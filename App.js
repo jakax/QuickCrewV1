@@ -2,14 +2,30 @@
 import { StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import JobDetails from './src/components/JobDetails';
-import BottomTabs from './src/navigation/BottomTabs';
+import AuthStack from './src/rootStack/authStack/AuthStack';
+import AppTabs from './src/rootStack/appTabs/AppTabs';
 
 
-const Stack = createNativeStackNavigator();
+
+
+const RootStack = createNativeStackNavigator();
 
 export default function App() {
   return (
+    <NavigationContainer>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        
+        {/* Auth screens */}
+        <RootStack.Screen name="Auth" component={AuthStack} />
+
+        {/* App (tabs) */}
+        <RootStack.Screen name="Tabs" component={AppTabs} />
+
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+}
+    /*
     <NavigationContainer>
       <Stack.Navigator>
         <Stack.Screen
@@ -23,9 +39,7 @@ export default function App() {
           options={{ title: 'Job Details' }}
         />
       </Stack.Navigator>
-    </NavigationContainer>
-  );
-}
+    </NavigationContainer>*/
 
 const styles = StyleSheet.create({
   container: {

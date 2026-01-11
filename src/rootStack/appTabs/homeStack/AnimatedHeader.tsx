@@ -1,7 +1,7 @@
 import React from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import StyledText from "./StyledText";
-import theme from "../theme";
+import StyledText from "../../../components/StyledText";
+import theme from "../../../theme";
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
