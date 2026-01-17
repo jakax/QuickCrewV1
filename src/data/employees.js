@@ -22,7 +22,7 @@ export default [
     birthDate: '10-03-1990',
     Gender: 'Male',
     HiringDescription: 'Experienced cleaner with a keen eye for detail and a commitment to maintaining high standards of cleanliness.',
-  }
+  },
   {
     id: '3',
     firstName: 'Sandra',
@@ -34,7 +34,7 @@ export default [
     birthDate: '01-11-1988',
     Gender: 'Female',
     HiringDescription: 'Experienced cleaner with a keen eye for detail and a commitment to maintaining high standards of cleanliness.',
-  }
+  },
   {
     id: '4',
     firstName: 'Barbara',
@@ -46,7 +46,7 @@ export default [
     birthDate: '15-08-1987',
     Gender: 'Female',
     HiringDescription: 'Experienced cleaner with a keen eye for detail and a commitment to maintaining high standards of cleanliness.',
-  }
+  },
   {
     id: '5',
     firstName: 'Estevan',
@@ -58,7 +58,7 @@ export default [
     birthDate: '15-05-1990',
     Gender: 'Male',
     HiringDescription: 'Experienced cleaner with a keen eye for detail and a commitment to maintaining high standards of cleanliness.',
-  }
+  },
   {
     id: '6',
     firstName: 'Maria',

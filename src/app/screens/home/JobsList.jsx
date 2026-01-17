@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Animated, FlatList } from "react-native";
-import AnimatedHeader from "./AnimatedHeader.tsx";
-import JobsItem from "./JobsItem";
-import { readCollection } from "../../../firebase/readCollection.js";
+import AnimatedHeader from "../../components/jobs/AnimatedHeader.jsx";
+import JobsItem from "../../components/jobs/JobsItem.jsx";
+import { readCollection } from "../../../services/firebase/firestore.service.js";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -14,8 +14,8 @@ const JobsList = () => {
   useEffect(() => {
     const loadJobs = async () => {
       try {
-        const jobsData = await readCollection("jobs"); // ✅ await
-        setJobs(jobsData); // ✅ put into state
+        const jobsData = await readCollection("jobs");
+        setJobs(jobsData);
       } catch (err) {
         console.error("Error loading jobs:", err);
       }

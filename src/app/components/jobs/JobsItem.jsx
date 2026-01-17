@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import StyledText from '../../../components/StyledText';
+import StyledText from '../../../styles/styledText';
 import theme from '../../../theme';
 import { useNavigation } from '@react-navigation/native';
 
-const jobsItem = (props) => {
+const JobsItem = (props) => {
   const navigation = useNavigation();
   return (
     <Pressable 
@@ -38,4 +38,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default jobsItem;
+export default JobsItem;

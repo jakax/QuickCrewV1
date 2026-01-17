@@ -1,11 +1,11 @@
 import React from "react";
 import { Animated, StyleSheet, View } from "react-native";
-import StyledText from "../../../components/StyledText";
+import StyledText from "../../../styles/styledText";
 import theme from "../../../theme";
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
-const AnimatedHeader = ({ scrollY }: any) => {
+const AnimatedHeader = ({ scrollY }) => {
   const opacity = scrollY.interpolate({
     inputRange: [0, 150],
     outputRange: [1, 0],

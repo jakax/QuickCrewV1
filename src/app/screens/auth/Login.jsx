@@ -1,30 +1,23 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
-import { readDocumentTest } from "../../../firebase/readDocumentTest";
-import { createUser } from "../../../firebase/createUser";
+import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
+import { loginAndLoadProfile } from "../../../services/auth.service";
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
 
-  const handleLogin = () => {
-    console.log("Login with:", email, password);
+  const onLoginPress = async () => {
+    try {
+      setError(null);
+      const profile = await loginAndLoadProfile(email, password);
+      navigation.replace(profile.role === "employer" ? "EmployerHome" : "Tabs", { screen: "JobDetails" });
+    } catch (e) {
+      setError(getFirebaseAuthErrorMessage(e));
+    }
   };
 
-  // Read test user from Firebase
-  /*useEffect(() => {
-    readDocumentTest('users');
-    //read('jobs');
-  }, []);*/
-
-  // Create a test user on Firebase
-  /*useEffect(() => {
-    createUser({
-      fullName: "Test User" + Math.floor(Math.random() * 1000),
-      role: "worker",
-      createdAt: new Date(),
-  });
-  }, []);*/
 
   return (
     <View style={styles.container}>
@@ -58,9 +51,14 @@ const Login = ({ navigation }) => {
             value={password}
             onChangeText={setPassword}
         />
+        {error && (
+          <Text style={{ color: "red", marginBottom: 12 }}>
+            {error}
+          </Text>
+        )}
 
         {/* LOGIN BUTTON */}
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+        <TouchableOpacity style={styles.loginButton} onPress={onLoginPress}>
             <Text style={styles.loginButtonText}>Log In</Text>
         </TouchableOpacity>
 
@@ -72,7 +70,7 @@ const Login = ({ navigation }) => {
         {/* REGISTER */}
         <View style={styles.registerContainer}>
             <Text>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Register")}>
+            <TouchableOpacity onPress={() => navigation.navigate("RegisterWorker")}>
             <Text style={styles.registerText}> Create one</Text>
             </TouchableOpacity>
         </View>

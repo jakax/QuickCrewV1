@@ -1,9 +1,9 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import Profile from './Profile';
-import Saved from './Saved';
-import Applied from './Applied';
-import HomeStack from './homeStack/HomeStack';
+import Profile from '../screens/tabs/Profile';
+import Saved from '../screens/tabs/Saved';
+import Applied from '../screens/tabs/Applied';
+import HomeStack from './HomeStack';
 
 
 const Tab = createBottomTabNavigator();

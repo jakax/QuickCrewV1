@@ -1,6 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import JobsList from "./JobsList";
-import JobDetails from "./JobDetails";
+import JobsList from "../screens/home/JobsList";
+import JobDetails from "../screens/home/JobDetails";
 
 const Stack = createNativeStackNavigator();
 
