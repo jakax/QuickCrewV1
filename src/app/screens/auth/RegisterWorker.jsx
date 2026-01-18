@@ -1,16 +1,3 @@
-/*import React from "react";
-import { View, Text } from "react-native";
-
-const Register = () => {
-  return (
-    <View style={{ paddingVertical: 50, left: 10 }}>
-      <Text>Register Screen, Work in progress</Text>
-    </View>
-  );
-}
-
-export default Register;*/
-
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -25,6 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import { registerWorker } from "../../../services/signup.service";
+import { useConfirm } from "../../providers/ConfirmProvider";
 
 // Simple email check (good enough for v1)
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
@@ -34,6 +22,8 @@ export default function RegisterWorker({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState(null);
+  const confirm = useConfirm();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -49,25 +39,35 @@ export default function RegisterWorker({ navigation }) {
   }, [fullName, email, password, confirmPassword, isSubmitting]);
 
   const onRegister = async () => {
+    const ok = await confirm({
+      title: "Create worker account?",
+      message: "You can browse jobs immediately. Approval is only needed when you apply.",
+      confirmText: "Register",
+    });
+    if (!ok) return;
+    await handlerRegister();
+  };
+
+  async function handlerRegister() {
     // Client-side validation (fast feedback)
     const name = fullName.trim();
     const mail = email.trim();
 
     if (name.length < 2) {
-      Alert.alert("Missing name", "Please enter your full name.");
+      setError("Missing name", "Please enter your full name.");
       return;
     }
     if (!isValidEmail(mail)) {
-      Alert.alert("Invalid email", "Please enter a valid email address.");
+      setError("Invalid email", "Please enter a valid email address.");
       return;
     }
     //Add more validations in the future like lowercase, uppercase, numbers, special characters, etc.
     if (password.length < 6) {
-      Alert.alert("Weak password", "Password must be at least 6 characters.");
+      setError("Weak password", "Password must be at least 6 characters.");
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert("Passwords don't match", "Please confirm your password.");
+      setError("Passwords don't match", "Please confirm your password.");
       return;
     }
 
@@ -83,16 +83,17 @@ export default function RegisterWorker({ navigation }) {
       // Worker can browse jobs immediately
       navigation.navigate("Tabs", { screen: "JobDetails" }); // change to your jobs list route if needed
     } catch (e) {
+      console.log("Registration error:", e);
       // Firebase errors: e.code often exists (auth/email-already-in-use, etc.)
       const code = e?.code || "";
       if (code === "auth/email-already-in-use") {
-        Alert.alert("Email already in use", "Try logging in instead.");
+        setError("Email already in use", "Try logging in instead.");
       } else if (code === "auth/invalid-email") {
-        Alert.alert("Invalid email", "Please check your email address.");
+        setError("Invalid email", "Please check your email address.");
       } else if (code === "auth/weak-password") {
-        Alert.alert("Weak password", "Please choose a stronger password.");
+        setError("Weak password", "Please choose a stronger password.");
       } else {
-        Alert.alert("Signup failed", e?.message || "Please try again.");
+        setError("Signup failed", e?.message || "Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -168,6 +169,8 @@ export default function RegisterWorker({ navigation }) {
           />
         </View>
 
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
         <Pressable
           onPress={onRegister}
           disabled={!canSubmit}
@@ -242,4 +245,13 @@ const styles = StyleSheet.create({
 
   secondaryLinkBtn: { marginTop: 18, alignItems: "center" },
   secondaryLinkText: { fontSize: 14, fontWeight: "700", opacity: 0.9 },
+
+  errorText: {
+    backgroundColor: "#2A0F14",
+    color: "#F87171",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    fontSize: 13,
+  },
 });

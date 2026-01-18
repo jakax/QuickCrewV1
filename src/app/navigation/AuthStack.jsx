@@ -3,6 +3,7 @@ import Login from '../screens/auth/Login';
 import RegisterWorker from '../screens/auth/RegisterWorker';
 import RegisterEmployer from '../screens/auth/RegisterEmployer';
 import ForgotPassword from '../screens/auth/ForgotPassword'; // después
+import CreateOrganizationScreen from '../screens/org/CreateOrganizationScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -12,6 +13,11 @@ const AuthStack = () => (
     <Stack.Screen name="RegisterWorker" component={RegisterWorker} />
     <Stack.Screen name="RegisterEmployer" component={RegisterEmployer} />
     <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+    <Stack.Screen 
+      name="CreateOrganization"
+      component={CreateOrganizationScreen}
+      options={{ headerShown: false }}
+    />
   </Stack.Navigator>
 );
 

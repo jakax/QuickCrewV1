@@ -1,12 +1,44 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Pressable } from "react-native";
+import { signOut } from "firebase/auth";
+import { auth } from "../../../services/firebase/config";
+import { useConfirm } from "../../../app/providers/ConfirmProvider"; // adjust path to your provider
 
 
-const Profile = () => {
+const Profile = ({ navigation }) => {
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName]   = useState("");
     const [email, setEmail]         = useState("");
     const [phone, setPhone]         = useState("");
+    const confirm = useConfirm();
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const onLogout = async () => {
+    setError(null);
+
+    const ok = await confirm({
+      title: "Log out?",
+      message: "You’ll need to log in again to access your account.",
+      confirmText: "Log out",
+      cancelText: "Cancel",
+      destructive: true,
+    });
+
+    if (!ok) return;
+
+      try {
+        setLoading(true);
+        await signOut(auth);
+
+        // Optional: force navigation to Gate (signOut will trigger Gate anyway)
+        navigation.reset({ index: 0, routes: [{ name: "Gate" }] });
+      } catch (e) {
+        setError(e?.message || "Could not log out.");
+      } finally {
+        setLoading(false);
+      }
+    };
   return (
     <ScrollView style={styles.container}>
         {/* Row principal: avatar + info */}
@@ -26,6 +58,7 @@ const Profile = () => {
         </View>
         {/* Divider */}
         <View style={styles.divider} />
+
 
         {/* FORMULARIO */}
         <View style={styles.formSection}>
@@ -84,6 +117,19 @@ const Profile = () => {
             </TouchableOpacity>
 
         </View>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable
+          onPress={onLogout}
+          disabled={loading}
+          style={({ pressed }) => [
+            styles.logoutBtn,
+            (pressed || loading) && { opacity: 0.9 },
+            loading && { opacity: 0.6 },
+          ]}
+        >
+          <Text style={styles.logoutText}>{loading ? "Logging out..." : "Log out"}</Text>
+        </Pressable>
     </ScrollView>
   );
 };
@@ -179,6 +225,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  error: {
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    fontSize: 13,
+  },
+  logoutBtn: {
+    marginTop: 8,
+    backgroundColor: "#EF4444",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  logoutText: { color: "white", fontWeight: "700" },
 });
 
 export default Profile;

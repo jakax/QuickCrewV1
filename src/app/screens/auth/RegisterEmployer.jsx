@@ -65,9 +65,11 @@ export default function RegisterEmployer({ navigation }) {
 
       // If org doesn't exist (or checkbox off), we send them to org creation flow
       if (result.needsOrgCreation) {
-        navigation.replace("OrgCreate", {
-          legalBusinessName: legalName,
-          orgNotFound: !!result.orgNotFound,
+        navigation.replace("CreateOrganization", {
+          uid: result.uid,
+          nextRouteName: "AppTabs",
+          //legalBusinessName: legalName,
+          //orgNotFound: !!result.orgNotFound,
         });
         return;
       }
@@ -99,8 +101,6 @@ export default function RegisterEmployer({ navigation }) {
         <Text style={styles.subtitle}>
           If your business already exists in QuickCrew, we’ll link you to it.
         </Text>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.field}>
           <Text style={styles.label}>Your name</Text>
@@ -176,6 +176,8 @@ export default function RegisterEmployer({ navigation }) {
             }}
           />
         </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
           onPress={onRegister}

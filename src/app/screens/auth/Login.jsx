@@ -8,11 +8,13 @@ const Login = ({ navigation }) => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
 
+
+
   const onLoginPress = async () => {
     try {
       setError(null);
       const profile = await loginAndLoadProfile(email, password);
-      navigation.replace(profile.role === "employer" ? "EmployerHome" : "Tabs", { screen: "JobDetails" });
+      navigation.reset({ index: 0, routes: [{ name: "Gate" }] });
     } catch (e) {
       setError(getFirebaseAuthErrorMessage(e));
     }
