@@ -3,12 +3,12 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Profile from '../screens/tabs/Profile';
 import Saved from '../screens/tabs/Saved';
 import Applied from '../screens/tabs/Applied';
-import HomeStack from './HomeStack';
+import WorkerJobsHome from '../screens/worker/WorkerJobsHome';
 
 
 const Tab = createBottomTabNavigator();
 
-export default function AppTabs() {
+export default function WorkerTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -22,7 +22,7 @@ export default function AppTabs() {
         tabBarInactiveTintColor: '#bbbbbb',
       }}
     >
-      <Tab.Screen name="Home" component={HomeStack} options={{ title: "Home" }} />
+      <Tab.Screen name="Jobs" component={WorkerJobsHome} />
       <Tab.Screen name="Applied" component={Applied} options={{ title: "Applied" }} />
       <Tab.Screen name="Saved" component={Saved} options={{ title: "Saved" }} />
       <Tab.Screen name="Profile" component={Profile} options={{ title: "Profile" }} />

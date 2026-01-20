@@ -36,6 +36,7 @@ export async function createOrganizationAndLinkUser({
     userRef,
     {
       orgId: orgRef.id,
+      orgName: org.name.trim(),
       memberRole,
       updatedAt: serverTimestamp(),
     },
@@ -45,6 +46,8 @@ export async function createOrganizationAndLinkUser({
   // Add membership doc (future-proof)
   const memberRef = doc(db, "organizations", orgRef.id, "members", uid);
   batch.set(memberRef, {
+    uid,
+    orgId: orgRef.id,
     memberRole,
     joinedAt: serverTimestamp(),
   });

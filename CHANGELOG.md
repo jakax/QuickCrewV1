@@ -26,3 +26,13 @@ Which tag version am I
 - Organization creation
 - Role-based tabs
 - Logout
+
+## v0.3.0
+- Role-based navigation split (Worker vs Employer)
+- Clean RootStack / Tabs / Stacks separation
+- Shared JobItem + shared JobForm (DRY, long-term)
+- Worker read-only JobDetails
+- Employer editable JobDetails
+- Jobs lists aligned with real Firestore data
+- Clear ownership & permission boundaries
+- Removal of legacy "Tabs" coupling

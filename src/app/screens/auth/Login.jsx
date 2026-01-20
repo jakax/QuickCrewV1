@@ -80,7 +80,7 @@ const Login = ({ navigation }) => {
         {/* Register later */}
         <TouchableOpacity
         style={styles.skipButton}
-        onPress={() => navigation.navigate("Tabs", { screen: "JobDetails" })}
+        onPress={() => navigation.navigate("JobDetails")}
         >
         <Text style={styles.skipButtonText}>Register later</Text>
         </TouchableOpacity>

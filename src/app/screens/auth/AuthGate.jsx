@@ -1,60 +1,34 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../../services/firebase/config";
+import { useSession } from "../../providers/SessionProvider";
+import { resetTo } from "../../navigation/navigationRef";
 
 export default function AuthGate({ navigation }) {
-  const [error, setError] = useState(null);
+  const { loading, error, uid, role, orgId, isEmployer } = useSession();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      try {
-        setError(null);
+    if (loading) return;
 
-        // Not logged in -> go to Auth stack
-        if (!user) {
-          navigation.reset({ index: 0, routes: [{ name: "Auth" }] });
-          return;
-        }
+    if (!uid) {
+      navigation.reset({ index: 0, routes: [{ name: "Auth" }] });
+      return;
+    }
 
-        const uid = user.uid;
-
-        // Read Firestore user profile
-        const userRef = doc(db, "users", uid);
-        const snap = await getDoc(userRef);
-
-        if (!snap.exists()) {
-          setError("User profile not found in database.");
-          return;
-        }
-
-        const profile = snap.data();
-        const role = profile?.role;
-
-        if (role === "employer") {
-          // If org required and missing, send to CreateOrganization
-          if (!profile?.orgId) {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "CreateOrganization", params: { uid, nextRouteName: "EmployerTabs" } }],
-            });
-            return;
-          }
-
-          navigation.reset({ index: 0, routes: [{ name: "EmployerTabs" }] });
-          return;
-        }
-
-        // Default: worker
-        navigation.reset({ index: 0, routes: [{ name: "Tabs", params: { screen: "JobDetails" } }] });
-      } catch (e) {
-        setError(e?.message || "Something went wrong.");
+    if (isEmployer) {
+      if (!orgId) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "CreateOrganization" }],
+        });
+      } else {
+        navigation.reset({ index: 0, routes: [{ name: "EmployerRoot" }] });
       }
-    });
+      return;
+    }
 
-    return () => unsub();
-  }, [navigation]);
+    // Default worker
+    resetTo(isEmployer ? "EmployerRoot" : "WorkerRoot");
+  }, [loading, uid, role, orgId, isEmployer, navigation]);
 
   return (
     <View style={styles.root}>

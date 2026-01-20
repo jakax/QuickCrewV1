@@ -81,7 +81,7 @@ export default function RegisterWorker({ navigation }) {
       });
 
       // Worker can browse jobs immediately
-      navigation.navigate("Tabs", { screen: "JobDetails" }); // change to your jobs list route if needed
+      navigation.navigate("JobDetails"); // change to your jobs list route if needed
     } catch (e) {
       console.log("Registration error:", e);
       // Firebase errors: e.code often exists (auth/email-already-in-use, etc.)
