@@ -13,6 +13,17 @@ export default function EmployerJobsHome({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const { approvalStatus } = useSession();
+
+  {approvalStatus === "pending" ? (
+    <View style={styles.banner}>
+      <Text style={styles.bannerTitle}>Pending approval</Text>
+      <Text style={styles.bannerText}>
+        Your account is pending approval by QuickCrew. You can browse for now.
+      </Text>
+    </View>
+  ) : null}
+
   const load = useCallback(async () => {
     try {
       setError(null);
@@ -149,4 +160,15 @@ const styles = StyleSheet.create({
   shiftLine: { marginTop: 8, color: "#374151" },
   rate: { marginTop: 8, color: "#111827", fontWeight: "700" },
   posted: { marginTop: 10, color: "#9CA3AF", fontSize: 12 },
+
+  banner: {
+  margin: 16,
+  padding: 14,
+  borderRadius: 14,
+  backgroundColor: "#FFFBEB",
+  borderWidth: 1,
+  borderColor: "#FDE68A",
+},
+  bannerTitle: { fontWeight: "900", color: "#92400E", marginBottom: 4 },
+  bannerText: { color: "#92400E", fontWeight: "600", lineHeight: 18 },
 });

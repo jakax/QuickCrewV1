@@ -3,32 +3,32 @@ import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import { useSession } from "../../providers/SessionProvider";
 import { resetTo } from "../../navigation/navigationRef";
 
-export default function AuthGate({ navigation }) {
-  const { loading, error, uid, role, orgId, isEmployer } = useSession();
+export default function AuthGate() {
+  const { loading, error, uid, isEmployer, orgId, approvalStatus } = useSession();
 
   useEffect(() => {
     if (loading) return;
 
     if (!uid) {
-      navigation.reset({ index: 0, routes: [{ name: "Auth" }] });
+      resetTo("Auth");
       return;
     }
 
     if (isEmployer) {
       if (!orgId) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "CreateOrganization" }],
-        });
-      } else {
-        navigation.reset({ index: 0, routes: [{ name: "EmployerRoot" }] });
+        resetTo("CreateOrganization"); // only if this screen exists in RootStack (see note below)
+        return;
       }
+
+      // Future: block access until approved
+      // if (approvalStatus !== "approved") { resetTo("EmployerPending"); return; }
+
+      resetTo("EmployerRoot");
       return;
     }
 
-    // Default worker
-    resetTo(isEmployer ? "EmployerRoot" : "WorkerRoot");
-  }, [loading, uid, role, orgId, isEmployer, navigation]);
+    resetTo("WorkerRoot");
+  }, [loading, uid, isEmployer, orgId, approvalStatus]);
 
   return (
     <View style={styles.root}>

@@ -8,24 +8,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
-import { createOrganizationAndLinkUser } from "../../../services/organization.service";
+import { createOrganizationOrJoinExisting } from "../../../services/organization.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
+import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
 
-const ROLE_OPTIONS = [
-  { label: "Owner", value: "owner" },
-  { label: "Admin", value: "admin" },
-  { label: "Manager", value: "manager" },
-  { label: "Supervisor", value: "supervisor" },
-];
 
 export default function CreateOrganizationScreen({ route, navigation }) {
   const uid = route?.params?.uid; // pass from register/login success
-  const nextRouteName = route?.params?.nextRouteName || "AppTabs"; // where to go after success
 
-  const [memberRole, setMemberRole] = useState("owner");
   const [error, setError] = useState(null);
 
   const [org, setOrg] = useState({
@@ -42,8 +33,8 @@ export default function CreateOrganizationScreen({ route, navigation }) {
   const confirm = useConfirm();
 
   const canSubmit = useMemo(() => {
-    return !!uid && org.name.trim().length > 1 && !!memberRole && !loading;
-  }, [uid, org.name, memberRole, loading]);
+  return !!uid && org.name.trim().length > 1 && !loading;
+}, [uid, org.name, loading]);
 
   function setField(key, value) {
     setOrg((prev) => ({ ...prev, [key]: value }));
@@ -62,35 +53,42 @@ export default function CreateOrganizationScreen({ route, navigation }) {
 
 
   async function handleCreateOrganization() {
-    if (!uid) {
-      setError("Missing user", "Could not find your user id (uid).");
-      return;
-    }
-    if (!org.name.trim()) {
-      setError("Organization name required", "Please enter the organization name.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const { orgId } = await createOrganizationAndLinkUser({
-        uid,
-        org,
-        memberRole,
-      });
-
-      // You can route to a "success" or directly into employer area
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "EmployerTabs", params: { orgId } }],
-      });
-    } catch (e) {
-      setError("Could not create organization", e?.message || "Unknown error");
-    } finally {
-      setLoading(false);
-    }
+  if (!uid) {
+    setError("Could not find your user id (uid).");
+    return;
   }
+  if (!org.name.trim()) {
+    setError("Please enter the organization name.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError(null);
+
+    const result = await createOrganizationOrJoinExisting({
+      uid,
+      org,
+    });
+
+    // Friendly UX: show message if already existed
+    if (!result.created) {
+      await confirm({
+        title: "Organization already exists",
+        message:
+          "This organization already exists in QuickCrew. Your account has been linked and is now pending approval by QuickCrew.",
+        confirmText: "OK",
+      });
+    }
+
+    // Best routing: let Gate decide based on updated user doc
+    routeAfterAuthChange();
+  } catch (e) {
+    setError(e?.message || "Could not create organization.");
+  } finally {
+    setLoading(false);
+  }
+}
 
   return (
     <KeyboardAvoidingView
@@ -102,20 +100,6 @@ export default function CreateOrganizationScreen({ route, navigation }) {
         <Text style={styles.subtitle}>
           Your employer account needs an organization. Create it now and we’ll link your user.
         </Text>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Your role in this organization</Text>
-          <View style={styles.pickerWrap}>
-            <Picker
-              selectedValue={memberRole}
-              onValueChange={(v) => setMemberRole(v)}
-            >
-              {ROLE_OPTIONS.map((opt) => (
-                <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
-              ))}
-            </Picker>
-          </View>
-        </View>
 
         <View style={styles.section}>
           <Text style={styles.label}>Organization name *</Text>

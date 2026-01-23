@@ -36,3 +36,23 @@ Which tag version am I
 - Jobs lists aligned with real Firestore data
 - Clear ownership & permission boundaries
 - Removal of legacy "Tabs" coupling
+
+## v0.4.0 – Profile & Approval UX
+
+### Added
+- Role-based Profile screen (Worker / Employer)
+- Approval status badge and banner for pending users
+- Employer account review state handled in UI
+- Worker verification state reflected in profile
+- Logout confirmation with safe session reset via AuthGate
+
+### Improved
+- Profile UX consistency across roles
+- Clear, user-friendly messaging for pending approval states
+- Centralized auth-based routing using AuthGate
+- Cleaner separation between editable profile data and read-only account data
+
+### Technical
+- Profile now reads real Firestore user data
+- Navigation after auth/state changes routed through `Gate`
+- Prepared structure for future profile sections (bank details, documents, verification)

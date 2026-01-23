@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Pressable } from "react-native";
 import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
 import { loginAndLoadProfile } from "../../../services/auth.service";
+import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -14,7 +15,7 @@ const Login = ({ navigation }) => {
     try {
       setError(null);
       const profile = await loginAndLoadProfile(email, password);
-      navigation.reset({ index: 0, routes: [{ name: "Gate" }] });
+      routeAfterAuthChange(profile);
     } catch (e) {
       setError(getFirebaseAuthErrorMessage(e));
     }
@@ -69,12 +70,21 @@ const Login = ({ navigation }) => {
             <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
 
-        {/* REGISTER */}
-        <View style={styles.registerContainer}>
-            <Text>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("RegisterWorker")}>
-            <Text style={styles.registerText}> Create one</Text>
-            </TouchableOpacity>
+        {/* REGISTER footers */}
+        <View style={styles.footerLinks}>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Don’t have an account?</Text>
+            <Pressable onPress={() => navigation.navigate("RegisterWorker")}>
+              <Text style={styles.linkText}>Create one</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Are you an employer?</Text>
+            <Pressable onPress={() => navigation.navigate("RegisterEmployer")}>
+              <Text style={styles.linkText}>Create a business account</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Register later */}
@@ -179,6 +189,27 @@ skipButtonText: {
   color: "#555",
   fontSize: 15,
   fontWeight: "500",
+},
+
+footerLinks: {
+  marginTop: 24,
+  alignItems: "center",
+  gap: 12,
+},
+
+footerRow: {
+  flexDirection: "row",
+  gap: 6,
+},
+
+footerText: {
+  fontSize: 14,
+  opacity: 0.8,
+},
+
+linkText: {
+  fontSize: 14,
+  fontWeight: "700",
 },
 });
 

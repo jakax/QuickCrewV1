@@ -3,51 +3,22 @@ import {
   doc,
   setDoc,
   serverTimestamp,
-  query,
-  where,
-  getDocs,
+  getDoc,
   collection,
-  limit,
   writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "./firebase/config";
-import { normalizeName } from "../utils/normalize";
 
 /**
- * Create Worker account:
+ * Employer signup (scalable):
  * - Creates Firebase Auth user
- * - Creates Firestore profile users/{uid}
- * - Does NOT require workerStatus approved to browse (only to apply later)
- */
-export const registerWorker = async ({ email, password, fullName }) => {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-
-  const uid = cred.user.uid;
-
-  await setDoc(doc(db, "users", uid), {
-    role: "worker",
-    fullName: fullName?.trim() || "",
-    email: email.trim(),
-    isActive: true,
-
-    workerStatus: "pending", // pending until form + admin approval
-    approvedCategories: [],
-
-    createdAt: serverTimestamp(),
-  });
-
-  return { uid };
-};
-
-/**
- * Employer signup:
- * - Creates Firebase Auth user
- * - If business already registered: finds org by legalNameNormalized and links user
- * - If not registered: creates user doc and returns flag to navigate to org form screen
+ * - If businessAlreadyRegistered:
+ *    - requires selectedOrgId (picked from typeahead)
+ *    - links user to org
+ *    - sets approvalStatus = "pending"
+ *    - creates membership doc with status "pending"
+ * - Else:
+ *    - creates user doc in onboarding state and returns needsOrgCreation
  */
 export const registerEmployer = async ({
   email,
@@ -55,13 +26,10 @@ export const registerEmployer = async ({
   fullName,
   legalBusinessName,
   businessAlreadyRegistered,
+  selectedOrgId,
+  memberRole, // Owner/Admin/Manager/Supervisor
 }) => {
-  const cred = await createUserWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-
+  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
   const uid = cred.user.uid;
 
   const baseUserDoc = {
@@ -72,57 +40,92 @@ export const registerEmployer = async ({
     createdAt: serverTimestamp(),
   };
 
+  // Not registered -> send to create org flow
   if (!businessAlreadyRegistered) {
-    // No org yet — we’ll complete later in the OrgCreate flow
     await setDoc(doc(db, "users", uid), {
       ...baseUserDoc,
       orgIds: [],
-      employerOnboardingStatus: "needs_org", // helpful flag
+      employerOnboardingStatus: "needs_org",
       legalBusinessNameDraft: legalBusinessName?.trim() || "",
+      approvalStatus: "pending", // optional; or omit until org exists
     });
 
     return { uid, needsOrgCreation: true };
   }
 
-  // businessAlreadyRegistered = true → verify org exists
-  const normalized = normalizeName(legalBusinessName);
+  // Registered -> must have selected org
+  if (!selectedOrgId) {
+    // Important: Auth user exists already. We should still write a profile for consistency.
+    await setDoc(doc(db, "users", uid), {
+      ...baseUserDoc,
+      orgIds: [],
+      employerOnboardingStatus: "org_not_selected",
+      legalBusinessNameDraft: legalBusinessName?.trim() || "",
+      approvalStatus: "pending",
+    });
 
-  const orgsRef = collection(db, "organizations");
-  const q = query(orgsRef, where("legalNameNormalized", "==", normalized), limit(1));
-  const snap = await getDocs(q);
+    // Throw so UI can show a real error
+    throw new Error("Please select your organization from the list.");
+  }
 
-  if (snap.empty) {
-    // Org not found: we should not silently continue.
-    // We created the Auth user already; we can still create a user profile
-    // and route them to org creation or show an error screen.
+  if (!memberRole) {
+    await setDoc(doc(db, "users", uid), {
+      ...baseUserDoc,
+      orgIds: [],
+      employerOnboardingStatus: "missing_member_role",
+      approvalStatus: "pending",
+    });
+
+    throw new Error("Please select your member role (Owner/Admin/Manager/Supervisor).");
+  }
+
+  // Verify org exists
+  const orgRef = doc(db, "organizations", selectedOrgId);
+  const orgSnap = await getDoc(orgRef);
+
+  if (!orgSnap.exists()) {
     await setDoc(doc(db, "users", uid), {
       ...baseUserDoc,
       orgIds: [],
       employerOnboardingStatus: "org_not_found",
       legalBusinessNameDraft: legalBusinessName?.trim() || "",
+      approvalStatus: "pending",
     });
 
     return { uid, needsOrgCreation: true, orgNotFound: true };
   }
 
-  const orgDoc = snap.docs[0];
-  const orgId = orgDoc.id;
+  const org = orgSnap.data();
+  const orgName = org?.name || legalBusinessName?.trim() || "";
 
-  // Link employer to org + create membership doc (batch keeps it consistent)
+  // Link user + membership atomically
   const batch = writeBatch(db);
 
   batch.set(doc(db, "users", uid), {
     ...baseUserDoc,
-    orgIds: [orgId],
-    employerOnboardingStatus: "complete",
+    orgIds: [selectedOrgId],
+    orgId: selectedOrgId, // convenient single-org pointer (optional but VERY useful)
+    orgName,
+    memberRole,
+    approvalStatus: "pending",
+    employerOnboardingStatus: "pending_approval",
+    updatedAt: serverTimestamp(),
   });
 
-  batch.set(doc(db, "organizations", orgId, "members", uid), {
-    role: "manager",
-    createdAt: serverTimestamp(),
+  batch.set(doc(db, "organizations", selectedOrgId, "members", uid), {
+    uid,
+    memberRole,
+    status: "pending",
+    joinedAt: serverTimestamp(),
+    createdAt: serverTimestamp(), // keep if you already use it elsewhere
   });
 
   await batch.commit();
 
-  return { uid, needsOrgCreation: false, orgId };
+  return {
+    uid,
+    needsOrgCreation: false,
+    orgId: selectedOrgId,
+    approvalStatus: "pending",
+  };
 };

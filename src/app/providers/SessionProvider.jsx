@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../services/firebase/config";
 
 const SessionContext = createContext(null);
@@ -12,54 +12,75 @@ export function SessionProvider({ children }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      try {
-        setError(null);
-        setAuthUser(user);
-        setProfile(null);
+    let unsubProfile = null;
 
-        if (!user) {
-          setLoading(false);
-          return;
-        }
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setError(null);
+      setAuthUser(user);
+      setProfile(null);
 
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (!snap.exists()) {
-          setError("User profile not found.");
-          setLoading(false);
-          return;
-        }
-
-        setProfile({ id: snap.id, ...snap.data() });
-        setLoading(false);
-      } catch (e) {
-        setError(e?.message || "Session error");
-        setLoading(false);
+      // cleanup previous profile listener
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
       }
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+
+      const userRef = doc(db, "users", user.uid);
+
+      unsubProfile = onSnapshot(
+        userRef,
+        (snap) => {
+          if (!snap.exists()) {
+            setProfile(null);
+            setError("User profile not found.");
+            setLoading(false);
+            return;
+          }
+
+          setProfile({ id: snap.id, ...snap.data() });
+          setLoading(false);
+        },
+        (e) => {
+          setProfile(null);
+          setError(e?.message || "Session error");
+          setLoading(false);
+        }
+      );
     });
 
-    return () => unsub();
+    return () => {
+      if (unsubProfile) unsubProfile();
+      unsubAuth();
+    };
   }, []);
 
-  const value = useMemo(() => ({
-    loading,
-    error,
-    authUser,
-    uid: authUser?.uid ?? null,
-    profile,
-    role: profile?.role ?? null,
-    orgId: profile?.orgId ?? null,
-    orgName: profile?.orgName ?? null,
-    memberRole: profile?.memberRole ?? null,
-    isEmployer: profile?.role === "employer",
-    isWorker: profile?.role === "worker",
-  }), [loading, error, authUser, profile]);
-
-  return (
-    <SessionContext.Provider value={value}>
-      {children}
-    </SessionContext.Provider>
+  const value = useMemo(
+    () => ({
+      loading,
+      error,
+      authUser,
+      uid: authUser?.uid ?? null,
+      profile,
+      role: profile?.role ?? null,
+      orgId: profile?.orgId ?? null,
+      orgName: profile?.orgName ?? null,
+      memberRole: profile?.memberRole ?? null,
+      isEmployer: profile?.role === "employer",
+      isWorker: profile?.role === "worker",
+      approvalStatus:
+        profile?.approvalStatus || (profile?.role === "employer" ? "pending" : null),
+    }),
+    [loading, error, authUser, profile]
   );
+
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 
 export function useSession() {

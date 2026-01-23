@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import Checkbox from "expo-checkbox";
 import { registerEmployer } from "../../../services/signup.service";
+import { searchOrganizationsByNamePrefix } from "../../../services/organization.service";
 
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
@@ -20,6 +21,19 @@ export default function RegisterEmployer({ navigation }) {
   const [legalBusinessName, setLegalBusinessName] = useState("");
   const [businessAlreadyRegistered, setBusinessAlreadyRegistered] = useState(false);
 
+  // ✅ org picker state
+  const [orgResults, setOrgResults] = useState([]);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState(null); // {id, name, ...}
+  
+  const [memberRole, setMemberRole] = useState("owner");
+  const ROLE_OPTIONS = [
+    { label: "Owner", value: "owner" },
+    { label: "Admin", value: "admin" },
+    { label: "Manager", value: "manager" },
+    { label: "Supervisor", value: "supervisor" },
+  ];
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -27,17 +41,79 @@ export default function RegisterEmployer({ navigation }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  // simple debounce without libs
+  const searchTimer = useRef(null);
+
   const canSubmit = useMemo(() => {
-    return (
+    const base =
       fullName.trim().length >= 2 &&
       legalBusinessName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
       password.length >= 6 &&
       confirmPassword.length >= 6 &&
       password === confirmPassword &&
-      !isSubmitting
-    );
-  }, [fullName, legalBusinessName, email, password, confirmPassword, isSubmitting]);
+      !isSubmitting;
+
+    if (!base) return false;
+
+    // If business already registered, must select an org
+    if (businessAlreadyRegistered) {
+      return !!selectedOrg?.id && !!memberRole;
+    }
+
+    return true;
+  }, [
+    fullName,
+    legalBusinessName,
+    email,
+    password,
+    confirmPassword,
+    isSubmitting,
+    businessAlreadyRegistered,
+    selectedOrg,
+    memberRole
+  ]);
+
+  const onChangeBusinessName = (text) => {
+    setLegalBusinessName(text);
+
+    // if user edits the name, selection is no longer valid
+    setSelectedOrg(null);
+
+    if (!businessAlreadyRegistered) return;
+
+    const typed = text.trim();
+    if (typed.length < 2) {
+      setOrgResults([]);
+      return;
+    }
+
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+
+    searchTimer.current = setTimeout(async () => {
+      try {
+        setOrgLoading(true);
+        const results = await searchOrganizationsByNamePrefix(typed, { limitCount: 8 });
+        setOrgResults(results);
+      } catch (e) {
+        // silent fail for typeahead; keep screen usable
+        setOrgResults([]);
+      } finally {
+        setOrgLoading(false);
+      }
+    }, 250);
+  };
+
+  const onToggleRegistered = (value) => {
+    setBusinessAlreadyRegistered(value);
+    setSelectedOrg(null);
+    setOrgResults([]);
+
+    // If turning ON and name already typed, trigger search
+    if (value) {
+      onChangeBusinessName(legalBusinessName);
+    }
+  };
 
   const onRegister = async () => {
     setError(null);
@@ -52,6 +128,10 @@ export default function RegisterEmployer({ navigation }) {
     if (password.length < 6) return setError("Password must be at least 6 characters.");
     if (password !== confirmPassword) return setError("Passwords do not match.");
 
+    if (businessAlreadyRegistered && !selectedOrg?.id) {
+      return setError("Please select your organization from the list.");
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -61,20 +141,24 @@ export default function RegisterEmployer({ navigation }) {
         fullName: name,
         legalBusinessName: legalName,
         businessAlreadyRegistered,
+        selectedOrgId: selectedOrg?.id || null,
+        memberRole,
       });
 
-      // If org doesn't exist (or checkbox off), we send them to org creation flow
+      // org creation flow
       if (result.needsOrgCreation) {
         navigation.replace("CreateOrganization", {
           uid: result.uid,
-          nextRouteName: "AppTabs",
-          //legalBusinessName: legalName,
-          //orgNotFound: !!result.orgNotFound,
+          nextRouteName: "EmployerTabs",
         });
         return;
       }
 
-      navigation.replace("EmployerHome");
+      // ✅ linked to existing org: show pending message then go to EmployerTabs
+      // for now: simple inline navigation; we can replace with ConfirmProvider later
+      navigation.replace("EmployerTabs", {
+        pendingApprovalMessage: true,
+      });
     } catch (e) {
       const code = e?.code || "";
       if (code === "auth/email-already-in-use") {
@@ -118,22 +202,90 @@ export default function RegisterEmployer({ navigation }) {
           <Text style={styles.label}>Legal business name</Text>
           <TextInput
             value={legalBusinessName}
-            onChangeText={setLegalBusinessName}
-            placeholder="e.g., QuickCrew Limited"
+            onChangeText={onChangeBusinessName}
+            placeholder="Start typing your business name..."
             autoCapitalize="words"
             style={styles.input}
             editable={!isSubmitting}
           />
+
+          {/* ✅ Typeahead list when checkbox ON */}
+          {businessAlreadyRegistered ? (
+            <View style={styles.typeaheadBox}>
+              {orgLoading ? (
+                <View style={styles.typeaheadRow}>
+                  <ActivityIndicator size="small" />
+                  <Text style={styles.typeaheadMuted}>Searching organizations…</Text>
+                </View>
+              ) : selectedOrg ? (
+                <View style={styles.selectedRow}>
+                  <Text style={styles.selectedText}>Selected: {selectedOrg.name}</Text>
+                  <Pressable onPress={() => setSelectedOrg(null)} disabled={isSubmitting}>
+                    <Text style={styles.clearText}>Clear</Text>
+                  </Pressable>
+                </View>
+              ) : orgResults.length > 0 ? (
+                orgResults.map((org) => (
+                  <Pressable
+                    key={org.id}
+                    onPress={() => {
+                      setSelectedOrg(org);
+                      setOrgResults([]);
+                      // optionally sync input exactly to selected org name
+                      setLegalBusinessName(org.name);
+                    }}
+                    style={styles.suggestionRow}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.suggestionTitle}>{org.name}</Text>
+                    {!!org.city || !!org.country ? (
+                      <Text style={styles.suggestionMeta}>
+                        {[org.city, org.country].filter(Boolean).join(", ")}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                ))
+              ) : legalBusinessName.trim().length >= 2 ? (
+                <Text style={styles.typeaheadMuted}>
+                  No matches found. If your business isn’t registered, uncheck the box and create a new organization.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.checkboxRow}>
           <Checkbox
             value={businessAlreadyRegistered}
-            onValueChange={setBusinessAlreadyRegistered}
+            onValueChange={onToggleRegistered}
             disabled={isSubmitting}
           />
           <Text style={styles.checkboxText}>Business already registered</Text>
         </View>
+
+        {/*Choose Role if Business already exists*/}
+        {businessAlreadyRegistered ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>Your role in the organization</Text>
+            <View style={styles.roleRow}>
+              {ROLE_OPTIONS.map((opt) => {
+                const selected = memberRole === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => setMemberRole(opt.value)}
+                    style={[styles.rolePill, selected && styles.rolePillSelected]}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={[styles.roleText, selected && styles.roleTextSelected]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null }
 
         <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
@@ -232,6 +384,30 @@ const styles = StyleSheet.create({
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   checkboxText: { fontSize: 14, opacity: 0.9 },
 
+  typeaheadBox: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    marginTop: 10,
+    overflow: "hidden",
+    backgroundColor: "#fff",
+  },
+  typeaheadRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
+  typeaheadMuted: { padding: 12, color: "#6B7280", fontSize: 13, lineHeight: 18 },
+
+  suggestionRow: { padding: 12, borderTopWidth: 1, borderTopColor: "#F3F4F6" },
+  suggestionTitle: { fontWeight: "800", color: "#111827" },
+  suggestionMeta: { marginTop: 4, color: "#6B7280", fontSize: 12 },
+
+  selectedRow: {
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  selectedText: { fontWeight: "800", color: "#111827" },
+  clearText: { color: "#2563EB", fontWeight: "800" },
+
   button: {
     marginTop: 8,
     backgroundColor: "#111",
@@ -249,4 +425,16 @@ const styles = StyleSheet.create({
 
   secondaryLinkBtn: { marginTop: 18, alignItems: "center" },
   secondaryLinkText: { fontSize: 14, fontWeight: "700", opacity: 0.9 },
+
+  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  rolePill: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  rolePillSelected: { backgroundColor: "#111", borderColor: "#111" },
+  roleText: { fontWeight: "700", opacity: 0.9 },
+  roleTextSelected: { color: "#fff", opacity: 1 },
 });
