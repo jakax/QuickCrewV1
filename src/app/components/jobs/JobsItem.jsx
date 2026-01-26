@@ -1,21 +1,23 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import StyledText from "../../../styles/styledText";
 import { isNewShift, formatShiftDate, formatPostedAgo } from "../../../utils/jobFormatters";
-import { useSession } from "../../providers/SessionProvider"; 
+import { useSession } from "../../providers/SessionProvider";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
-import { Ionicons } from "@expo/vector-icons"; // works in Expo
-// adjust path if your utils live elsewhere
+import { Ionicons } from "@expo/vector-icons";
+
+import { db } from "../../../services/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 
 const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) => {
   const navigation = useNavigation();
-  
+
   const { isSaved, toggleSaved } = useSavedJobs();
   const savedFromStore = isSaved(job.id);
   const saved = typeof forceBookmarked === "boolean" ? forceBookmarked : savedFromStore;
 
-  const { isEmployer, isWorker } = useSession();
+  const { isEmployer, isWorker, uid } = useSession();
 
   const showNew = useMemo(() => isNewShift(job?.createdAt, 3), [job?.createdAt]);
 
@@ -25,6 +27,32 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
 
   const hasRate = typeof job?.ratePerHour === "number" && !Number.isNaN(job.ratePerHour);
   const rateText = hasRate ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : "";
+
+  // ✅ detect if current worker already applied to this job
+  const [alreadyApplied, setAlreadyApplied] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const check = async () => {
+      try {
+        if (!isWorker || !uid || !job?.id) {
+          if (mounted) setAlreadyApplied(false);
+          return;
+        }
+        const applicationId = `${job.id}_${uid}`;
+        const snap = await getDoc(doc(db, "applications", applicationId));
+        if (mounted) setAlreadyApplied(snap.exists());
+      } catch {
+        if (mounted) setAlreadyApplied(false);
+      }
+    };
+
+    check();
+    return () => {
+      mounted = false;
+    };
+  }, [isWorker, uid, job?.id]);
 
   const onPress = () => {
     if (onPressOverride) return onPressOverride(job);
@@ -46,50 +74,40 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
     toggleSaved({ jobId: job.id, orgId: job.orgId });
   };
 
+  // ✅ Only allow bookmark when:
+  // - worker
+  // - NOT already applied
+  // - job still open (defensive)
+  const canShowBookmark =
+    isWorker && !alreadyApplied && String(job?.status || "").toLowerCase() === "open";
+
   return (
-    <Pressable
-      onPress={onPress}
-      style={styles.container}
-    >
-      {/* Tag + Posted */}
+    <Pressable onPress={onPress} style={styles.container}>
       <View style={styles.topRow}>
-        {showNew ? (
-          <StyledText style={styles.tag}>New shift</StyledText>
-        ) : (
-          <View />
-        )}
+        {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : <View />}
       </View>
 
-        {isWorker && (
-        <Pressable
-          onPress={handleBookmarkPress}
-          hitSlop={10}
-          style={styles.saveBtn}
-        >
+      {canShowBookmark ? (
+        <Pressable onPress={handleBookmarkPress} hitSlop={10} style={styles.saveBtn}>
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
             size={20}
             color={saved ? "#111" : "#6B7280"}
           />
         </Pressable>
-      )}
-      {/* Title */}
+      ) : null}
+
       <StyledText fontSize="heading" fontWeight="bold" style={styles.title}>
         {job?.title || "Untitled job"}
       </StyledText>
 
-      {/* Company */}
       <StyledText fontSize="subheading" style={styles.company}>
         {job?.orgName || "Company"}
       </StyledText>
 
-      {/* Location */}
-      {job?.location ? (
-        <StyledText style={styles.location}>{job.location}</StyledText>
-      ) : null}
+      {job?.location ? <StyledText style={styles.location}>{job.location}</StyledText> : null}
 
-      {/* Date + Time */}
-      {(dateText || timeText) ? (
+      {dateText || timeText ? (
         <StyledText style={styles.shiftLine}>
           {dateText}
           {dateText && timeText ? " - " : ""}
@@ -97,12 +115,8 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
         </StyledText>
       ) : null}
 
-      {/* Rate */}
-      {rateText ? (
-        <StyledText style={styles.rate}>{rateText}</StyledText>
-      ) : null}
+      {rateText ? <StyledText style={styles.rate}>{rateText}</StyledText> : null}
 
-      {/* Posted ago */}
       {postedAgo ? <StyledText style={styles.posted}>{postedAgo}</StyledText> : null}
     </Pressable>
   );
@@ -142,16 +156,16 @@ const styles = StyleSheet.create({
   location: { marginTop: 4, color: "#6B7280" },
   shiftLine: { marginTop: 8, color: "#374151" },
 
-  rate: { 
+  rate: {
     marginTop: 8,
     marginBottom: 8,
     color: "#111827",
-    fontWeight: "800"
+    fontWeight: "800",
   },
 
   saveBtn: {
     position: "absolute",
-    top: 18,        // aligns with tag/title
+    top: 18,
     right: 12,
     width: 32,
     height: 32,

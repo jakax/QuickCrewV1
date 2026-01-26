@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
 import { getJobById, updateJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
+
+function parseShiftTimeLegacy(shiftTimeRaw) {
+  if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
+  const normalized = shiftTimeRaw.replace(/\s+/g, " ").trim();
+  const parts = normalized.split(/ to /i);
+  if (parts.length !== 2) return { start: "", end: "" };
+  return { start: parts[0].trim(), end: parts[1].trim() };
+}
 
 export default function EmployerEditJob() {
   const route = useRoute();
@@ -79,16 +87,31 @@ export default function EmployerEditJob() {
     );
   }
 
+  const legacy = parseShiftTimeLegacy(job.shiftTime || "");
+
   return (
-    <>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       <Text style={styles.h1}>Edit shift</Text>
+
       <JobForm
         mode="edit"
         initialValues={{
           title: job.title || "",
           location: job.location || "",
           shiftDate: job.shiftDate || "",
+
+          // NEW: prefill split times if present, otherwise fallback to legacy shiftTime parsing
+          shiftStartTime: job.shiftStartTime || legacy.start,
+          shiftEndTime: job.shiftEndTime || legacy.end,
+
+          // Keep legacy too (JobForm will re-compose it on submit)
           shiftTime: job.shiftTime || "",
+
           ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
           description: job.description || "",
         }}
@@ -99,12 +122,31 @@ export default function EmployerEditJob() {
         onSubmit={onSubmit}
         onCancel={() => navigation.goBack()}
       />
-    </>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff", padding: 20 },
+  screen: { flex: 1, backgroundColor: "#fff" },
+  content: {
+    paddingBottom: 40, // breathing room for smaller screens
+    backgroundColor: "#fff",
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 20,
+  },
   error: { color: "#b91c1c", fontWeight: "800", textAlign: "center" },
-  h1: { fontSize: 20, fontWeight: "900", color: "#111827", paddingHorizontal: 16, paddingTop: 16, backgroundColor: "#fff" },
+  h1: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111827",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    backgroundColor: "#fff",
+  },
 });

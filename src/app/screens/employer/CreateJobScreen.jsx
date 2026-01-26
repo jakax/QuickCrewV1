@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Text, StyleSheet } from "react-native";
+import { Text, StyleSheet, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
 import { createJob } from "../../../services/jobs.service";
@@ -17,6 +17,10 @@ export default function CreateJobScreen() {
       setError(null);
       setLoading(true);
 
+      // NOTE:
+      // We are intentionally not deriving shiftTime/shiftStartAt here yet,
+      // because we need to update JobForm + createJob() service in a controlled way.
+      // This screen simply forwards whatever JobForm returns.
       await createJob({
         orgId,
         orgName,
@@ -33,7 +37,11 @@ export default function CreateJobScreen() {
   };
 
   return (
-    <>
+    <ScrollView
+          style={styles.screen}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
       <Text style={styles.h1}>Create shift</Text>
       <JobForm
         mode="create"
@@ -41,7 +49,15 @@ export default function CreateJobScreen() {
           title: "",
           location: "",
           shiftDate: "",
+
+          // NEW (Sprint 1 prep): split time inputs
+          shiftStartTime: "",
+          shiftEndTime: "",
+
+          // Keep existing for backward compatibility
+          // (we’ll generate it from start/end later in JobForm or the service)
           shiftTime: "",
+
           ratePerHour: null,
           description: "",
         }}
@@ -52,10 +68,31 @@ export default function CreateJobScreen() {
         onSubmit={onSubmit}
         onCancel={() => navigation.goBack()}
       />
-    </>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  h1: { fontSize: 20, fontWeight: "900", color: "#111827", paddingHorizontal: 16, paddingTop: 16, backgroundColor: "#fff" },
+  screen: { flex: 1, backgroundColor: "#fff" },
+  content: {
+    paddingBottom: 40, // breathing room for smaller screens
+    backgroundColor: "#fff",
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 20,
+  },
+  error: { color: "#b91c1c", fontWeight: "800", textAlign: "center" },
+  h1: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111827",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    backgroundColor: "#fff",
+  },
 });

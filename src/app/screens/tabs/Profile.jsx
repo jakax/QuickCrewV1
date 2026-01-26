@@ -68,7 +68,7 @@ export default function Profile() {
   }
 
   if (isWorker) {
-    if (profile?.workerStatus === "approved") {
+    if (profile?.approvalStatus === "approved") {
       return {
         label: "Verified",
         color: "#16A34A",

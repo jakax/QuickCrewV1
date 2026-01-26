@@ -62,4 +62,37 @@ Which tag version am I
 - Navigation after auth/state changes routed through `Gate`
 - Prepared structure for future profile sections (bank details, documents, verification)
 
-###
+### v0.6.0 — Worker Application Flow (Core Marketplace Slice)
+### Added
+
+- Worker job application flow (apply to shift with eligibility checks)
+- Applications Firestore collection with denormalized job data for fast rendering
+- “Applied” tab (from scratch) showing:
+- applied jobs
+- status tags (Applied / Accepted / Rejected / Withdrawn)
+- shift date/time
+- rate
+- Worker cancel shift flow (only allowed ≥ 8h before shift start)
+- ConfirmProvider integration for cancel confirmations and error feedback
+- Automatic reopening of jobs when a worker cancels (auto-assign mode)
+- Eligibility gating:
+- worker must be approved
+- worker must be active
+- applications close 8h before shift start
+- Real-time applied jobs updates via Firestore snapshot
+
+### Changed
+
+- Removed bookmark/favorite functionality once a worker applies to a job
+- Saved jobs are automatically cleared when a worker applies
+- Bookmark toggle hidden on job cards and job details for already-applied jobs
+- Job cards defensively hide bookmark when job is not open
+- Improved worker job details UI feedback (Applied state + eligibility hints)
+
+### Technical
+
+- Introduced applications/{jobId_uid} document pattern
+- Added transactional cancel flow (delete application + reopen job atomically)
+- Added shiftStartAt-based time validation helpers
+- Applied screen now uses Firestore subscriptions instead of static placeholder
+- Standardized worker apply logic inside WorkerJobDetails

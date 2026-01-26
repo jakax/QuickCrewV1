@@ -1,23 +1,60 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, TouchableOpacity, Switch, ActivityIndicator, ScrollView } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  Pressable,
+  TouchableOpacity,
+  Switch,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { getJobById } from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift } from "../../../utils/jobFormatters";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
+import { useSession } from "../../providers/SessionProvider";
+
+import { db } from "../../../services/firebase/config";
+import {
+  doc,
+  getDoc,
+  serverTimestamp,
+  Timestamp,
+  runTransaction,
+} from "firebase/firestore";
+
+const HOURS_8_MS = 8 * 60 * 60 * 1000;
+
+function asDateMaybe(tsOrDate) {
+  if (!tsOrDate) return null;
+  if (tsOrDate instanceof Date) return tsOrDate;
+  if (tsOrDate instanceof Timestamp) return tsOrDate.toDate();
+  if (typeof tsOrDate?.seconds === "number") return new Date(tsOrDate.seconds * 1000);
+  return null;
+}
 
 export default function WorkerJobDetails() {
   const route = useRoute();
   const navigation = useNavigation();
   const jobId = route?.params?.jobId;
 
+  const { uid } = useSession();
+
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
+  const [userDoc, setUserDoc] = useState(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const [userError, setUserError] = useState(null);
+
   const [modalVisible, setModalVisible] = useState(false);
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyError, setApplyError] = useState(null);
 
   const { isSaved, toggleSaved } = useSavedJobs();
-  
   const saved = isSaved(jobId);
 
   useEffect(() => {
@@ -47,6 +84,157 @@ export default function WorkerJobDetails() {
     };
   }, [jobId]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const loadUser = async () => {
+      try {
+        setUserError(null);
+        setUserLoading(true);
+
+        if (!uid) throw new Error("Missing uid (session).");
+
+        const ref = doc(db, "users", uid);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new Error("User profile not found.");
+
+        if (mounted) setUserDoc({ id: snap.id, ...snap.data() });
+      } catch (e) {
+        if (mounted) setUserError(e?.message || "Could not load user.");
+      } finally {
+        if (mounted) setUserLoading(false);
+      }
+    };
+
+    loadUser();
+    return () => {
+      mounted = false;
+    };
+  }, [uid]);
+
+  const [alreadyApplied, setAlreadyApplied] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+
+    const checkApplied = async () => {
+      try {
+        if (!uid || !jobId) return;
+        const applicationId = `${jobId}_${uid}`;
+        const ref = doc(db, "applications", applicationId);
+        const snap = await getDoc(ref);
+        if (mounted) setAlreadyApplied(snap.exists());
+      } catch {
+        // ignore
+      }
+    };
+
+    checkApplied();
+    return () => {
+      mounted = false;
+    };
+  }, [uid, jobId]);
+
+  const applyEligibility = useMemo(() => {
+    if (!job) return { canApply: false, reason: "Job not loaded." };
+    if (!uid) return { canApply: false, reason: "Missing session." };
+    if (userLoading) return { canApply: false, reason: "Checking eligibility..." };
+    if (userError) return { canApply: false, reason: "Could not verify your profile." };
+    if (!userDoc) return { canApply: false, reason: "Could not verify your profile." };
+
+    if (userDoc.role !== "worker") return { canApply: false, reason: "Only workers can apply." };
+    if (userDoc.isActive === false) return { canApply: false, reason: "Your account is inactive." };
+    if (String(userDoc.approvalStatus || "").toUpperCase() !== "APPROVED") {
+      return { canApply: false, reason: "Your profile is not approved yet." };
+    }
+
+    const status = String(job.status || "").toLowerCase();
+    if (status !== "open") return { canApply: false, reason: "This shift is no longer available." };
+
+    const startAt = asDateMaybe(job.shiftStartAt);
+    if (!startAt) return { canApply: false, reason: "This shift is missing start time. Please contact support." };
+
+    const diff = startAt.getTime() - Date.now();
+    if (diff <= 0) return { canApply: false, reason: "This shift has already started." };
+    if (diff < HOURS_8_MS) return { canApply: false, reason: "Applications close 8 hours before the shift starts." };
+
+    if (alreadyApplied) return { canApply: false, reason: "Applied ✅" };
+
+    return { canApply: true, reason: null };
+  }, [job, uid, userLoading, userError, userDoc, alreadyApplied]);
+
+  const applyToJob = async () => {
+    try {
+      setApplyError(null);
+
+      if (!applyEligibility.canApply) {
+        setModalVisible(true);
+        return;
+      }
+
+      setApplyLoading(true);
+
+      const applicationId = `${jobId}_${uid}`;
+      const appRef = doc(db, "applications", applicationId);
+      const jobRef = doc(db, "jobs", jobId);
+      const savedRef = doc(db, "users", uid, "savedJobs", jobId); // <-- remove bookmark if it exists
+
+      await runTransaction(db, async (tx) => {
+        const jobSnap = await tx.get(jobRef);
+        if (!jobSnap.exists()) throw new Error("Job not found.");
+
+        const jobData = jobSnap.data();
+        const status = String(jobData?.status || "").toLowerCase();
+        if (status !== "open") throw new Error("This shift is no longer available.");
+
+        const startAt = asDateMaybe(jobData?.shiftStartAt);
+        if (!startAt) throw new Error("This shift is missing start time.");
+
+        const diff = startAt.getTime() - Date.now();
+        if (diff <= 0) throw new Error("This shift has already started.");
+        if (diff < HOURS_8_MS) throw new Error("Applications close 8 hours before the shift starts.");
+
+        const existing = await tx.get(appRef);
+        if (existing.exists()) return;
+
+        tx.set(appRef, {
+          jobId,
+          workerId: uid,
+          orgId: jobData.orgId || null,
+          orgName: jobData.orgName || null,
+
+          status: "APPLIED",
+          createdAt: serverTimestamp(),
+
+          jobTitle: jobData.title || null,
+          location: jobData.location || null,
+          ratePerHour: typeof jobData.ratePerHour === "number" ? jobData.ratePerHour : null,
+          shiftDate: jobData.shiftDate || null,
+          shiftTime: jobData.shiftTime || null,
+          shiftStartAt: jobData.shiftStartAt || null,
+        });
+
+        // 🔥 If it was saved, remove it — “Applied” replaces “Saved”
+        tx.delete(savedRef);
+
+        // Auto-assign lock only when business approval is NOT required
+        const approvalRequired = jobData?.businessApprovalRequired === true;
+        if (!approvalRequired) {
+          tx.update(jobRef, {
+            status: "pending",
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+
+      setAlreadyApplied(true);
+      setModalVisible(true);
+    } catch (e) {
+      setApplyError(e?.message || "Could not apply.");
+    } finally {
+      setApplyLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -70,16 +258,15 @@ export default function WorkerJobDetails() {
   const dateText = formatShiftDate(job.shiftDate);
   const timeText = job.shiftTime || "";
   const postedAgo = formatPostedAgo(job.createdAt);
-  const rateText = typeof job.ratePerHour === "number" ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : null;
+  const rateText =
+    typeof job.ratePerHour === "number" ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : null;
+
+  const applyDisabled = !applyEligibility.canApply || applyLoading;
+  const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Apply Now";
 
   return (
     <View style={styles.container}>
-      {/* Content */}
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {showNew ? <Text style={styles.tag}>New shift</Text> : null}
 
         <Text style={styles.title}>{job.title}</Text>
@@ -87,7 +274,7 @@ export default function WorkerJobDetails() {
 
         {job.location ? <Text style={styles.meta}>{job.location}</Text> : null}
 
-        {(dateText || timeText) ? (
+        {dateText || timeText ? (
           <Text style={styles.meta}>
             {dateText}
             {dateText && timeText ? " - " : ""}
@@ -99,26 +286,39 @@ export default function WorkerJobDetails() {
 
         {job.description ? <Text style={styles.description}>{job.description}</Text> : null}
         {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
+
+        {applyError ? <Text style={[styles.error, { marginTop: 14 }]}>{applyError}</Text> : null}
       </ScrollView>
 
-      {/* Bottom Apply Bar */}
       <View style={styles.bottomBar}>
-        <View style={styles.saveContainer}>
-          <Text style={styles.saveText}>Save Job</Text>
-          <Switch value={saved} onValueChange={() => toggleSaved({ jobId: job.id, orgId: job.orgId })} />
-        </View>
+        {/* ✅ Hide bookmark once applied */}
+        {!alreadyApplied ? (
+          <View style={styles.saveContainer}>
+            <Text style={styles.saveText}>Save Job</Text>
+            <Switch value={saved} onValueChange={() => toggleSaved({ jobId: job.id, orgId: job.orgId })} />
+          </View>
+        ) : null}
 
-        <TouchableOpacity style={styles.applyButton} onPress={() => setModalVisible(true)}>
-          <Text style={styles.applyButtonText}>Apply Now</Text>
+        {!applyEligibility.canApply && applyEligibility.reason ? (
+          <Text style={styles.applyHint}>{applyEligibility.reason}</Text>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.applyButton, applyDisabled && styles.applyButtonDisabled]}
+          onPress={applyToJob}
+          disabled={applyDisabled}
+        >
+          <Text style={styles.applyButtonText}>{applyButtonLabel}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Modal */}
       <Modal transparent animationType="fade" visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalMessage}>
-              Please complete your registration form before applying for this job.
+              {alreadyApplied
+                ? "Application submitted. You can view it in your Applied tab."
+                : applyEligibility.reason || "You can’t apply to this shift right now."}
             </Text>
 
             <View style={styles.modalButtonsRow}>
@@ -126,14 +326,16 @@ export default function WorkerJobDetails() {
                 style={[styles.modalButton, styles.okButton]}
                 onPress={() => {
                   setModalVisible(false);
-                  navigation.navigate("Profile");
+                  if (String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED") {
+                    navigation.navigate("Profile");
+                  }
                 }}
               >
                 <Text style={styles.okButtonText}>OK</Text>
               </Pressable>
 
               <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>Close</Text>
               </Pressable>
             </View>
           </View>
@@ -183,7 +385,10 @@ const styles = StyleSheet.create({
   saveContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   saveText: { fontSize: 16, fontWeight: "600" },
 
+  applyHint: { marginBottom: 10, color: "#6B7280", fontWeight: "700" },
+
   applyButton: { backgroundColor: "#2563EB", paddingVertical: 15, borderRadius: 12 },
+  applyButtonDisabled: { opacity: 0.6 },
   applyButtonText: { textAlign: "center", color: "#fff", fontSize: 18, fontWeight: "900" },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
@@ -195,9 +400,7 @@ const styles = StyleSheet.create({
   okButton: { backgroundColor: "#2563EB" },
   cancelButtonText: { color: "#333", fontSize: 16, fontWeight: "700" },
   okButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  
+
   scroll: { flex: 1 },
-  scrollContent: {
-    paddingBottom: 140, // important: space for bottom bar + breathing room
-  },
+  scrollContent: { paddingBottom: 140 },
 });

@@ -1,6 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 
+function parseShiftTimeLegacy(shiftTimeRaw) {
+  // Very lightweight parser for legacy strings like:
+  // "9:00 am to 5:00 pm" or "09:00 to 17:00"
+  // If it can’t parse, returns empty strings.
+  if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
+
+  const normalized = shiftTimeRaw.replace(/\s+/g, " ").trim();
+  const parts = normalized.split(/ to /i);
+  if (parts.length !== 2) return { start: "", end: "" };
+
+  return { start: parts[0].trim(), end: parts[1].trim() };
+}
+
 export default function JobForm({
   mode, // "create" | "edit"
   initialValues,
@@ -14,7 +27,19 @@ export default function JobForm({
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? ""); // keep YYYY-MM-DD for now
+
+  // NEW: split time inputs
+  const legacyParsed = parseShiftTimeLegacy(initialValues?.shiftTime ?? "");
+  const [shiftStartTime, setShiftStartTime] = useState(
+    initialValues?.shiftStartTime ?? legacyParsed.start ?? ""
+  );
+  const [shiftEndTime, setShiftEndTime] = useState(
+    initialValues?.shiftEndTime ?? legacyParsed.end ?? ""
+  );
+
+  // Keep legacy field for backward compatibility (we will generate it on submit)
   const [shiftTime, setShiftTime] = useState(initialValues?.shiftTime ?? "");
+
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
   );
@@ -23,15 +48,18 @@ export default function JobForm({
   const [localError, setLocalError] = useState(null);
 
   const canSubmit = useMemo(() => {
-    return !!title.trim() && !!shiftDate.trim() && !!shiftTime.trim();
-  }, [title, shiftDate, shiftTime]);
+    return (
+      !!title.trim() &&
+      !!shiftDate.trim() &&
+      !!shiftStartTime.trim() &&
+      !!shiftEndTime.trim()
+    );
+  }, [title, shiftDate, shiftStartTime, shiftEndTime]);
 
   const submit = () => {
     setLocalError(null);
 
-    const rate =
-      rateText.trim() === "" ? null : Number(rateText.replace(",", "."));
-
+    const rate = rateText.trim() === "" ? null : Number(rateText.replace(",", "."));
     if (rate != null && Number.isNaN(rate)) {
       setLocalError("Rate per hour must be a number.");
       return;
@@ -44,14 +72,32 @@ export default function JobForm({
       return;
     }
 
+    if (!shiftStartTime.trim() || !shiftEndTime.trim()) {
+      setLocalError("Shift start time and end time are required.");
+      return;
+    }
+
+    // Build legacy shiftTime string for backwards compatibility
+    const composedShiftTime = `${shiftStartTime.trim()} to ${shiftEndTime.trim()}`;
+
     onSubmit?.({
       title: title.trim(),
       location: location.trim(),
       shiftDate: shiftDate.trim(),
-      shiftTime: shiftTime.trim(),
+
+      // NEW fields (source of truth for us going forward)
+      shiftStartTime: shiftStartTime.trim(),
+      shiftEndTime: shiftEndTime.trim(),
+
+      // Keep writing legacy too (until we fully migrate UI everywhere)
+      shiftTime: composedShiftTime,
+
       ratePerHour: rate,
       description: description.trim(),
     });
+
+    // Keep internal shiftTime in sync (not strictly required, but helps if screen stays open)
+    setShiftTime(composedShiftTime);
   };
 
   return (
@@ -101,17 +147,36 @@ export default function JobForm({
         autoCapitalize="none"
       />
 
-      <Text style={styles.label}>Shift time *</Text>
+      {/* NEW: split time fields */}
+      <Text style={styles.label}>Shift start time *</Text>
       <TextInput
-        value={shiftTime}
+        value={shiftStartTime}
         onChangeText={(v) => {
-          setShiftTime(v);
+          setShiftStartTime(v);
           if (localError) setLocalError(null);
         }}
         style={styles.input}
-        placeholder="e.g. 9:00 am to 5:00 pm"
+        placeholder="e.g. 9:00 am"
         placeholderTextColor="#9CA3AF"
+        autoCapitalize="none"
       />
+
+      <Text style={styles.label}>Shift end time *</Text>
+      <TextInput
+        value={shiftEndTime}
+        onChangeText={(v) => {
+          setShiftEndTime(v);
+          if (localError) setLocalError(null);
+        }}
+        style={styles.input}
+        placeholder="e.g. 5:00 pm"
+        placeholderTextColor="#9CA3AF"
+        autoCapitalize="none"
+      />
+
+      {/* Keep legacy field hidden from the user.
+          We still keep it in state for compatibility, but we don't render it. */}
+      {/* <Text style={styles.label}>Shift time *</Text> ... */}
 
       <Text style={styles.label}>Rate per hour</Text>
       <TextInput
@@ -158,9 +223,7 @@ export default function JobForm({
             (!canSubmit || loading) && { opacity: 0.6 },
           ]}
         >
-          <Text style={styles.primaryText}>
-            {loading ? "Saving..." : submitLabel}
-          </Text>
+          <Text style={styles.primaryText}>{loading ? "Saving..." : submitLabel}</Text>
         </Pressable>
       </View>
 

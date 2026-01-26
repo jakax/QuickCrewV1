@@ -2,7 +2,9 @@ import React, { useRef, useEffect, useState } from "react";
 import { Animated, FlatList } from "react-native";
 import AnimatedHeader from "../../components/jobs/AnimatedHeader.jsx";
 import JobsItem from "../../components/jobs/JobsItem.jsx";
-import { listPublicJobs } from "../../../services/jobs.service.js";
+
+import { db } from "../../../services/firebase/config";
+import { collection, onSnapshot, orderBy, query, where, limit } from "firebase/firestore";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -11,16 +13,26 @@ const JobsList = () => {
   const [jobs, setJobs] = useState([]);
 
   useEffect(() => {
-    const loadJobs = async () => {
-      try {
-        const jobsData = await listPublicJobs({ limitCount: 50 });
-        setJobs(jobsData);
-      } catch (err) {
-        console.error("Error loading jobs:", err);
-      }
-    };
+    // Only show jobs that are truly available in the pool
+    const q = query(
+      collection(db, "jobs"),
+      where("status", "==", "open"),
+      orderBy("createdAt", "desc"),
+      limit(50)
+    );
 
-    loadJobs();
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setJobs(next);
+      },
+      (err) => {
+        console.error("Error subscribing jobs:", err);
+      }
+    );
+
+    return () => unsub();
   }, []);
 
   return (
@@ -30,10 +42,7 @@ const JobsList = () => {
         data={jobs}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <JobsItem job={item} />}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
       />
     </>
