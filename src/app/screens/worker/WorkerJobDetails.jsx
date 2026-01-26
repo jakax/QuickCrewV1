@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, Modal, Pressable, TouchableOpacity, Switch, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, Modal, Pressable, TouchableOpacity, Switch, ActivityIndicator, ScrollView } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { getJobById } from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift } from "../../../utils/jobFormatters";
+import { useSavedJobs } from "../../hooks/useSavedJobs";
 
 export default function WorkerJobDetails() {
   const route = useRoute();
@@ -13,8 +14,11 @@ export default function WorkerJobDetails() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  const [saved, setSaved] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+
+  const { isSaved, toggleSaved } = useSavedJobs();
+  
+  const saved = isSaved(jobId);
 
   useEffect(() => {
     let mounted = true;
@@ -71,7 +75,11 @@ export default function WorkerJobDetails() {
   return (
     <View style={styles.container}>
       {/* Content */}
-      <View style={{ paddingBottom: 120 }}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {showNew ? <Text style={styles.tag}>New shift</Text> : null}
 
         <Text style={styles.title}>{job.title}</Text>
@@ -88,16 +96,16 @@ export default function WorkerJobDetails() {
         ) : null}
 
         {rateText ? <Text style={styles.rate}>{rateText}</Text> : null}
-        {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
 
         {job.description ? <Text style={styles.description}>{job.description}</Text> : null}
-      </View>
+        {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
+      </ScrollView>
 
       {/* Bottom Apply Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.saveContainer}>
           <Text style={styles.saveText}>Save Job</Text>
-          <Switch value={saved} onValueChange={setSaved} />
+          <Switch value={saved} onValueChange={() => toggleSaved({ jobId: job.id, orgId: job.orgId })} />
         </View>
 
         <TouchableOpacity style={styles.applyButton} onPress={() => setModalVisible(true)}>
@@ -187,4 +195,9 @@ const styles = StyleSheet.create({
   okButton: { backgroundColor: "#2563EB" },
   cancelButtonText: { color: "#333", fontSize: 16, fontWeight: "700" },
   okButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  
+  scroll: { flex: 1 },
+  scrollContent: {
+    paddingBottom: 140, // important: space for bottom bar + breathing room
+  },
 });

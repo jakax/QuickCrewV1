@@ -45,6 +45,11 @@ Which tag version am I
 - Employer account review state handled in UI
 - Worker verification state reflected in profile
 - Logout confirmation with safe session reset via AuthGate
+- Reuse JobsItem for Saved screen
+- Force bookmarked state on saved cards
+- Allow instant removal from Saved list
+- Keep navigation to WorkerJobDetails
+- Integrate with useSavedJobs realtime map"
 
 ### Improved
 - Profile UX consistency across roles
@@ -56,3 +61,5 @@ Which tag version am I
 - Profile now reads real Firestore user data
 - Navigation after auth/state changes routed through `Gate`
 - Prepared structure for future profile sections (bank details, documents, verification)
+
+###
