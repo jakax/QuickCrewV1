@@ -10,19 +10,11 @@ export default function EmployerJobsHome({ navigation }) {
   const { orgId } = useSession();
 
   const [jobs, setJobs] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const { approvalStatus } = useSession();
-
-  {approvalStatus === "pending" ? (
-    <View style={styles.banner}>
-      <Text style={styles.bannerTitle}>Pending approval</Text>
-      <Text style={styles.bannerText}>
-        Your account is pending approval by QuickCrew. You can browse for now.
-      </Text>
-    </View>
-  ) : null}
 
   const load = useCallback(async () => {
     try {
@@ -30,6 +22,7 @@ export default function EmployerJobsHome({ navigation }) {
       setLoading(true);
       const data = await listJobsByOrg({ orgId });
       setJobs(data);
+      setRefreshKey((k) => k + 1);
     } catch (e) {
       setError(e?.message || "Could not load jobs.");
     } finally {
@@ -49,6 +42,14 @@ export default function EmployerJobsHome({ navigation }) {
 
   return (
     <View style={styles.root}>
+      {approvalStatus === "pending" ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerTitle}>Pending approval</Text>
+          <Text style={styles.bannerText}>
+            Your account is pending approval by QuickCrew. You can browse for now.
+          </Text>
+        </View>
+      ) : null}
       {/* Search row (placeholder for later) */}
       <View style={styles.searchRow}>
         <TextInput placeholder="Search jobs..." placeholderTextColor="#9CA3AF" style={styles.searchInput} />
@@ -61,6 +62,7 @@ export default function EmployerJobsHome({ navigation }) {
 
       <FlatList
         data={jobs}
+        extraData={refreshKey}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 120 }}
         ListEmptyComponent={

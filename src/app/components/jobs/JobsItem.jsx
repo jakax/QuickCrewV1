@@ -8,7 +8,15 @@ import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { db } from "../../../services/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+  limit
+} from "firebase/firestore";
 
 const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) => {
   const navigation = useNavigation();
@@ -30,6 +38,8 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
 
   // ✅ detect if current worker already applied to this job
   const [alreadyApplied, setAlreadyApplied] = useState(false);
+  // ✅ detect if this job has pending applications (employer view)
+  const [hasPendingApplicants, setHasPendingApplicants] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -54,6 +64,54 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
     };
   }, [isWorker, uid, job?.id]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const checkPendingApplicants = async () => {
+      try {
+        if (!isEmployer || !job?.id) {
+          if (mounted) setHasPendingApplicants(false);
+          return;
+        }
+
+        // Check if there is at least 1 pending application for this job
+        const q = query(
+          collection(db, "applications"),
+          where("jobId", "==", job.id),
+          where("status", "==", "APPLIED"),
+          limit(1)
+        );
+
+        const snap = await getDocs(q);
+        if (mounted) setHasPendingApplicants(!snap.empty);
+      } catch (e) {
+        console.log("Error checking pending applicants:", e);
+        if (mounted) setHasPendingApplicants(false);
+      }
+    };
+
+    checkPendingApplicants();
+
+    return () => {
+      mounted = false;
+    };
+  }, [isEmployer, job?.id]);
+
+  const jobStatusRaw = String(job?.status || "").toLowerCase();
+
+  const employerStatusLabel = useMemo(() => {
+    if (!isEmployer) return null;
+
+    if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
+    if (jobStatusRaw === "filled") return "Filled";
+
+    // If job is open (status = pending approval) and has pending applicants -> approval needed
+    if (jobStatusRaw === "pending" && hasPendingApplicants) return "Applied (approval needed)";
+
+    // Default
+    return "Open";
+  }, [isEmployer, jobStatusRaw, hasPendingApplicants]);
+
   const onPress = () => {
     if (onPressOverride) return onPressOverride(job);
 
@@ -62,6 +120,11 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
     } else {
       navigation.navigate("WorkerJobDetails", { jobId: job.id });
     }
+  };
+
+  const onReviewApplicantsPress = (e) => {
+    e.stopPropagation();
+    navigation.navigate("EmployerJobApplicants", { jobId: job.id });
   };
 
   const handleBookmarkPress = (e) => {
@@ -84,7 +147,14 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
   return (
     <Pressable onPress={onPress} style={styles.container}>
       <View style={styles.topRow}>
-        {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : <View />}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : null}
+
+          {isEmployer && employerStatusLabel ? 
+            console.log("Employer status label:", employerStatusLabel) || (
+            <StyledText style={styles.statusBadge}>{employerStatusLabel}</StyledText>
+          ) : null}
+        </View>
       </View>
 
       {canShowBookmark ? (
@@ -118,6 +188,12 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
       {rateText ? <StyledText style={styles.rate}>{rateText}</StyledText> : null}
 
       {postedAgo ? <StyledText style={styles.posted}>{postedAgo}</StyledText> : null}
+
+      {isEmployer && jobStatusRaw === "pending" && hasPendingApplicants ? (
+        <Pressable onPress={onReviewApplicantsPress} style={styles.reviewBtn}>
+          <StyledText style={styles.reviewBtnText}>Review applicants</StyledText>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 };
@@ -176,6 +252,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     zIndex: 5,
+  },
+
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "#F3F4F6",
+    color: "#111827",
+    alignSelf: "flex-start",
+  },
+
+  reviewBtn: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  reviewBtnText: {
+    color: "#111827",
+    fontWeight: "700",
   },
 });
 
