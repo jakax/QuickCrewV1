@@ -46,7 +46,7 @@ export default function EmployerJobApplicants() {
       const qApps = query(
         collection(db, "applications"),
         where("jobId", "==", jobId),
-        where("status", "==", "APPLIED")
+        where("status", "==", "pending")
       );
 
       const snap = await getDocs(qApps);
@@ -55,23 +55,61 @@ export default function EmployerJobApplicants() {
       // Enrich with worker profile (MVP join)
       const enriched = await Promise.all(
         rows.map(async (a) => {
-          try {
-            const u = await getDoc(doc(db, "users", a.workerUid));
-            const user = u.exists() ? u.data() : null;
+            const workerUid = a.workerUid || a.uid || a.userId || a.workerId;
+
+            // First try snapshot fields (if you later add them)
+            const snapshotName =
+            a.workerFullName || a.fullName || a.workerName || a.name || a.displayName;
+
+            const snapshotPhone =
+            a.workerPhone || a.phone || a.workerPhoneNumber || a.phoneNumber;
+
+            try {
+            if (!workerUid) {
+                return {
+                ...a,
+                workerUid: workerUid || null,
+                workerFullName: snapshotName || "Unknown name",
+                workerPhone: snapshotPhone || "",
+                };
+            }
+
+            // Try both collection names: "users" and "user"
+            const u1 = await getDoc(doc(db, "users", workerUid));
+            const u2 = !u1.exists() ? await getDoc(doc(db, "user", workerUid)) : null;
+
+            const data = u1.exists() ? u1.data() : u2?.exists() ? u2.data() : null;
+
+            const fullName =
+                snapshotName ||
+                data?.fullName ||
+                data?.displayName ||
+                data?.name ||
+                data?.full_name ||
+                "Unknown name";
+
+            const phone =
+                snapshotPhone ||
+                data?.phone ||
+                data?.phoneNumber ||
+                "";
+
             return {
-              ...a,
-              workerFullName: a.workerFullName || user?.fullName || "Unnamed worker",
-              workerPhone: a.workerPhone || user?.phone || "",
+                ...a,
+                workerUid,
+                workerFullName: fullName,
+                workerPhone: phone,
             };
-          } catch {
+            } catch {
             return {
-              ...a,
-              workerFullName: a.workerFullName || "Unnamed worker",
-              workerPhone: a.workerPhone || "",
+                ...a,
+                workerUid: workerUid || null,
+                workerFullName: snapshotName || "Unknown name",
+                workerPhone: snapshotPhone || "",
             };
-          }
+            }
         })
-      );
+        );
 
       setApps(enriched);
     } catch (e) {
@@ -209,6 +247,7 @@ export default function EmployerJobApplicants() {
 
   const renderItem = ({ item }) => {
     const busy = actingId === item.id;
+    console.log("worker item", item);
 
     return (
       <View style={styles.card}>

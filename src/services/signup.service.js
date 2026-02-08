@@ -129,3 +129,26 @@ export const registerEmployer = async ({
     approvalStatus: "pending",
   };
 };
+
+/**
+ * Worker signup:
+ * - Creates Firebase Auth user
+ * - Creates users/{uid} profile
+ */
+export const registerWorker = async ({ email, password, fullName, phone }) => {
+  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  const uid = cred.user.uid;
+
+  await setDoc(doc(db, "users", uid), {
+    role: "worker",
+    fullName: fullName?.trim() || "",
+    email: email.trim(),
+    phone: phone?.trim?.() || "",
+    isActive: true,
+    approvalStatus: "pending", // change to "pending" if you want admin approval for workers too
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { uid };
+};

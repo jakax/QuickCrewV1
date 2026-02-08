@@ -156,8 +156,9 @@ export default function RegisterEmployer({ navigation }) {
 
       // ✅ linked to existing org: show pending message then go to EmployerTabs
       // for now: simple inline navigation; we can replace with ConfirmProvider later
-      navigation.replace("EmployerTabs", {
-        pendingApprovalMessage: true,
+      navigation.replace("EmployerRoot", {
+        screen: "EmployerTabs",
+        params: { pendingApprovalMessage: true },
       });
     } catch (e) {
       const code = e?.code || "";

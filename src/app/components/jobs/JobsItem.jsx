@@ -18,7 +18,13 @@ import {
   limit
 } from "firebase/firestore";
 
-const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) => {
+const JobsItem = ({
+    job,
+    forceBookmarked,
+    onBookmarkPress,
+    onPressOverride,
+    hasPendingApplicantsOverride,
+  }) => {
   const navigation = useNavigation();
 
   const { isSaved, toggleSaved } = useSavedJobs();
@@ -39,7 +45,9 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
   // ✅ detect if current worker already applied to this job
   const [alreadyApplied, setAlreadyApplied] = useState(false);
   // ✅ detect if this job has pending applications (employer view)
-  const [hasPendingApplicants, setHasPendingApplicants] = useState(false);
+  const [hasPendingApplicants, setHasPendingApplicants] = useState(
+    typeof hasPendingApplicantsOverride === "boolean" ? hasPendingApplicantsOverride : false
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -69,6 +77,10 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
 
     const checkPendingApplicants = async () => {
       try {
+        if (typeof hasPendingApplicantsOverride === "boolean") {
+          if (mounted) setHasPendingApplicants(hasPendingApplicantsOverride);
+          return;
+        }
         if (!isEmployer || !job?.id) {
           if (mounted) setHasPendingApplicants(false);
           return;
@@ -78,7 +90,7 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
         const q = query(
           collection(db, "applications"),
           where("jobId", "==", job.id),
-          where("status", "==", "APPLIED"),
+          where("status", "==", "pending"),
           limit(1)
         );
 
@@ -95,9 +107,16 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
     return () => {
       mounted = false;
     };
-  }, [isEmployer, job?.id]);
+  }, [isEmployer, job?.id, hasPendingApplicantsOverride]);
 
   const jobStatusRaw = String(job?.status || "").toLowerCase();
+  
+  const canReviewApplicants =
+  isEmployer &&
+  hasPendingApplicants &&
+  jobStatusRaw !== "filled" &&
+  jobStatusRaw !== "cancelled" &&
+  jobStatusRaw !== "cancel";
 
   const employerStatusLabel = useMemo(() => {
     if (!isEmployer) return null;
@@ -105,12 +124,23 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
     if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
     if (jobStatusRaw === "filled") return "Filled";
 
-    // If job is open (status = pending approval) and has pending applicants -> approval needed
-    if (jobStatusRaw === "pending" && hasPendingApplicants) return "Applied (approval needed)";
+    // If there are pending applicants, employer needs to take action
+    if (hasPendingApplicants) return "Applied (approval needed)";
 
     // Default
     return "Open";
   }, [isEmployer, jobStatusRaw, hasPendingApplicants]);
+
+  const employerStatusStyle = useMemo(() => {
+    if (!isEmployer) return null;
+
+    const label = employerStatusLabel;
+
+    if (label === "Applied (approval needed)") return styles.statusApplied;
+    if (label === "Filled") return styles.statusFilled;
+    if (label === "Cancelled") return styles.statusCancelled;
+    return styles.statusOpen;
+  }, [isEmployer, employerStatusLabel]);
 
   const onPress = () => {
     if (onPressOverride) return onPressOverride(job);
@@ -150,9 +180,10 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : null}
 
-          {isEmployer && employerStatusLabel ? 
-            console.log("Employer status label:", employerStatusLabel) || (
-            <StyledText style={styles.statusBadge}>{employerStatusLabel}</StyledText>
+          {isEmployer && employerStatusLabel ? (
+            <StyledText style={[styles.statusBadge, employerStatusStyle]}>
+              {employerStatusLabel}
+            </StyledText>
           ) : null}
         </View>
       </View>
@@ -189,7 +220,7 @@ const JobsItem = ({ job, forceBookmarked, onBookmarkPress, onPressOverride }) =>
 
       {postedAgo ? <StyledText style={styles.posted}>{postedAgo}</StyledText> : null}
 
-      {isEmployer && jobStatusRaw === "pending" && hasPendingApplicants ? (
+      {canReviewApplicants ? (
         <Pressable onPress={onReviewApplicantsPress} style={styles.reviewBtn}>
           <StyledText style={styles.reviewBtnText}>Review applicants</StyledText>
         </Pressable>
@@ -259,9 +290,36 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 999,
     overflow: "hidden",
+    alignSelf: "flex-start",
+    fontWeight: "800",
+  },
+
+  statusOpen: {
     backgroundColor: "#F3F4F6",
     color: "#111827",
-    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  statusApplied: {
+    backgroundColor: "#FFFBEB",
+    color: "#92400E",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+
+  statusFilled: {
+    backgroundColor: "#ECFDF5",
+    color: "#065F46",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+
+  statusCancelled: {
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 
   reviewBtn: {

@@ -11,10 +11,11 @@ import {
   ScrollView,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { getJobById } from "../../../services/jobs.service";
-import { formatShiftDate, formatPostedAgo, isNewShift } from "../../../utils/jobFormatters";
+import { getJobById, cancelJobApplication } from "../../../services/jobs.service";
+import { formatShiftDate, formatPostedAgo, isNewShift, canCancelApplication } from "../../../utils/jobFormatters";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { useSession } from "../../providers/SessionProvider";
+import { useConfirm } from "../../providers/ConfirmProvider";
 
 import { db } from "../../../services/firebase/config";
 import {
@@ -53,6 +54,12 @@ export default function WorkerJobDetails() {
   const [modalVisible, setModalVisible] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyError, setApplyError] = useState(null);
+
+  const confirm = useConfirm();
+
+  const [applicationStatus, setApplicationStatus] = useState(null); // "pending" | "cancelled" | ...
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
 
   const { isSaved, toggleSaved } = useSavedJobs();
   const saved = isSaved(jobId);
@@ -112,17 +119,26 @@ export default function WorkerJobDetails() {
     };
   }, [uid]);
 
-  const [alreadyApplied, setAlreadyApplied] = useState(false);
   useEffect(() => {
     let mounted = true;
 
     const checkApplied = async () => {
       try {
         if (!uid || !jobId) return;
+
         const applicationId = `${jobId}_${uid}`;
         const ref = doc(db, "applications", applicationId);
         const snap = await getDoc(ref);
-        if (mounted) setAlreadyApplied(snap.exists());
+
+        if (!mounted) return;
+
+        if (!snap.exists()) {
+          setApplicationStatus(null);
+          return;
+        }
+
+        const st = String(snap.data()?.status || "").toLowerCase();
+        setApplicationStatus(st || "pending");
       } catch {
         // ignore
       }
@@ -133,6 +149,13 @@ export default function WorkerJobDetails() {
       mounted = false;
     };
   }, [uid, jobId]);
+
+  const hasActiveApplication = useMemo(() => {
+    const st = String(applicationStatus || "").toLowerCase();
+    return st === "pending" || st === "accepted";
+  }, [applicationStatus]);
+
+  const alreadyApplied = hasActiveApplication;
 
   const applyEligibility = useMemo(() => {
     if (!job) return { canApply: false, reason: "Job not loaded." };
@@ -161,6 +184,49 @@ export default function WorkerJobDetails() {
 
     return { canApply: true, reason: null };
   }, [job, uid, userLoading, userError, userDoc, alreadyApplied]);
+
+  const canCancel = useMemo(() => {
+    if (!job) return false;
+    if (!hasActiveApplication) return false;
+    return canCancelApplication(job, 4);
+  }, [job, hasActiveApplication]);
+
+  const onCancelApplication = async () => {
+    try {
+      setCancelError(null);
+
+      if (!uid || !jobId) throw new Error("Missing session/job.");
+
+      if (!canCancel) {
+        setCancelError("You can only cancel 4+ hours before the shift starts.");
+        return;
+      }
+
+      const ok = await confirm({
+        title: "Cancel application?",
+        message: "This will withdraw your application and the shift will be available for other workers.",
+        confirmText: "Cancel application",
+        cancelText: "Keep it",
+        destructive: true,
+      });
+
+      if (!ok) return;
+
+      setCancelLoading(true);
+
+      await cancelJobApplication({
+        jobId,
+        workerUid: uid,
+        minHoursBeforeStart: 4,
+      });
+
+      setApplicationStatus("cancelled");
+    } catch (e) {
+      setCancelError(e?.message || "Could not cancel application.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   const applyToJob = async () => {
     try {
@@ -194,15 +260,37 @@ export default function WorkerJobDetails() {
         if (diff < HOURS_8_MS) throw new Error("Applications close 8 hours before the shift starts.");
 
         const existing = await tx.get(appRef);
-        if (existing.exists()) return;
+        if (existing.exists()) {
+          const ex = existing.data();
+          const st = String(ex?.status || "").toLowerCase();
+
+          // If already active, stop
+          if (st === "pending" || st === "accepted") return;
+
+          // Cooldown after cancel (e.g. 10 minutes)
+          if (st === "cancelled") {
+            const cancelledAt =
+              ex?.cancelledAt && typeof ex.cancelledAt.toDate === "function"
+                ? ex.cancelledAt.toDate()
+                : null;
+
+            const COOLDOWN_MS = 10 * 60 * 1000;
+            if (cancelledAt && Date.now() - cancelledAt.getTime() < COOLDOWN_MS) {
+              throw new Error("Please wait a few minutes before applying again.");
+            }
+          }
+
+          // If rejected/cancelled and cooldown passed → allow overwrite (continue)
+        }
 
         tx.set(appRef, {
           jobId,
           workerId: uid,
+          workerUid: uid,
           orgId: jobData.orgId || null,
           orgName: jobData.orgName || null,
 
-          status: "APPLIED",
+          status: "pending",
           createdAt: serverTimestamp(),
 
           jobTitle: jobData.title || null,
@@ -211,6 +299,7 @@ export default function WorkerJobDetails() {
           shiftDate: jobData.shiftDate || null,
           shiftTime: jobData.shiftTime || null,
           shiftStartAt: jobData.shiftStartAt || null,
+          updatedAt: serverTimestamp(),
         });
 
         // 🔥 If it was saved, remove it — “Applied” replaces “Saved”
@@ -226,7 +315,7 @@ export default function WorkerJobDetails() {
         }
       });
 
-      setAlreadyApplied(true);
+      setApplicationStatus("pending");
       setModalVisible(true);
     } catch (e) {
       setApplyError(e?.message || "Could not apply.");
@@ -292,11 +381,25 @@ export default function WorkerJobDetails() {
 
       <View style={styles.bottomBar}>
         {/* ✅ Hide bookmark once applied */}
-        {!alreadyApplied ? (
+        {!hasActiveApplication ? (
           <View style={styles.saveContainer}>
             <Text style={styles.saveText}>Save Job</Text>
             <Switch value={saved} onValueChange={() => toggleSaved({ jobId: job.id, orgId: job.orgId })} />
           </View>
+        ) : null}
+
+        {cancelError ? <Text style={styles.applyHint}>{cancelError}</Text> : null}
+
+        {hasActiveApplication ? (
+          <TouchableOpacity
+            style={[styles.cancelButton, (!canCancel || cancelLoading) && styles.applyButtonDisabled]}
+            onPress={onCancelApplication}
+            disabled={!canCancel || cancelLoading}
+          >
+            <Text style={styles.cancelButtonText}>
+              {cancelLoading ? "Cancelling..." : canCancel ? "Cancel application" : "Cancel locked (under 4h)"}
+            </Text>
+          </TouchableOpacity>
         ) : null}
 
         {!applyEligibility.canApply && applyEligibility.reason ? (
@@ -396,11 +499,22 @@ const styles = StyleSheet.create({
   modalMessage: { fontSize: 16, marginBottom: 20, textAlign: "center" },
   modalButtonsRow: { flexDirection: "row", justifyContent: "space-between", width: "100%" },
   modalButton: { flex: 1, paddingVertical: 10, marginHorizontal: 5, borderRadius: 8, alignItems: "center" },
-  cancelButton: { backgroundColor: "#ddd" },
   okButton: { backgroundColor: "#2563EB" },
-  cancelButtonText: { color: "#333", fontSize: 16, fontWeight: "700" },
   okButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
+
+  cancelButton: {
+    backgroundColor: "#111827",
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  cancelButtonText: {
+    textAlign: "center",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
 });

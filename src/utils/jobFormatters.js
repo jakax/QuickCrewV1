@@ -53,3 +53,48 @@ export function formatPostedAgo(createdAt) {
   const diffDay = Math.floor(diffHr / 24);
   return `Posted ${diffDay}d ago`;
 }
+
+export function getShiftStartMs(job) {
+  try {
+    const sd = job?.shiftDate;
+    const st = (job?.shiftTime || "").trim();
+
+    // Firestore Timestamp
+    if (sd && typeof sd.toDate === "function") {
+      return sd.toDate().getTime();
+    }
+
+    // JS Date
+    if (sd instanceof Date) return sd.getTime();
+
+    // String date: YYYY-MM-DD
+    if (typeof sd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sd)) {
+      const firstTime = st.split("-")[0].trim(); // "09:00 - 17:00" → "09:00"
+
+      if (/^\d{1,2}:\d{2}$/.test(firstTime)) {
+        const hhmm = firstTime.padStart(5, "0");
+        return new Date(`${sd}T${hhmm}:00`).getTime();
+      }
+
+      // Fallback: date only
+      return new Date(`${sd}T00:00:00`).getTime();
+    }
+
+    // Other parseable formats
+    if (typeof sd === "string") {
+      const dt = new Date(sd);
+      if (!Number.isNaN(dt.getTime())) return dt.getTime();
+    }
+
+    return Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+export function canCancelApplication(job, hoursBefore = 4) {
+  const startMs = getShiftStartMs(job);
+  if (!Number.isFinite(startMs)) return false;
+
+  return startMs - Date.now() >= hoursBefore * 60 * 60 * 1000;
+}

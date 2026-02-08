@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  writeBatch,
   collection,
   getDocs,
   limit,
@@ -162,8 +163,8 @@ export async function createJob({ orgId, orgName, uid, job }) {
     // (We can standardize later.)
     status: "open",
 
-    // NEW flag (default true)
-    businessApprovalRequired: true,
+    // Approval required by default; employer can disable it in the UI
+    businessApprovalRequired: job?.businessApprovalRequired !== false,
 
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -246,4 +247,85 @@ export async function updateJob(jobId, updates) {
     ...next,
     updatedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Worker cancels their application for a job.
+ * Rules enforced here (service-level):
+ * - application must exist
+ * - only the same worker can cancel their own application
+ * - only allowed if shift starts in >= minHoursBeforeStart hours
+ * - only allowed if application is still pending (you can widen later)
+ *
+ * Note: job status should remain "open" (jobs lifecycle is separate).
+ */
+export async function cancelJobApplication({
+  jobId,
+  workerUid,
+  minHoursBeforeStart = 4,
+}) {
+  if (!jobId) throw new Error("Missing jobId");
+  if (!workerUid) throw new Error("Missing workerUid");
+
+  const applicationId = `${jobId}_${workerUid}`;
+
+  const jobRef = doc(db, "jobs", jobId);
+  const appRef = doc(db, "applications", applicationId);
+
+  // Read both docs
+  const [jobSnap, appSnap] = await Promise.all([getDoc(jobRef), getDoc(appRef)]);
+
+  if (!jobSnap.exists()) throw new Error("Job not found");
+  if (!appSnap.exists()) throw new Error("Application not found");
+
+  const job = jobSnap.data();
+  const app = appSnap.data();
+
+  // Basic ownership safety
+  const appWorker = app?.workerUid || app?.workerId;
+  if (appWorker && appWorker !== workerUid) {
+    throw new Error("You can only cancel your own application.");
+  }
+
+  // Only allow cancelling pending apps for now (adjust later if you want)
+  const status = String(app?.status || "").toLowerCase();
+  if (status !== "pending") {
+    throw new Error("Only pending applications can be cancelled.");
+  }
+
+  // Prefer shiftStartAt as source of truth
+  const shiftStartAt = job?.shiftStartAt;
+  const startMs =
+    shiftStartAt && typeof shiftStartAt.toDate === "function"
+      ? shiftStartAt.toDate().getTime()
+      : shiftStartAt instanceof Date
+      ? shiftStartAt.getTime()
+      : Number.POSITIVE_INFINITY;
+
+  if (!Number.isFinite(startMs)) {
+    throw new Error("Shift start time is missing. Cannot cancel safely.");
+  }
+
+  const diffMs = startMs - Date.now();
+  const minMs = minHoursBeforeStart * 60 * 60 * 1000;
+
+  if (diffMs < minMs) {
+    throw new Error(`You can only cancel ${minHoursBeforeStart}+ hours before the shift starts.`);
+  }
+
+  // Update application (keep history)
+  const batch = writeBatch(db);
+
+  batch.update(appRef, {
+    status: "cancelled",
+    cancelledAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // Optional: if you later add pendingApplicationsCount, decrement here.
+  // batch.update(jobRef, { pendingApplicationsCount: increment(-1) });
+
+  await batch.commit();
+
+  return { ok: true };
 }

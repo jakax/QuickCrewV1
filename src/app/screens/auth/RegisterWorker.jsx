@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -46,7 +45,7 @@ export default function RegisterWorker({ navigation }) {
     });
     if (!ok) return;
     await handlerRegister();
-  };
+  }
 
   async function handlerRegister() {
     // Client-side validation (fast feedback)
@@ -54,20 +53,20 @@ export default function RegisterWorker({ navigation }) {
     const mail = email.trim();
 
     if (name.length < 2) {
-      setError("Missing name", "Please enter your full name.");
+      setError("Please enter your full name.");
       return;
     }
     if (!isValidEmail(mail)) {
-      setError("Invalid email", "Please enter a valid email address.");
+      setError("Please enter a valid email address.");
       return;
     }
     //Add more validations in the future like lowercase, uppercase, numbers, special characters, etc.
     if (password.length < 6) {
-      setError("Weak password", "Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters.");
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords don't match", "Please confirm your password.");
+      setError("Passwords don't match. Please confirm your password.");
       return;
     }
 
@@ -81,19 +80,22 @@ export default function RegisterWorker({ navigation }) {
       });
 
       // Worker can browse jobs immediately
-      navigation.navigate("JobDetails"); // change to your jobs list route if needed
+      navigation.replace("WorkerRoot", {
+        screen: "WorkerTabs",
+        params: { pendingApprovalMessage: true },
+      });
     } catch (e) {
       console.log("Registration error:", e);
       // Firebase errors: e.code often exists (auth/email-already-in-use, etc.)
       const code = e?.code || "";
       if (code === "auth/email-already-in-use") {
-        setError("Email already in use", "Try logging in instead.");
+        setError("Email already in use. Try logging in instead.");
       } else if (code === "auth/invalid-email") {
-        setError("Invalid email", "Please check your email address.");
+        setError("Invalid email. Please check your email address.");
       } else if (code === "auth/weak-password") {
-        setError("Weak password", "Please choose a stronger password.");
+        setError("Weak password. Please choose a stronger password.");
       } else {
-        setError("Signup failed", e?.message || "Please try again.");
+        setError(e?.message || "Signup failed. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -169,7 +171,7 @@ export default function RegisterWorker({ navigation }) {
           />
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Pressable
           onPress={onRegister}

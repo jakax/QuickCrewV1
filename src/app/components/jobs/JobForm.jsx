@@ -1,5 +1,15 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Modal,
+  TouchableOpacity,
+} from "react-native";
+import { Picker } from "@react-native-picker/picker";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   // Very lightweight parser for legacy strings like:
@@ -12,6 +22,38 @@ function parseShiftTimeLegacy(shiftTimeRaw) {
   if (parts.length !== 2) return { start: "", end: "" };
 
   return { start: parts[0].trim(), end: parts[1].trim() };
+}
+
+function parseTimeParts(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  const t = raw.trim().toLowerCase().replace(/\s+/g, " ");
+
+  // "9:00 am"
+  const m1 = t.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
+  if (m1) {
+    const h = String(Number(m1[1])); // normalize "09" -> "9"
+    const mm = m1[2];
+    const ap = m1[3].toUpperCase();
+    return { hour: h, minute: mm, meridiem: ap };
+  }
+
+  // "09:00" (assume 24h -> convert to AM/PM)
+  const m2 = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (m2) {
+    let hh = Number(m2[1]);
+    const mm = m2[2];
+    const ap = hh >= 12 ? "PM" : "AM";
+    if (hh === 0) hh = 12;
+    else if (hh > 12) hh -= 12;
+    return { hour: String(hh), minute: mm, meridiem: ap };
+  }
+
+  return null;
+}
+
+function composeTimeParts({ hour, minute, meridiem }) {
+  if (!hour || !minute || !meridiem) return "";
+  return `${hour}:${minute} ${String(meridiem).toLowerCase()}`;
 }
 
 export default function JobForm({
@@ -28,17 +70,71 @@ export default function JobForm({
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? ""); // keep YYYY-MM-DD for now
 
-  // NEW: split time inputs
-  const legacyParsed = parseShiftTimeLegacy(initialValues?.shiftTime ?? "");
-  const [shiftStartTime, setShiftStartTime] = useState(
-    initialValues?.shiftStartTime ?? legacyParsed.start ?? ""
-  );
-  const [shiftEndTime, setShiftEndTime] = useState(
-    initialValues?.shiftEndTime ?? legacyParsed.end ?? ""
+  const [businessApprovalRequired, setBusinessApprovalRequired] = useState(
+    initialValues?.businessApprovalRequired !== false
   );
 
-  // Keep legacy field for backward compatibility (we will generate it on submit)
-  const [shiftTime, setShiftTime] = useState(initialValues?.shiftTime ?? "");
+  // NEW: split time inputs
+  const legacyParsed = parseShiftTimeLegacy(initialValues?.shiftTime ?? "");
+
+  const startPartsInit =
+    parseTimeParts(initialValues?.shiftStartTime) ||
+    parseTimeParts(legacyParsed.start) ||
+    { hour: "9", minute: "00", meridiem: "AM" };
+
+  const endPartsInit =
+    parseTimeParts(initialValues?.shiftEndTime) ||
+    parseTimeParts(legacyParsed.end) ||
+    { hour: "5", minute: "00", meridiem: "PM" };
+
+  const [startHour, setStartHour] = useState(startPartsInit.hour);
+  const [startMinute, setStartMinute] = useState(startPartsInit.minute);
+  const [startMeridiem, setStartMeridiem] = useState(startPartsInit.meridiem);
+
+  const [endHour, setEndHour] = useState(endPartsInit.hour);
+  const [endMinute, setEndMinute] = useState(endPartsInit.minute);
+  const [endMeridiem, setEndMeridiem] = useState(endPartsInit.meridiem);
+
+  // ✅ Modal time picker (Option A)
+const [timeModalOpen, setTimeModalOpen] = useState(false);
+
+// Temp values for modal editing (so Cancel doesn't mutate your real state)
+const [tmpStartHour, setTmpStartHour] = useState(startHour);
+const [tmpStartMinute, setTmpStartMinute] = useState(startMinute);
+const [tmpStartMeridiem, setTmpStartMeridiem] = useState(startMeridiem);
+
+const [tmpEndHour, setTmpEndHour] = useState(endHour);
+const [tmpEndMinute, setTmpEndMinute] = useState(endMinute);
+const [tmpEndMeridiem, setTmpEndMeridiem] = useState(endMeridiem);
+
+const openTimeModal = () => {
+  setTmpStartHour(startHour);
+  setTmpStartMinute(startMinute);
+  setTmpStartMeridiem(startMeridiem);
+
+  setTmpEndHour(endHour);
+  setTmpEndMinute(endMinute);
+  setTmpEndMeridiem(endMeridiem);
+
+  setTimeModalOpen(true);
+};
+
+const applyTimeModal = () => {
+  setStartHour(tmpStartHour);
+  setStartMinute(tmpStartMinute);
+  setStartMeridiem(tmpStartMeridiem);
+
+  setEndHour(tmpEndHour);
+  setEndMinute(tmpEndMinute);
+  setEndMeridiem(tmpEndMeridiem);
+
+  if (localError) setLocalError(null);
+  setTimeModalOpen(false);
+};
+
+  const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const minutes = ["00", "15", "30", "45"];
+  const meridiems = ["AM", "PM"];
 
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
@@ -51,10 +147,10 @@ export default function JobForm({
     return (
       !!title.trim() &&
       !!shiftDate.trim() &&
-      !!shiftStartTime.trim() &&
-      !!shiftEndTime.trim()
+      !!startHour && !!startMinute && !!startMeridiem &&
+      !!endHour && !!endMinute && !!endMeridiem
     );
-  }, [title, shiftDate, shiftStartTime, shiftEndTime]);
+  }, [title, shiftDate, startHour, startMinute, startMeridiem, endHour, endMinute, endMeridiem]);
 
   const submit = () => {
     setLocalError(null);
@@ -72,13 +168,15 @@ export default function JobForm({
       return;
     }
 
-    if (!shiftStartTime.trim() || !shiftEndTime.trim()) {
+    const composedStart = composeTimeParts({ hour: startHour, minute: startMinute, meridiem: startMeridiem });
+    const composedEnd = composeTimeParts({ hour: endHour, minute: endMinute, meridiem: endMeridiem });
+    if (!composedStart || !composedEnd) {
       setLocalError("Shift start time and end time are required.");
       return;
     }
 
     // Build legacy shiftTime string for backwards compatibility
-    const composedShiftTime = `${shiftStartTime.trim()} to ${shiftEndTime.trim()}`;
+    const composedShiftTime = `${composedStart} to ${composedEnd}`;
 
     onSubmit?.({
       title: title.trim(),
@@ -86,8 +184,9 @@ export default function JobForm({
       shiftDate: shiftDate.trim(),
 
       // NEW fields (source of truth for us going forward)
-      shiftStartTime: shiftStartTime.trim(),
-      shiftEndTime: shiftEndTime.trim(),
+      shiftStartTime: composedStart,
+      shiftEndTime: composedEnd,
+      businessApprovalRequired,
 
       // Keep writing legacy too (until we fully migrate UI everywhere)
       shiftTime: composedShiftTime,
@@ -95,9 +194,6 @@ export default function JobForm({
       ratePerHour: rate,
       description: description.trim(),
     });
-
-    // Keep internal shiftTime in sync (not strictly required, but helps if screen stays open)
-    setShiftTime(composedShiftTime);
   };
 
   return (
@@ -148,31 +244,25 @@ export default function JobForm({
       />
 
       {/* NEW: split time fields */}
-      <Text style={styles.label}>Shift start time *</Text>
-      <TextInput
-        value={shiftStartTime}
-        onChangeText={(v) => {
-          setShiftStartTime(v);
-          if (localError) setLocalError(null);
-        }}
-        style={styles.input}
-        placeholder="e.g. 9:00 am"
-        placeholderTextColor="#9CA3AF"
-        autoCapitalize="none"
-      />
+      <Text style={styles.label}>Shift time *</Text>
 
-      <Text style={styles.label}>Shift end time *</Text>
-      <TextInput
-        value={shiftEndTime}
-        onChangeText={(v) => {
-          setShiftEndTime(v);
-          if (localError) setLocalError(null);
-        }}
-        style={styles.input}
-        placeholder="e.g. 5:00 pm"
-        placeholderTextColor="#9CA3AF"
-        autoCapitalize="none"
-      />
+      <TouchableOpacity activeOpacity={0.8} onPress={openTimeModal} style={styles.timeSummary}>
+        <Text style={styles.timeSummaryText}>
+          {composeTimeParts({ hour: startHour, minute: startMinute, meridiem: startMeridiem }) || "Start"}{" "}
+          –{" "}
+          {composeTimeParts({ hour: endHour, minute: endMinute, meridiem: endMeridiem }) || "End"}
+        </Text>
+        <Text style={styles.timeSummaryChevron}>▾</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Approval</Text>
+      <View style={styles.switchRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.switchTitle}>Require approval before assigning</Text>
+          <Text style={styles.switchHint}>Recommended for most shifts.</Text>
+        </View>
+        <Switch value={businessApprovalRequired} onValueChange={setBusinessApprovalRequired} />
+      </View>
 
       {/* Keep legacy field hidden from the user.
           We still keep it in state for compatibility, but we don't render it. */}
@@ -232,6 +322,120 @@ export default function JobForm({
           Tip: Date is YYYY-MM-DD for now. We’ll switch to a date picker later.
         </Text>
       ) : null}
+
+      {/* ✅ Modal time picker */}
+      <Modal
+        visible={timeModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTimeModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select shift time</Text>
+
+            <Text style={styles.modalSectionTitle}>Start</Text>
+            <View style={styles.modalPickerRow}>
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={tmpStartHour}
+                  onValueChange={setTmpStartHour}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {hours.map((h) => (
+                    <Picker.Item key={`m-sh-${h}`} label={h} value={h} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={tmpStartMinute}
+                  onValueChange={setTmpStartMinute}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {minutes.map((m) => (
+                    <Picker.Item key={`m-sm-${m}`} label={m} value={m} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
+                <Picker
+                  selectedValue={tmpStartMeridiem}
+                  onValueChange={setTmpStartMeridiem}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {meridiems.map((ap) => (
+                    <Picker.Item key={`m-sap-${ap}`} label={ap} value={ap} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
+            <Text style={[styles.modalSectionTitle, { marginTop: 12 }]}>End</Text>
+            <View style={styles.modalPickerRow}>
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={tmpEndHour}
+                  onValueChange={setTmpEndHour}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {hours.map((h) => (
+                    <Picker.Item key={`m-eh-${h}`} label={h} value={h} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={tmpEndMinute}
+                  onValueChange={setTmpEndMinute}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {minutes.map((m) => (
+                    <Picker.Item key={`m-em-${m}`} label={m} value={m} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
+                <Picker
+                  selectedValue={tmpEndMeridiem}
+                  onValueChange={setTmpEndMeridiem}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {meridiems.map((ap) => (
+                    <Picker.Item key={`m-eap-${ap}`} label={ap} value={ap} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={styles.modalButtonsRow}>
+              <Pressable
+                onPress={() => setTimeModalOpen(false)}
+                style={({ pressed }) => [styles.modalBtn, styles.modalBtnGhost, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.modalBtnGhostText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={applyTimeModal}
+                style={({ pressed }) => [styles.modalBtn, styles.modalBtnPrimary, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -292,4 +496,132 @@ const styles = StyleSheet.create({
   primaryText: { color: "#fff", fontWeight: "900" },
 
   helper: { marginTop: 10, color: "#6B7280", fontSize: 12, lineHeight: 16 },
+
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+  },
+  switchTitle: { fontWeight: "900", color: "#111827" },
+  switchHint: { marginTop: 2, fontSize: 12, fontWeight: "700", color: "#6B7280" },
+
+  timeSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#FAFAFA",
+  },
+
+  timeSummaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  timeSummaryChevron: {
+    color: "#9CA3AF",
+    fontWeight: "900",
+    marginLeft: 10,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 18,
+  },
+
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#111827",
+    marginBottom: 10,
+  },
+
+  modalSectionTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+
+  modalPickerRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  modalPickerBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#FAFAFA",
+  },
+
+  modalPickerSmall: {
+    flex: 0.9,
+  },
+
+  modalButtonsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 14,
+  },
+
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  modalBtnGhost: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#fff",
+  },
+
+  modalBtnPrimary: {
+    backgroundColor: "#2563EB",
+  },
+
+  modalBtnGhostText: {
+    color: "#111827",
+    fontWeight: "900",
+  },
+
+  modalBtnPrimaryText: {
+    color: "#fff",
+    fontWeight: "900",
+  },
+
+  picker: {
+    height: 180,
+  },
+
+  pickerItem: {
+    color: "#111827",
+    fontSize: 18,
+    fontWeight: "700",
+  },
 });

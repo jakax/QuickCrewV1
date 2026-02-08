@@ -58,6 +58,8 @@ export default function CreateJobScreen() {
           // (we’ll generate it from start/end later in JobForm or the service)
           shiftTime: "",
 
+          businessApprovalRequired: true,
+
           ratePerHour: null,
           description: "",
         }}

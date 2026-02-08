@@ -4,6 +4,9 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
 import { listJobsByOrg } from "../../../services/jobs.service";
 import JobsItem from "../../components/jobs/JobsItem";
+import { db } from "../../../services/firebase/config";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
+import { getShiftStartMs } from "../../../utils/jobFormatters";
 
 
 export default function EmployerJobsHome({ navigation }) {
@@ -16,12 +19,69 @@ export default function EmployerJobsHome({ navigation }) {
 
   const { approvalStatus } = useSession();
 
+  const hasPendingForJob = async (jobId) => {
+    const q = query(
+      collection(db, "applications"),
+      where("jobId", "==", jobId),
+      where("status", "==", "pending"),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    return !snap.empty;
+  };
+
   const load = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
       const data = await listJobsByOrg({ orgId });
-      setJobs(data);
+
+      // Enrich jobs with hasPendingApplicants so we can sort properly.
+      // If you later add jobs.pendingApplicationsCount, we can switch to that.
+      const enriched = await Promise.all(
+        (data || []).map(async (j) => {
+          try {
+            const status = String(j?.status || "").toLowerCase();
+            const cancelled = status === "cancel" || status === "cancelled";
+            const filled = status === "filled";
+
+            if (filled || cancelled) return { ...j, hasPendingApplicants: false };
+            const pending = await hasPendingForJob(j.id);
+            return { ...j, hasPendingApplicants: pending };
+          } catch (e) {
+            console.log("hasPendingForJob error:", e);
+            return { ...j, hasPendingApplicants: false };
+          }
+        })
+      );
+
+      enriched.sort((a, b) => {
+        const aStatus = String(a?.status || "").toLowerCase();
+        const bStatus = String(b?.status || "").toLowerCase();
+
+        const aCancelled = aStatus === "cancel" || aStatus === "cancelled";
+        const bCancelled = bStatus === "cancel" || bStatus === "cancelled";
+
+        const aFilled = aStatus === "filled";
+        const bFilled = bStatus === "filled";
+
+        // 1) Pending approval first (only if not filled/cancelled)
+        const aNeedsAction = !!a?.hasPendingApplicants && !aFilled && !aCancelled;
+        const bNeedsAction = !!b?.hasPendingApplicants && !bFilled && !bCancelled;
+        if (aNeedsAction !== bNeedsAction) return aNeedsAction ? -1 : 1;
+
+        // 2) Then by soonest shift start
+        const aStart = getShiftStartMs(a);
+        const bStart = getShiftStartMs(b);
+        if (aStart !== bStart) return aStart - bStart;
+
+        // 3) Tie-breaker: createdAt newest first (if available)
+        const aCreated = a?.createdAt?.seconds ? a.createdAt.seconds : 0;
+        const bCreated = b?.createdAt?.seconds ? b.createdAt.seconds : 0;
+        return bCreated - aCreated;
+      });
+
+      setJobs(enriched);
       setRefreshKey((k) => k + 1);
     } catch (e) {
       setError(e?.message || "Could not load jobs.");
@@ -72,7 +132,9 @@ export default function EmployerJobsHome({ navigation }) {
             <Text style={styles.muted}>No jobs yet. Tap + to create your first job.</Text>
           )
         }
-        renderItem={({ item }) => <JobsItem job={item} />}
+        renderItem={({ item }) => (
+          <JobsItem job={item} hasPendingApplicantsOverride={item.hasPendingApplicants} />
+        )}
       />
 
       {/* FAB */}

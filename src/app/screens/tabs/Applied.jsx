@@ -48,11 +48,12 @@ function formatDateTime(value) {
 }
 
 function statusLabel(statusRaw) {
-  const s = String(statusRaw || "").toUpperCase();
-  if (s === "ACCEPTED") return "Accepted";
-  if (s === "REJECTED") return "Rejected";
-  if (s === "WITHDRAWN") return "Withdrawn";
-  return "Applied";
+  const s = String(statusRaw || "").toLowerCase();
+  if (s === "accepted") return "Accepted";
+  if (s === "rejected") return "Rejected";
+  if (s === "withdrawn") return "Withdrawn";
+  if (s === "cancelled") return "Cancelled";
+  return "Pending";
 }
 
 function statusStyle(statusRaw) {
@@ -60,7 +61,13 @@ function statusStyle(statusRaw) {
   if (s === "ACCEPTED") return styles.pillAccepted;
   if (s === "REJECTED") return styles.pillRejected;
   if (s === "WITHDRAWN") return styles.pillWithdrawn;
+  if (s === "CANCELLED") return styles.pillCancelled;
   return styles.pillApplied;
+}
+
+function isActiveApplication(statusRaw) {
+  const s = String(statusRaw || "").toLowerCase();
+  return s === "pending" || s === "accepted";
 }
 
 export default function Applied() {
@@ -96,7 +103,9 @@ export default function Applied() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const next = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((a) => isActiveApplication(a.status));
         setItems(next);
         setLoading(false);
       },
@@ -123,7 +132,9 @@ export default function Applied() {
       );
 
       const snap = await getDocs(q);
-      const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const next = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((a) => isActiveApplication(a.status));
       setItems(next);
     } catch (e) {
       setLoadError(e?.message || "Could not refresh.");
@@ -139,7 +150,7 @@ export default function Applied() {
 
   const isCancellableUI = (app) => {
     const appStatus = String(app?.status || "").toUpperCase();
-    if (appStatus !== "APPLIED") return false;
+    if (appStatus !== "pending") return false;
 
     const startAt = asDateMaybe(app?.shiftStartAt);
     if (!startAt) return false;
@@ -178,7 +189,7 @@ export default function Applied() {
         if (appData.workerId !== uid) throw new Error("Not allowed.");
 
         const appStatus = String(appData.status || "").toUpperCase();
-        if (appStatus !== "APPLIED") throw new Error("You can only cancel an active application.");
+        if (appStatus !== "pending") throw new Error("You can only cancel an active application.");
 
         const jobSnap = await tx.get(jobRef);
         if (!jobSnap.exists()) throw new Error("Job not found.");
@@ -350,6 +361,7 @@ const styles = StyleSheet.create({
   pillAccepted: { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
   pillRejected: { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
   pillWithdrawn: { backgroundColor: "#F3F4F6", borderColor: "#E5E7EB" },
+  pillCancelled: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
 
   cancelBtn: {
     marginTop: 12,
