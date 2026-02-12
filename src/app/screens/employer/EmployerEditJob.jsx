@@ -114,6 +114,7 @@ export default function EmployerEditJob() {
 
           ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
           description: job.description || "",
+          businessApprovalRequired: job?.businessApprovalRequired !== false,
         }}
         orgName={job.orgName || orgName}
         submitLabel="Save changes"

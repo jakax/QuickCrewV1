@@ -24,6 +24,7 @@ import {
   serverTimestamp,
   Timestamp,
   runTransaction,
+  collection,
 } from "firebase/firestore";
 
 const HOURS_8_MS = 8 * 60 * 60 * 1000;
@@ -249,6 +250,19 @@ export default function WorkerJobDetails() {
         if (!jobSnap.exists()) throw new Error("Job not found.");
 
         const jobData = jobSnap.data();
+
+        const shiftDate = String(jobData?.shiftDate || "").trim();
+        if (!shiftDate) throw new Error("This shift is missing shiftDate.");
+
+        const lockId = `${uid}_${shiftDate}`;
+        const lockRef = doc(db, "workerShiftDayLocks", lockId);
+
+        // If a lock exists, worker already has an active shift that day
+        const lockSnap = await tx.get(lockRef);
+        if (lockSnap.exists()) {
+          throw new Error("You already have a shift on this date. You can’t apply to another one the same day.");
+        }
+
         const status = String(jobData?.status || "").toLowerCase();
         if (status !== "open") throw new Error("This shift is no longer available.");
 
@@ -302,20 +316,58 @@ export default function WorkerJobDetails() {
           updatedAt: serverTimestamp(),
         });
 
+        tx.set(lockRef, {
+          workerUid: uid,
+          shiftDate,
+          jobId,
+          status: "active",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
         // 🔥 If it was saved, remove it — “Applied” replaces “Saved”
         tx.delete(savedRef);
 
-        // Auto-assign lock only when business approval is NOT required
-        const approvalRequired = jobData?.businessApprovalRequired === true;
+        // Auto-assign only when business approval is NOT required
+        const approvalRequired = jobData?.businessApprovalRequired !== false;
+
         if (!approvalRequired) {
+          // Create assignment record
+          const assignmentRef = doc(collection(db, "assignments"));
+
+          // Update job to assigned immediately
           tx.update(jobRef, {
-            status: "pending",
+            status: "assigned",
+            assignedWorkerUid: uid,
+            assignedAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+          });
+
+          // Also mark the application as accepted (so Applied tab can reflect it)
+          tx.set(
+            appRef,
+            {
+              status: "accepted",
+              decidedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          tx.set(assignmentRef, {
+            jobId,
+            orgId: jobData.orgId || null,
+            orgName: jobData.orgName || null,
+            workerUid: uid,
+            status: "assigned",
+            createdAt: serverTimestamp(),
+            createdBy: uid,
           });
         }
       });
 
-      setApplicationStatus("pending");
+      const approvalRequired = job?.businessApprovalRequired !== false;
+      setApplicationStatus(approvalRequired ? "pending" : "accepted");
       setModalVisible(true);
     } catch (e) {
       setApplyError(e?.message || "Could not apply.");
@@ -420,7 +472,9 @@ export default function WorkerJobDetails() {
           <View style={styles.modalBox}>
             <Text style={styles.modalMessage}>
               {alreadyApplied
-                ? "Application submitted. You can view it in your Applied tab."
+                ? applicationStatus === "accepted"
+                  ? "You’re assigned to this shift ✅ You can view it in your Applied tab."
+                  : "Application submitted. Waiting for employer approval. You can view it in your Applied tab."
                 : applyEligibility.reason || "You can’t apply to this shift right now."}
             </Text>
 

@@ -115,6 +115,7 @@ const JobsItem = ({
   isEmployer &&
   hasPendingApplicants &&
   jobStatusRaw !== "filled" &&
+  jobStatusRaw !== "assigned" && 
   jobStatusRaw !== "cancelled" &&
   jobStatusRaw !== "cancel";
 
@@ -123,6 +124,7 @@ const JobsItem = ({
 
     if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
     if (jobStatusRaw === "filled") return "Filled";
+    if (jobStatusRaw === "assigned") return "Assigned";
 
     // If there are pending applicants, employer needs to take action
     if (hasPendingApplicants) return "Applied (approval needed)";
@@ -137,6 +139,7 @@ const JobsItem = ({
     const label = employerStatusLabel;
 
     if (label === "Applied (approval needed)") return styles.statusApplied;
+    if (label === "Assigned") return styles.statusAssigned;
     if (label === "Filled") return styles.statusFilled;
     if (label === "Cancelled") return styles.statusCancelled;
     return styles.statusOpen;
@@ -306,6 +309,13 @@ const styles = StyleSheet.create({
     color: "#92400E",
     borderWidth: 1,
     borderColor: "#FDE68A",
+  },
+
+  statusAssigned: {
+    backgroundColor: "#EEF2FF",
+    color: "#3730A3",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
   },
 
   statusFilled: {

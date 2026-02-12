@@ -255,9 +255,11 @@ export async function updateJob(jobId, updates) {
  * - application must exist
  * - only the same worker can cancel their own application
  * - only allowed if shift starts in >= minHoursBeforeStart hours
- * - only allowed if application is still pending (you can widen later)
+ * - allowed if application is pending OR accepted (auto-assign)
  *
- * Note: job status should remain "open" (jobs lifecycle is separate).
+ * Note:
+ * - If accepted (auto-assign), we reopen the job.
+ * - We also release the worker day-lock (if you implemented it).
  */
 export async function cancelJobApplication({
   jobId,
@@ -287,10 +289,11 @@ export async function cancelJobApplication({
     throw new Error("You can only cancel your own application.");
   }
 
-  // Only allow cancelling pending apps for now (adjust later if you want)
   const status = String(app?.status || "").toLowerCase();
-  if (status !== "pending") {
-    throw new Error("Only pending applications can be cancelled.");
+  const wasAccepted = status === "accepted";
+
+  if (status !== "pending" && status !== "accepted") {
+    throw new Error("Only pending or accepted applications can be cancelled.");
   }
 
   // Prefer shiftStartAt as source of truth
@@ -313,19 +316,38 @@ export async function cancelJobApplication({
     throw new Error(`You can only cancel ${minHoursBeforeStart}+ hours before the shift starts.`);
   }
 
-  // Update application (keep history)
   const batch = writeBatch(db);
 
+  // Update application (keep history)
   batch.update(appRef, {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 
-  // Optional: if you later add pendingApplicationsCount, decrement here.
-  // batch.update(jobRef, { pendingApplicationsCount: increment(-1) });
+  // If this was an auto-assigned shift, reopen the job
+  if (wasAccepted) {
+    batch.update(jobRef, {
+      status: "open",
+      assignedWorkerUid: null,
+      assignedAt: null,
+      updatedAt: serverTimestamp(),
+    });
+
+    // OPTIONAL (recommended) — delete deterministic assignment doc if you used this id:
+    // assignments/{jobId}_{workerUid}
+    const assignmentRef = doc(db, "assignments", `${jobId}_${workerUid}`);
+    batch.delete(assignmentRef);
+  }
+
+  // Release the worker "one shift per day" lock (for BOTH pending + accepted)
+  const shiftDate = String(job?.shiftDate || "").trim();
+  if (shiftDate) {
+    const lockId = `${workerUid}_${shiftDate}`;
+    const lockRef = doc(db, "workerShiftDayLocks", lockId);
+    batch.delete(lockRef);
+  }
 
   await batch.commit();
-
   return { ok: true };
 }
