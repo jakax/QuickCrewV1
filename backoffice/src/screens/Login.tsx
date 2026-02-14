@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase/client";
 import { useNavigate } from "react-router-dom";
@@ -13,9 +13,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (user) {
-    nav("/");
-  }
+  useEffect(() => {
+    if (user) nav("/", { replace: true });
+  }, [user, nav]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +23,7 @@ export default function Login() {
       setError(null);
       setLoading(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      nav("/");
+      nav("/", { replace: true });
     } catch (err: any) {
       setError(err?.message || "Login failed.");
     } finally {
@@ -32,49 +32,36 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "system-ui" }}>
-      <form onSubmit={submit} style={{ width: 360, border: "1px solid #e5e7eb", borderRadius: 12, padding: 18 }}>
-        <h2 style={{ marginTop: 0 }}>QuickCrew Back Office</h2>
-        <p style={{ marginTop: 6, color: "#6b7280" }}>Staff login</p>
+    <div className="centerPage">
+      <form onSubmit={submit} className="card" style={{ width: 380 }}>
+        <div className="cardBody">
+          <h1 className="h1">QuickCrew Back Office</h1>
+          <div className="muted mt6">Staff login</div>
 
-        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>Email</label>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          type="email"
-          required
-          style={{ width: "100%", padding: 10, marginTop: 6, borderRadius: 10, border: "1px solid #d1d5db" }}
-        />
+          <label className="inputLabel">Email</label>
+          <input
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            required
+          />
 
-        <label style={{ display: "block", marginTop: 12, fontWeight: 700 }}>Password</label>
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          type="password"
-          required
-          style={{ width: "100%", padding: 10, marginTop: 6, borderRadius: 10, border: "1px solid #d1d5db" }}
-        />
+          <label className="inputLabel">Password</label>
+          <input
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+          />
 
-        {error ? <div style={{ marginTop: 12, color: "#b91c1c", fontWeight: 700 }}>{error}</div> : null}
+          {error ? <div className="error mt12">{error}</div> : null}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            marginTop: 14,
-            padding: 12,
-            borderRadius: 10,
-            border: "none",
-            background: "#2563eb",
-            color: "white",
-            fontWeight: 800,
-            cursor: "pointer",
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
+          <button type="submit" className="btn btnPrimary mt14" style={{ width: "100%" }} disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </div>
       </form>
     </div>
   );

@@ -1,0 +1,248 @@
+/* Layout */
+.page {
+  padding: 24px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cardHeader {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted-surface);
+}
+
+.cardBody {
+  padding: 14px;
+}
+
+.muted {
+  color: var(--muted-text);
+}
+
+.error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  background: var(--primary);
+  color: white;
+  border-color: #bfdbfe;
+}
+
+.btnDanger {
+  background: var(--danger-bg);
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Approvals layout */
+.approvalsLayout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 14px;
+}
+
+.list {
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+}
+
+.listItem {
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  background: white;
+  cursor: pointer;
+}
+
+.listItemActive {
+  background: #eff6ff;
+}
+
+.sectionGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.fullRow {
+  grid-column: 1 / -1;
+}
+
+.skillsWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.skillChip {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: white;
+  font-weight: 800;
+}
+
+.skillChipActive {
+  background: #eff6ff;
+}
+
+.input {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 800;
+  outline: none;
+}
+.input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35); }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-top: 1px solid #f1f5f9; padding: 12px 10px; vertical-align: middle; }
+.table thead th { border-top: none; color: #6b7280; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+
+/* ---------- Layout helpers (BackOffice) ---------- */
+.rowBetween {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rowTop {
+  align-items: flex-start;
+}
+
+.right {
+  justify-content: flex-end;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.w320 {
+  width: 320px;
+}
+
+.fs13 {
+  font-size: 13px;
+}
+
+.fs12 {
+  font-size: 12px;
+}
+
+.fw800 {
+  font-weight: 800;
+}
+
+.fw900 {
+  font-weight: 900;
+}
+
+/* ---------- Table helpers ---------- */
+.tableThLeft th {
+  text-align: left;
+}
+
+.tableActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.thActions {
+  width: 380px;
+}
+
+/* ---------- Pills (status) ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.pillOk {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.pillWarn {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+/* ---------- Modal (BackOffice) ---------- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 50;
+}
+
+.modalCard {
+  width: 100%;
+  max-width: 520px;
+}
+
+.modalTitle {
+  font-weight: 900;
+  font-size: 16px;
+}
+
+.modalMessage {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.modalActions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  margin-top: 10px;
+}

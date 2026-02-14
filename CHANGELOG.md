@@ -96,3 +96,65 @@ Which tag version am I
 - Added shiftStartAt-based time validation helpers
 - Applied screen now uses Firestore subscriptions instead of static placeholder
 - Standardized worker apply logic inside WorkerJobDetails
+
+### v0.7.0 — Auto-Assign + Shift Lifecycle Stabilization (Phase A Completion)
+### Added
+
+- Auto-Assign shift flow (no approval required)
+- Employers can disable approval during shift creation.
+- Worker application instantly locks the shift when approval is disabled.
+- businessApprovalRequired persisted in jobs collection.
+- Auto-assign logic integrated into worker apply transaction.
+- Shift day conflict guard (worker cannot apply to multiple shifts on same date).
+
+- Worker shift-day lock mechanism:
+- Prevents overlapping same-day applications.
+- Automatically released when cancellation happens.
+- Support for cancellation of accepted applications (auto-assigned jobs).
+- Automatic reopening of shifts when auto-assigned worker cancels.
+- Added assignment metadata cleanup on cancel:
+- assignedWorkerUid
+- assignedAt
+- Extended cancel safeguards (≥ 4h before shift start).
+
+### Changed
+
+- JobForm now persists approval mode correctly during edit.
+- Approval toggle state fully preserved across create/edit flows.
+- Worker apply flow now checks approval mode to decide:
+- pending application (manual approval)
+- auto-assigned lock (no approval required).
+- Improved shift time handling:
+- split start/end time fields as source of truth.
+- legacy shiftTime kept for compatibility.
+- Application lifecycle unified for:
+- pending
+- accepted (auto-assign)
+- cancelled.
+
+### Fixed
+
+- Edit shift bug resetting approval requirement.
+- Firestore web error caused by incorrect collection import.
+- Cancellation logic previously restricted to pending applications only.
+- Auto-assigned jobs now correctly return to open state when cancelled.
+- Worker shift lock cleanup on cancel.
+
+### Technical
+
+- Service-layer stabilization in jobs.service.
+- Improved transaction safety in worker apply flow.
+- Extended cancelJobApplication to support:
+- accepted status
+- job state rollback.
+- Introduced lightweight worker day-lock pattern for overlap prevention.
+- Continued backward compatibility with legacy shiftTime format.
+
+### Phase milestone
+
+✔️ Phase A (Hiring Core) effectively completed:
+
+- Shift creation
+- Approval vs Auto-Assign logic
+- Worker apply & cancel lifecycle
+- Conflict prevention safeguards

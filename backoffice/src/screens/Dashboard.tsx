@@ -1,31 +1,44 @@
 import React from "react";
-import { signOut } from "firebase/auth";
-import { auth } from "../firebase/client";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../providers/AuthProvider";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const nav = useNavigate();
 
   return (
-    <div style={{ fontFamily: "system-ui", padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-        <h1 style={{ margin: 0 }}>Back Office</h1>
-        <button
-          onClick={() => signOut(auth)}
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #d1d5db", background: "white", fontWeight: 800 }}
-        >
-          Sign out
-        </button>
+    <div className="page">
+      <div className="row">
+        <h1 className="h1">Dashboard</h1>
       </div>
 
-      <div style={{ marginTop: 16, color: "#374151" }}>
+      <div className="mt16">
         Logged in as <b>{user?.email || user?.uid}</b>
       </div>
 
-      <div style={{ marginTop: 18, border: "1px solid #e5e7eb", borderRadius: 12, padding: 14 }}>
-        <b>Next:</b> User Approvals (Phase B1)
-        <div style={{ marginTop: 8, color: "#6b7280" }}>
-          We’ll build a table of users pending approval and actions to approve/reject.
+      <div className="grid mt18">
+        <div className="card">
+          <div className="cardBody">
+            <div style={{ fontWeight: 900 }}>Users</div>
+            <div className="muted mt6">
+              Review workers, approve/reject, suspend/disable accounts.
+            </div>
+            <button className="btn btnPrimary mt12" onClick={() => nav("/users/workers")}>
+              Open Workers
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="cardBody">
+            <div style={{ fontWeight: 900 }}>Catalog</div>
+            <div className="muted mt6">
+              Manage skills and role rates used across the platform.
+            </div>
+            <button className="btn btnPrimary mt12" onClick={() => nav("/catalog/skills")}>
+              Open Skills
+            </button>
+          </div>
         </div>
       </div>
     </div>
