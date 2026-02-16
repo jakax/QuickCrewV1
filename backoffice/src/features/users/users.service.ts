@@ -27,6 +27,15 @@ export type UserRow = {
   statusReason?: string;
   statusUpdatedAt?: any;
   statusUpdatedBy?: string;
+
+  // ✅ status change audit trail (optional)
+  statusHistory?: Array<{
+    at?: any;                 // Date or Firestore Timestamp
+    by?: string;              // admin uid
+    from?: string | null;
+    to?: string;
+    reason?: string | null;
+  }>;
 };
 
 export async function listWorkersByStatus(status: ApprovalStatus): Promise<UserRow[]> {
@@ -52,10 +61,10 @@ type SetWorkerStatusArgs = {
   to: ApprovalStatus;
   skills?: string[];
   reason?: string | null;
-  from?: string | null; // optional; WorkersScreen can pass it if it has it
+  from?: string | null;
 };
 
-// This is the single “source of truth” for changing status.
+// Single “source of truth” for status changes.
 // Keeps MVP simple but auditable.
 export async function setWorkerStatus({
   userId,
@@ -71,7 +80,7 @@ export async function setWorkerStatus({
 
   const cleanReason = typeof reason === "string" ? reason.trim() : "";
 
-  // Require reason only for reject/suspend (MVP moderation best practice)
+  // Require reason only for reject/suspend
   if ((to === "rejected" || to === "suspended") && !cleanReason) {
     throw new Error("Reason is required for rejected/suspended.");
   }
@@ -82,27 +91,20 @@ export async function setWorkerStatus({
     approvalStatus: to,
     skills: Array.isArray(skills) ? skills : [],
 
-    // generic moderation metadata (used everywhere)
+    // generic moderation metadata
     statusReason: cleanReason || null,
     statusUpdatedAt: serverTimestamp(),
     statusUpdatedBy: adminUid,
 
-    // keep old per-status fields for compatibility / debugging
-    ...(to === "approved"
-      ? { approvedAt: serverTimestamp(), approvedBy: adminUid }
-      : {}),
-    ...(to === "rejected"
-      ? { rejectedAt: serverTimestamp(), rejectedBy: adminUid }
-      : {}),
-    ...(to === "suspended"
-      ? { suspendedAt: serverTimestamp(), suspendedBy: adminUid }
-      : {}),
-    ...(to === "pending"
-      ? { movedToPendingAt: serverTimestamp(), movedToPendingBy: adminUid }
-      : {}),
+    // keep per-status fields (useful for debugging / analytics later)
+    ...(to === "approved" ? { approvedAt: serverTimestamp(), approvedBy: adminUid } : {}),
+    ...(to === "rejected" ? { rejectedAt: serverTimestamp(), rejectedBy: adminUid } : {}),
+    ...(to === "suspended" ? { suspendedAt: serverTimestamp(), suspendedBy: adminUid } : {}),
+    ...(to === "pending" ? { movedToPendingAt: serverTimestamp(), movedToPendingBy: adminUid } : {}),
 
-    // lightweight history (optional but very useful)
+    // lightweight history
     statusHistory: arrayUnion({
+      // NOTE: Date() uses client time — acceptable for MVP audit trail
       at: new Date(),
       by: adminUid,
       from: from || null,
@@ -116,7 +118,7 @@ export async function setWorkerStatus({
   return { ok: true };
 }
 
-// Keep your existing API used by UsersApprovalsScreen
+// Existing API used by UsersApprovalsScreen
 export async function approveWorker({
   userId,
   adminUid,

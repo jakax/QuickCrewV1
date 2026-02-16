@@ -246,3 +246,18 @@
   resize: vertical;
   margin-top: 10px;
 }
+
+/* History */
+.historyList {
+  display: grid;
+  gap: 10px;
+}
+
+.historyRow {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: white;
+}
+
+.mb8 { margin-bottom: 8px; }

@@ -223,6 +223,31 @@ export default function UsersApprovalsScreen() {
                 </div>
 
                 <div className="card cardBody fullRow">
+                  <div className="fw900 mb8">Status history</div>
+
+                  {Array.isArray((selected as any).statusHistory) && (selected as any).statusHistory.length ? (
+                    <div className="historyList">
+                      {(selected as any).statusHistory
+                        .slice(-5)
+                        .reverse()
+                        .map((h: any, idx: number) => (
+                          <div key={idx} className="historyRow">
+                            <div className="fw900">
+                              {h.from || "—"} → {h.to || "—"}
+                            </div>
+                            <div className="muted fs12 fw800 mt6">
+                              by {h.by || "—"}
+                              {h.reason ? ` · reason: ${h.reason}` : ""}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="muted fs13 fw800">No history yet.</div>
+                  )}
+                </div>
+
+                <div className="card cardBody fullRow">
                   <div style={{ fontWeight: 900, marginBottom: 8 }}>Skills (controls job visibility later)</div>
 
                   <div className="skillsWrap">

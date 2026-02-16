@@ -13,9 +13,37 @@ function titleFor(tab: ApprovalStatus) {
   return "Suspended";
 }
 
+function asDateMaybe(v: any): Date | null {
+  if (!v) return null;
+  // Firestore Timestamp
+  if (typeof v?.toDate === "function") return v.toDate();
+  // {seconds}
+  if (typeof v?.seconds === "number") return new Date(v.seconds * 1000);
+  // JS Date
+  if (v instanceof Date) return v;
+  return null;
+}
+
+function fmtShort(d: Date | null): string {
+  if (!d) return "—";
+  try {
+    return d.toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
+function pillClass(st: string) {
+  if (st === "approved") return "pill pillOk";
+  if (st === "pending") return "pill";
+  // rejected/suspended (and any other future states)
+  return "pill pillWarn";
+}
+
 export default function WorkersScreen() {
   const nav = useNavigate();
   const { user } = useAuth();
+  const { prompt } = usePrompt();
 
   const [tab, setTab] = useState<ApprovalStatus>("pending");
   const title = useMemo(() => titleFor(tab), [tab]);
@@ -27,8 +55,6 @@ export default function WorkersScreen() {
 
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  const { prompt } = usePrompt();
 
   const load = async () => {
     try {
@@ -61,10 +87,10 @@ export default function WorkersScreen() {
   }, [items, q]);
 
   const openReview = (userId: string) => {
-    // For now, reuse your existing approvals screen as “deep review”.
-    // Later we can create /users/workers/:id
+    // MVP: keep it simple.
+    // Later: make approvals screen accept ?userId=... to open exact worker.
+    void userId;
     nav("/users/approvals");
-    // If you want, next step is to add route param and open exact worker.
   };
 
   const changeStatus = async (u: UserRow, to: ApprovalStatus) => {
@@ -76,15 +102,15 @@ export default function WorkersScreen() {
       let reason: string | null = null;
       if (to === "rejected" || to === "suspended") {
         reason = await prompt({
-            title: `Reason required (${to})`,
-            message: "Please add a short reason for audit history.",
-            placeholder: "e.g. References could not be verified",
-            confirmText: "Save",
-            cancelText: "Cancel",
-            required: true,
+          title: `Reason required (${to})`,
+          message: "Please add a short reason for audit history.",
+          placeholder: "e.g. References could not be verified",
+          confirmText: "Save",
+          cancelText: "Cancel",
+          required: true,
         });
 
-        if (reason == null) return; // user cancelled
+        if (reason == null) return; // cancelled
       }
 
       setActionLoadingId(u.id);
@@ -108,7 +134,7 @@ export default function WorkersScreen() {
 
   return (
     <div className="page">
-      <div className="row">
+      <div className="row rowBetween">
         <h1 className="h1">Workers</h1>
         <button className="btn" onClick={load} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
@@ -117,11 +143,7 @@ export default function WorkersScreen() {
 
       <div className="tabs mt16">
         {TABS.map((t) => (
-          <button
-            key={t}
-            className={`tab ${tab === t ? "tabActive" : ""}`}
-            onClick={() => setTab(t)}
-          >
+          <button key={t} className={`tab ${tab === t ? "tabActive" : ""}`} onClick={() => setTab(t)}>
             {t.toUpperCase()}
           </button>
         ))}
@@ -131,7 +153,7 @@ export default function WorkersScreen() {
         <div className="cardBody">
           <div className="row rowBetween">
             <div>
-              <div style={{ fontWeight: 900 }}>{title} workers</div>
+              <div className="fw900">{title} workers</div>
               <div className="muted mt6 fw800 fs13">
                 {loading ? "Loading…" : `${filtered.length} shown · ${items.length} total`}
               </div>
@@ -148,40 +170,45 @@ export default function WorkersScreen() {
           {error ? <div className="error mt12">{error}</div> : null}
           {actionError ? <div className="error mt12">{actionError}</div> : null}
 
-          {!loading && filtered.length === 0 ? (
-            <div className="muted mt16">No workers in this status.</div>
-          ) : null}
+          {!loading && filtered.length === 0 ? <div className="muted mt16">No workers in this status.</div> : null}
 
           <div className="mt16 tableWrap">
             <table className="table tableThLeft">
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left" }}>Name</th>
-                  <th style={{ textAlign: "left" }}>Email</th>
-                  <th style={{ textAlign: "left" }}>Status</th>
-                  <th style={{ textAlign: "left" }}>Skills</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Skills</th>
+                  <th>Last change</th>
+                  <th>Reason</th>
                   <th className="thActions" />
                 </tr>
               </thead>
+
               <tbody>
                 {filtered.map((u) => {
                   const busy = actionLoadingId === u.id;
-                  const st = String(u.approvalStatus || tab);
+                  const st = String(u.approvalStatus || tab).toLowerCase();
+                  const updatedAt = fmtShort(asDateMaybe(u.statusUpdatedAt || u.updatedAt));
+                  const reason = st === "rejected" || st === "suspended" ? String(u.statusReason || "—") : "—";
 
                   return (
                     <tr key={u.id}>
                       <td className="fw900">{u.fullName || "Unnamed"}</td>
-                      <td className="muted fw800">
-                        {u.email || u.id}
-                      </td>
+                      <td className="muted fw800">{u.email || u.id}</td>
+
                       <td>
-                        <span className={`pill ${st === "approved" ? "pillOk" : st === "pending" ? "" : "pillWarn"}`}>
-                          {st}
-                        </span>
+                        <span className={pillClass(st)}>{st}</span>
                       </td>
+
                       <td className="muted fw800">
                         {Array.isArray(u.skills) && u.skills.length ? u.skills.join(", ") : "—"}
                       </td>
+
+                      <td className="muted fw800 fs12">{updatedAt}</td>
+                      <td className="muted fw800 fs12">{reason}</td>
+
                       <td>
                         <div className="tableActions">
                           <button className="btn" onClick={() => openReview(u.id)} disabled={busy}>

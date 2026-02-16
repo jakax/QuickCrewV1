@@ -19,9 +19,9 @@ export default function Dashboard() {
       <div className="grid mt18">
         <div className="card">
           <div className="cardBody">
-            <div style={{ fontWeight: 900 }}>Users</div>
+            <div className="fw900">Workers</div>
             <div className="muted mt6">
-              Review workers, approve/reject, suspend/disable accounts.
+              Review workers, approve/reject, suspend/enable accounts, assign skills.
             </div>
             <button className="btn btnPrimary mt12" onClick={() => nav("/users/workers")}>
               Open Workers
@@ -31,9 +31,21 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="cardBody">
-            <div style={{ fontWeight: 900 }}>Catalog</div>
+            <div className="fw900">Organizations</div>
             <div className="muted mt6">
-              Manage skills and role rates used across the platform.
+              Manage organizations and per-company role rates.
+            </div>
+            <button className="btn btnPrimary mt12" onClick={() => nav("/organizations")}>
+              Open Organizations
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="cardBody">
+            <div className="fw900">Skills Catalog</div>
+            <div className="muted mt6">
+              Add/edit/deactivate skills used for worker eligibility and job visibility.
             </div>
             <button className="btn btnPrimary mt12" onClick={() => nav("/catalog/skills")}>
               Open Skills

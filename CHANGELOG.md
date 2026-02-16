@@ -62,7 +62,7 @@ Which tag version am I
 - Navigation after auth/state changes routed through `Gate`
 - Prepared structure for future profile sections (bank details, documents, verification)
 
-### v0.6.0 — Worker Application Flow (Core Marketplace Slice)
+## v0.6.0 — Worker Application Flow (Core Marketplace Slice)
 ### Added
 
 - Worker job application flow (apply to shift with eligibility checks)
@@ -97,7 +97,7 @@ Which tag version am I
 - Applied screen now uses Firestore subscriptions instead of static placeholder
 - Standardized worker apply logic inside WorkerJobDetails
 
-### v0.7.0 — Auto-Assign + Shift Lifecycle Stabilization (Phase A Completion)
+## v0.7.0 — Auto-Assign + Shift Lifecycle Stabilization (Phase A Completion)
 ### Added
 
 - Auto-Assign shift flow (no approval required)
@@ -158,3 +158,52 @@ Which tag version am I
 - Approval vs Auto-Assign logic
 - Worker apply & cancel lifecycle
 - Conflict prevention safeguards
+
+## v0.8.0 — Back Office (Admin) Foundation + Moderation + Org Config
+### Added
+
+- New Back Office web app (separate React/Vite app inside repo)
+- Admin login via Firebase Auth + adminUsers gate (only QuickCrew admins can access)
+- Protected routing + unauthorized screen handling
+- Dashboard with navigation to core admin areas:
+    - Workers
+    - Approvals (deep review)
+    - Skills Catalog
+    - Organizations
+
+### Users & Moderation
+- Workers section with tabs:
+    - Pending / Approved / Rejected / Suspended
+    - Search (name / email / uid) + refresh actions
+- Status change actions:
+    - Approve / Set pending / Reject / Suspend
+    - Reason required when rejecting or suspending (prompt UI)
+- Status metadata persisted on user docs:
+    - statusReason, statusUpdatedAt, statusUpdatedBy
+- Lightweight audit trail:
+    - statusHistory entries saved on each status change
+
+### Approvals (Deep Review)
+- Pending worker review screen with:
+    - Worker profile summary
+    - Skills assignment UI (checkbox chips)
+    - Placeholders for CV/References (future app-side additions)
+    - Approve/Reject flows write skills + status fields to users/{uid}
+
+### Skills Catalog
+- Firestore-backed skillsCatalog management:
+    - Create new skill (normalized key)
+    - Edit skill name
+    - Activate/Deactivate skills (no hard delete)
+    - Search + “show inactive” toggle
+    - Skills list used in Approvals for assigning skills to workers
+
+### Organizations
+- Organizations list + detail view
+- Org-specific roles & rates management per organization
+- Each org maintains its own role-rate set (supports different employer agreements)
+
+### UI / Technical
+- Centralized Back Office styling via styles/ui.css (no inline styles)
+- Shared UI primitives/providers (Prompt/Confirm pattern) used for admin actions
+- Firestore queries and filtering standardized by role + approvalStatus
