@@ -1,9 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
 import { getJobById, updateJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
+
+import { db } from "../../../services/firebase/config";
+import { collection, getDocs, query, where } from "firebase/firestore";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
@@ -11,6 +22,10 @@ function parseShiftTimeLegacy(shiftTimeRaw) {
   const parts = normalized.split(/ to /i);
   if (parts.length !== 2) return { start: "", end: "" };
   return { start: parts[0].trim(), end: parts[1].trim() };
+}
+
+function normKey(v) {
+  return String(v || "").trim().toLowerCase();
 }
 
 export default function EmployerEditJob() {
@@ -25,6 +40,11 @@ export default function EmployerEditJob() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  const [roleRates, setRoleRates] = useState({});
+  const [orgLoading, setOrgLoading] = useState(true);
+  const [orgError, setOrgError] = useState(null);
+
+  // Load job
   useEffect(() => {
     let mounted = true;
 
@@ -58,6 +78,50 @@ export default function EmployerEditJob() {
     };
   }, [jobId, orgId]);
 
+  // Load org roleRates (from subcollection)
+  useEffect(() => {
+    let mounted = true;
+
+    const loadRoleRates = async () => {
+      try {
+        setOrgError(null);
+        setOrgLoading(true);
+
+        if (!orgId) throw new Error("Missing orgId (session).");
+
+        const q = query(
+          collection(db, "organizations", orgId, "roleRates"),
+          where("isActive", "==", true)
+        );
+
+        const snap = await getDocs(q);
+
+        const cleaned = {};
+        snap.forEach((d) => {
+          const data = d.data() || {};
+          const key = normKey(data.roleKey || d.id);
+          const rate = data.ratePerHour;
+
+          if (key && typeof rate === "number" && Number.isFinite(rate)) {
+            cleaned[key] = rate;
+          }
+        });
+
+        if (mounted) setRoleRates(cleaned);
+      } catch (e) {
+        if (mounted) setOrgError(e?.message || "Could not load company rates.");
+        if (mounted) setRoleRates({});
+      } finally {
+        if (mounted) setOrgLoading(false);
+      }
+    };
+
+    loadRoleRates();
+    return () => {
+      mounted = false;
+    };
+  }, [orgId]);
+
   const onSubmit = async (values) => {
     try {
       setError(null);
@@ -90,47 +154,65 @@ export default function EmployerEditJob() {
   const legacy = parseShiftTimeLegacy(job.shiftTime || "");
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      <Text style={styles.h1}>Edit shift</Text>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.h1}>Edit shift</Text>
 
-      <JobForm
-        mode="edit"
-        initialValues={{
-          title: job.title || "",
-          location: job.location || "",
-          shiftDate: job.shiftDate || "",
+        {orgLoading ? (
+          <Text style={styles.hint}>Loading company rates…</Text>
+        ) : orgError ? (
+          <Text style={styles.hintError}>{orgError}</Text>
+        ) : null}
 
-          // NEW: prefill split times if present, otherwise fallback to legacy shiftTime parsing
-          shiftStartTime: job.shiftStartTime || legacy.start,
-          shiftEndTime: job.shiftEndTime || legacy.end,
+        <JobForm
+          mode="edit"
+          initialValues={{
+            title: job.title || "",
+            location: job.location || "",
+            shiftDate: job.shiftDate || "",
 
-          // Keep legacy too (JobForm will re-compose it on submit)
-          shiftTime: job.shiftTime || "",
+            shiftStartTime: job.shiftStartTime || legacy.start,
+            shiftEndTime: job.shiftEndTime || legacy.end,
+            shiftTime: job.shiftTime || "",
 
-          ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
-          description: job.description || "",
-          businessApprovalRequired: job?.businessApprovalRequired !== false,
-        }}
-        orgName={job.orgName || orgName}
-        submitLabel="Save changes"
-        loading={saving}
-        error={error}
-        onSubmit={onSubmit}
-        onCancel={() => navigation.goBack()}
-      />
-    </ScrollView>
+            // Rate will be forced by JobForm from roleRates + primaryRoleKey,
+            // but we keep this for display fallback.
+            ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
+
+            showRate: job?.showRate !== false,
+
+            primaryRoleKey: normKey(job?.primaryRoleKey || ""),
+            requiredSkills: Array.isArray(job?.requiredSkills) ? job.requiredSkills.map(normKey) : [],
+
+            description: job.description || "",
+            businessApprovalRequired: job?.businessApprovalRequired !== false,
+          }}
+          orgName={job.orgName || orgName}
+          roleRates={roleRates}
+          submitLabel="Save changes"
+          loading={saving}
+          error={error}
+          onSubmit={onSubmit}
+          onCancel={() => navigation.goBack()}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#fff" },
   content: {
-    paddingBottom: 40, // breathing room for smaller screens
+    paddingBottom: 40,
     backgroundColor: "#fff",
   },
 
@@ -141,7 +223,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     padding: 20,
   },
+
   error: { color: "#b91c1c", fontWeight: "800", textAlign: "center" },
+
   h1: {
     fontSize: 20,
     fontWeight: "900",
@@ -149,5 +233,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     backgroundColor: "#fff",
+  },
+
+  hint: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    color: "#6B7280",
+    fontWeight: "700",
+  },
+  hintError: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    color: "#b91c1c",
+    fontWeight: "800",
   },
 });

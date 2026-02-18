@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import { db } from "../../../services/firebase/config";
+import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   // Very lightweight parser for legacy strings like:
@@ -56,6 +58,10 @@ function composeTimeParts({ hour, minute, meridiem }) {
   return `${hour}:${minute} ${String(meridiem).toLowerCase()}`;
 }
 
+function normKey(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
 export default function JobForm({
   mode, // "create" | "edit"
   initialValues,
@@ -65,10 +71,60 @@ export default function JobForm({
   error,
   onSubmit,
   onCancel, // optional
+  roleRates, // { [skillKey]: number } optional; org-configured rates
 }) {
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? ""); // keep YYYY-MM-DD for now
+
+  const initialPrimary = initialValues?.primaryRoleKey || initialValues?.roleKey || "";
+  const initialRequiredSkills = Array.isArray(initialValues?.requiredSkills) ? initialValues.requiredSkills : [];
+
+  const [primaryRoleKey, setPrimaryRoleKey] = useState(initialPrimary);
+
+  const [alsoSkills, setAlsoSkills] = useState(() => {
+    return initialRequiredSkills.filter((k) => k && k !== initialPrimary);
+  });
+
+  const [showRate, setShowRate] = useState(initialValues?.showRate !== false);
+
+  const [localError, setLocalError] = useState(null);
+
+  const ALSO_SKILLS_MAX = 5;
+
+  const [skills, setSkills] = useState([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsError, setSkillsError] = useState(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "skillsCatalog"),
+      where("isActive", "==", true),
+      orderBy("name", "asc")
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const next = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          key: normKey(data.key),
+        };
+      });
+        setSkills(next);
+        setSkillsLoading(false);
+      },
+      (err) => {
+        setSkillsError(err?.message || "Could not load skills.");
+        setSkillsLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, []);
 
   const [businessApprovalRequired, setBusinessApprovalRequired] = useState(
     initialValues?.businessApprovalRequired !== false
@@ -139,9 +195,27 @@ const applyTimeModal = () => {
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
   );
-  const [description, setDescription] = useState(initialValues?.description ?? "");
 
-  const [localError, setLocalError] = useState(null);
+const normalizedRoleRates = useMemo(() => {
+    const src = roleRates && typeof roleRates === "object" ? roleRates : {};
+    const out = {};
+
+    for (const [k, v] of Object.entries(src)) {
+      const key = normKey(k);
+      const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+      if (key && Number.isFinite(n)) out[key] = n;
+    }
+
+    return out;
+  }, [roleRates]);
+
+  const agreedRate = primaryRoleKey ? normalizedRoleRates[primaryRoleKey] ?? null : null;
+
+  useEffect(() => {
+    setRateText(agreedRate != null ? String(agreedRate) : "");
+  }, [agreedRate]);
+
+  const [description, setDescription] = useState(initialValues?.description ?? "");
 
   const canSubmit = useMemo(() => {
     return (
@@ -155,11 +229,17 @@ const applyTimeModal = () => {
   const submit = () => {
     setLocalError(null);
 
-    const rate = rateText.trim() === "" ? null : Number(rateText.replace(",", "."));
-    if (rate != null && Number.isNaN(rate)) {
-      setLocalError("Rate per hour must be a number.");
+    if (agreedRate == null) {
+      setLocalError("No agreed rate found for this role. Please contact support.");
       return;
     }
+
+    if (!primaryRoleKey) {
+      setLocalError("Primary role is required.");
+      return;
+    }
+
+    const rate = agreedRate;
 
     // Basic date format sanity (YYYY-MM-DD)
     const isoOk = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate.trim());
@@ -193,6 +273,10 @@ const applyTimeModal = () => {
 
       ratePerHour: rate,
       description: description.trim(),
+
+      primaryRoleKey,
+      requiredSkills: [primaryRoleKey, ...alsoSkills],
+      showRate,
     });
   };
 
@@ -229,6 +313,103 @@ const applyTimeModal = () => {
         placeholder="e.g. Queenstown"
         placeholderTextColor="#9CA3AF"
       />
+
+      <Text style={styles.label}>Primary role *</Text>
+      <Text style={styles.hintText}>This sets the default rate and the main target profile.</Text>
+
+      {skillsLoading ? (
+        <Text style={styles.hintText}>Loading skills…</Text>
+      ) : skillsError ? (
+        <Text style={styles.errorBox}>{skillsError}</Text>
+      ) : (
+        <View style={styles.skillGrid}>
+          {skills.map((s) => {
+            const key = normKey(s.key);
+            const selected = primaryRoleKey === key;
+            const rr = normalizedRoleRates[key] ?? null;
+
+            return (
+              <Pressable
+                key={`primary-${s.key}`}
+                onPress={() => {
+                  setPrimaryRoleKey(key);
+                  setAlsoSkills((prev) => prev.filter((k) => normKey(k) !== key));
+                  if (localError) setLocalError(null);
+                }}
+                style={({ pressed }) => [
+                  styles.skillChip,
+                  selected && styles.skillChipSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.skillChipText, selected && styles.skillChipTextSelected]}>
+                  {s.name}
+                  {rr != null ? ` · $${rr}/h` : ""}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      <Text style={styles.label}>Also acceptable (optional)</Text>
+      <Text style={styles.hintText}>Workers matching any of these skills will also see the job.</Text>
+
+      {(!skillsLoading && !skillsError) ? (
+        <View style={styles.skillGrid}>
+          {skills
+            .filter((s) => normKey(s.key) !== primaryRoleKey)
+            .map((s) => {
+              const key = normKey(s.key);
+              const checked = alsoSkills.map(normKey).includes(key);
+              const disabled = !checked && alsoSkills.length >= ALSO_SKILLS_MAX;
+
+              return (
+                <Pressable
+                  key={`also-${s.key}`}
+                  onPress={() => {
+                    setAlsoSkills((prev) => {
+                      const prevNorm = prev.map(normKey);
+                      const exists = prevNorm.includes(key);
+
+                      if (exists) return prev.filter((k) => normKey(k) !== key);
+                      if (prev.length >= ALSO_SKILLS_MAX) return prev;
+
+                      return [...prev, key];
+                    });
+                    if (localError) setLocalError(null);
+                  }}
+                  disabled={disabled}
+                  style={({ pressed }) => [
+                    styles.skillChip,
+                    checked && styles.skillChipSelected,
+                    disabled && styles.skillChipDisabled,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.skillChipText,
+                      checked && styles.skillChipTextSelected,
+                      disabled && styles.skillChipTextDisabled,
+                    ]}
+                  >
+                    {s.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+        </View>
+      ) : null}
+
+      <Text style={styles.label}>Rate visibility</Text>
+      <View style={styles.switchRow}>
+        <View style={styles.switchCopy}>
+          <Text style={styles.switchTitle}>Show rate on job post</Text>
+          <Text style={styles.switchHint}>If disabled, workers won’t see the rate, but it’s still stored.</Text>
+        </View>
+        <Switch value={showRate} onValueChange={setShowRate} />
+      </View>
 
       <Text style={styles.label}>Shift date (YYYY-MM-DD) *</Text>
       <TextInput
@@ -271,15 +452,18 @@ const applyTimeModal = () => {
       <Text style={styles.label}>Rate per hour</Text>
       <TextInput
         value={rateText}
-        onChangeText={(v) => {
-          setRateText(v);
-          if (localError) setLocalError(null);
-        }}
-        style={styles.input}
-        placeholder="e.g. 25.00"
+        style={[styles.input, styles.inputDisabled]}
+        placeholder="—"
         placeholderTextColor="#9CA3AF"
-        keyboardType="decimal-pad"
+        editable={false}
+        selectTextOnFocus={false}
       />
+      {!rateText ?
+        <Text style={styles.hintText}>Select a primary role to see the agreed rate.</Text> 
+      : null}
+      <Text style={styles.hintText}>
+        Rate is set by your company agreement for this role.
+      </Text>
 
       <Text style={styles.label}>Description</Text>
       <TextInput
@@ -623,5 +807,56 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 18,
     fontWeight: "700",
+  },
+
+  hintText: { color: "#6B7280", fontSize: 12, fontWeight: "700", marginTop: 2, marginBottom: 8 },
+
+  switchCopy: { flex: 1 },
+
+  pressed: { opacity: 0.9 },
+
+  skillGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 6,
+  },
+
+  skillChip: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+
+  skillChipSelected: {
+    borderColor: "#2563EB",
+    backgroundColor: "#DBEAFE",
+  },
+
+  skillChipDisabled: {
+    opacity: 0.5,
+  },
+
+  skillChipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  skillChipTextSelected: {
+    color: "#1D4ED8",
+  },
+
+  skillChipTextDisabled: {
+    color: "#6B7280",
+  },
+
+  inputDisabled: {
+    backgroundColor: "#F9FAFB",
+    borderColor: "#E5E7EB",
+    color: "#6B7280",
   },
 });

@@ -37,6 +37,22 @@ function asDateMaybe(tsOrDate) {
   return null;
 }
 
+function normalizeSkill(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase();
+}
+
+function hasAnySkillOverlap(workerSkills = [], requiredSkills = []) {
+  const w = new Set((workerSkills || []).map(normalizeSkill).filter(Boolean));
+  const r = (requiredSkills || []).map(normalizeSkill).filter(Boolean);
+  if (r.length === 0) return true; // no requirement
+  for (const skill of r) {
+    if (w.has(skill)) return true;
+  }
+  return false;
+}
+
 export default function WorkerJobDetails() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -171,6 +187,14 @@ export default function WorkerJobDetails() {
       return { canApply: false, reason: "Your profile is not approved yet." };
     }
 
+    // ✅ Skills eligibility (MVP): if job has requiredSkills, worker must match at least one
+    const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
+    const workerSkills = Array.isArray(userDoc.skills) ? userDoc.skills : [];
+
+    if (!hasAnySkillOverlap(workerSkills, requiredSkills)) {
+      return { canApply: false, reason: "Your skills don’t match this shift’s requirements." };
+    }
+
     const status = String(job.status || "").toLowerCase();
     if (status !== "open") return { canApply: false, reason: "This shift is no longer available." };
 
@@ -251,6 +275,26 @@ export default function WorkerJobDetails() {
 
         const jobData = jobSnap.data();
 
+        // ✅ Load worker profile for eligibility checks inside the transaction
+        const userRef = doc(db, "users", uid);
+        const userSnap = await tx.get(userRef);
+        if (!userSnap.exists()) throw new Error("User profile not found.");
+
+        const u = userSnap.data();
+
+        if (String(u?.role || "") !== "worker") throw new Error("Only workers can apply.");
+        if (u?.isActive === false) throw new Error("Your account is inactive.");
+        if (String(u?.approvalStatus || "").toUpperCase() !== "APPROVED") {
+          throw new Error("Your profile is not approved yet.");
+        }
+
+        const requiredSkillsTx = Array.isArray(jobData?.requiredSkills) ? jobData.requiredSkills : [];
+        const workerSkillsTx = Array.isArray(u?.skills) ? u.skills : [];
+
+        if (!hasAnySkillOverlap(workerSkillsTx, requiredSkillsTx)) {
+          throw new Error("Your skills don’t match this shift’s requirements.");
+        }
+
         const shiftDate = String(jobData?.shiftDate || "").trim();
         if (!shiftDate) throw new Error("This shift is missing shiftDate.");
 
@@ -329,7 +373,7 @@ export default function WorkerJobDetails() {
         tx.delete(savedRef);
 
         // Auto-assign only when business approval is NOT required
-        const approvalRequired = jobData?.businessApprovalRequired !== false;
+        const approvalRequired = jobData?.businessApprovalRequired === true;
 
         if (!approvalRequired) {
           // Create assignment record
@@ -366,7 +410,7 @@ export default function WorkerJobDetails() {
         }
       });
 
-      const approvalRequired = job?.businessApprovalRequired !== false;
+      const approvalRequired = job?.businessApprovalRequired === true;
       setApplicationStatus(approvalRequired ? "pending" : "accepted");
       setModalVisible(true);
     } catch (e) {
@@ -483,7 +527,10 @@ export default function WorkerJobDetails() {
                 style={[styles.modalButton, styles.okButton]}
                 onPress={() => {
                   setModalVisible(false);
-                  if (String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED") {
+                  const notApproved = String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED";
+                  const inactive = userDoc?.isActive === false;
+
+                  if (notApproved || inactive) {
                     navigation.navigate("Profile");
                   }
                 }}

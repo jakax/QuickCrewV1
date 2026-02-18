@@ -101,12 +101,28 @@ function parseLegacyShiftTime(shiftTimeRaw) {
   return { shiftStartTime: parts[0].trim(), shiftEndTime: parts[1].trim() };
 }
 
+function normalizeSkillKey(key) {
+  return String(key || "").trim().toLowerCase();
+}
+
+function uniq(arr) {
+  return Array.from(new Set((arr || []).filter(Boolean)));
+}
+
 export async function createJob({ orgId, orgName, uid, job }) {
   if (!orgId) throw new Error("Missing orgId");
   if (!orgName) throw new Error("Missing orgName");
   if (!uid) throw new Error("Missing user id");
   if (!job?.title?.trim()) throw new Error("Job title is required");
   if (!job?.shiftDate) throw new Error("Shift date is required");
+
+  const showRate = job?.showRate !== false; // default true
+
+  const primaryRoleKey = normalizeSkillKey(job?.primaryRoleKey);
+  if (!primaryRoleKey) throw new Error("Primary role is required");
+
+  const requiredSkillsRaw = Array.isArray(job?.requiredSkills) ? job.requiredSkills : [];
+  const requiredSkills = uniq([primaryRoleKey, ...requiredSkillsRaw.map(normalizeSkillKey)]);
 
   // We prefer the new split time inputs.
   // Backward compatible: if not present, try to infer from legacy `shiftTime`.
@@ -157,7 +173,13 @@ export async function createJob({ orgId, orgName, uid, job }) {
     shiftStartAt,
     shiftEndAt,
 
+    // Skills / matching
+    primaryRoleKey,
+    requiredSkills,
+
+    // Rate
     ratePerHour: rateNum,
+    showRate,
 
     // Keep your current status string to avoid breaking other screens.
     // (We can standardize later.)
@@ -207,6 +229,24 @@ export async function updateJob(jobId, updates) {
   // If editing a job and it includes the new split time fields, re-derive timestamps.
   // Backward compatible: if only `shiftTime` is provided, attempt to parse it.
   const next = { ...(updates || {}) };
+
+  // Normalize skills fields if provided
+  if (typeof next.primaryRoleKey === "string") {
+    next.primaryRoleKey = normalizeSkillKey(next.primaryRoleKey);
+  }
+
+  if (Array.isArray(next.requiredSkills)) {
+    const primary = typeof next.primaryRoleKey === "string" ? next.primaryRoleKey : "";
+    const norm = next.requiredSkills.map(normalizeSkillKey);
+    next.requiredSkills = uniq(primary ? [primary, ...norm] : norm);
+  }
+
+  if (typeof next.showRate === "undefined") {
+    // If not provided, don't touch it on update
+    // (so existing jobs keep their value)
+  } else {
+    next.showRate = next.showRate !== false;
+  }
 
   const hasSplitTimes =
     typeof next.shiftDate === "string" &&

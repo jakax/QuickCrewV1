@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../providers/AuthProvider";
 import { ApprovalStatus, listWorkersByStatus, setWorkerStatus, UserRow } from "./users.service";
 import { usePrompt } from "../../providers/PromptProvider";
+import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 
 const TABS: ApprovalStatus[] = ["pending", "approved", "rejected", "suspended"];
 
@@ -56,6 +57,8 @@ export default function WorkersScreen() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const [skillsMap, setSkillsMap] = useState<Record<string, string>>({});
+
   const load = async () => {
     try {
       setError(null);
@@ -73,6 +76,28 @@ export default function WorkersScreen() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSkills = async () => {
+        try {
+        const data = await listSkillsCatalog();
+        const map: Record<string, string> = {};
+        data.forEach((s: any) => {
+            if (s?.id) map[s.id] = s.name || s.key || s.id;
+        });
+        if (mounted) setSkillsMap(map);
+        } catch {
+        // silent - table can fall back to ids
+        }
+    };
+
+    loadSkills();
+    return () => {
+        mounted = false;
+    };
+    }, []);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -203,7 +228,11 @@ export default function WorkersScreen() {
                       </td>
 
                       <td className="muted fw800">
-                        {Array.isArray(u.skills) && u.skills.length ? u.skills.join(", ") : "—"}
+                        {Array.isArray(u.skills) && u.skills.length
+                          ? u.skills
+                              .map((id) => skillsMap[id] || id)
+                              .join(", ")
+                          : "—"}
                       </td>
 
                       <td className="muted fw800 fs12">{updatedAt}</td>
