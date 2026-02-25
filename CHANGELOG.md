@@ -207,3 +207,22 @@ Which tag version am I
 - Centralized Back Office styling via styles/ui.css (no inline styles)
 - Shared UI primitives/providers (Prompt/Confirm pattern) used for admin actions
 - Firestore queries and filtering standardized by role + approvalStatus
+
+## v0.9.0 — Config changes, Google login config
+### Added
+
+- Worker Profile
+- Added IRD Number field
+- Added Bank Account field
+- Enabled worker ability to input and update IRD and bank details
+- Back Office
+- Back Office now reads and displays:
+- IRD Number
+- Bank Account details
+- Improved worker financial data visibility for admin review
+
+### Updated
+
+- Date Picker
+- Temporarily aligned Date Picker UX/behavior to match the current Time Picker implementation
+- Simplified picker logic for consistency across shift creation

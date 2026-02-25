@@ -58,6 +58,41 @@ function composeTimeParts({ hour, minute, meridiem }) {
   return `${hour}:${minute} ${String(meridiem).toLowerCase()}`;
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function parseIsoDateParts(iso) {
+  if (!iso || typeof iso !== "string") return null;
+  const m = iso.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (mo < 1 || mo > 12) return null;
+  if (d < 1 || d > 31) return null;
+
+  return { year: y, month: mo, day: d };
+}
+
+function daysInMonth(year, month) {
+  // month: 1-12
+  return new Date(year, month, 0).getDate();
+}
+
+function composeIsoDate({ year, month, day }) {
+  if (!year || !month || !day) return "";
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+function formatIsoToDmy(iso) {
+  const p = parseIsoDateParts(iso);
+  if (!p) return "";
+  return `${pad2(p.day)}-${pad2(p.month)}-${p.year}`;
+}
+
 function normKey(v) {
   return String(v || "").trim().toLowerCase();
 }
@@ -76,6 +111,48 @@ export default function JobForm({
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? ""); // keep YYYY-MM-DD for now
+
+  // ✅ Modal date picker (same UX as time)
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+
+  // current date parts for the modal
+  const today = new Date();
+  const parsedInitialDate = parseIsoDateParts(shiftDate) || {
+    year: today.getFullYear(),
+    month: today.getMonth() + 1,
+    day: today.getDate(),
+  };
+
+  // Temp values for modal editing
+  const [tmpYear, setTmpYear] = useState(parsedInitialDate.year);
+  const [tmpMonth, setTmpMonth] = useState(parsedInitialDate.month);
+  const [tmpDay, setTmpDay] = useState(parsedInitialDate.day);
+
+  const openDateModal = () => {
+    const parsed = parseIsoDateParts(shiftDate) || {
+      year: today.getFullYear(),
+      month: today.getMonth() + 1,
+      day: today.getDate(),
+    };
+
+    setTmpYear(parsed.year);
+    setTmpMonth(parsed.month);
+    setTmpDay(parsed.day);
+    setDateModalOpen(true);
+  };
+
+  useEffect(() => {
+    // keep day valid when month/year changes
+    const max = daysInMonth(tmpYear, tmpMonth);
+    if (tmpDay > max) setTmpDay(max);
+  }, [tmpYear, tmpMonth]);
+
+  const applyDateModal = () => {
+    const iso = composeIsoDate({ year: tmpYear, month: tmpMonth, day: tmpDay });
+    setShiftDate(iso);
+    if (localError) setLocalError(null);
+    setDateModalOpen(false);
+  };
 
   const initialPrimary = initialValues?.primaryRoleKey || initialValues?.roleKey || "";
   const initialRequiredSkills = Array.isArray(initialValues?.requiredSkills) ? initialValues.requiredSkills : [];
@@ -192,6 +269,11 @@ const applyTimeModal = () => {
   const minutes = ["00", "15", "30", "45"];
   const meridiems = ["AM", "PM"];
 
+  const months = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() + i)); // current year + 5
+  const maxDaysForTmp = daysInMonth(tmpYear, tmpMonth);
+  const days = Array.from({ length: maxDaysForTmp }, (_, i) => String(i + 1));
+
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
   );
@@ -244,7 +326,7 @@ const normalizedRoleRates = useMemo(() => {
     // Basic date format sanity (YYYY-MM-DD)
     const isoOk = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate.trim());
     if (!isoOk) {
-      setLocalError("Shift date must be YYYY-MM-DD (for now).");
+      setLocalError("Shift date is required.");
       return;
     }
 
@@ -411,18 +493,14 @@ const normalizedRoleRates = useMemo(() => {
         <Switch value={showRate} onValueChange={setShowRate} />
       </View>
 
-      <Text style={styles.label}>Shift date (YYYY-MM-DD) *</Text>
-      <TextInput
-        value={shiftDate}
-        onChangeText={(v) => {
-          setShiftDate(v);
-          if (localError) setLocalError(null);
-        }}
-        style={styles.input}
-        placeholder="2026-01-20"
-        placeholderTextColor="#9CA3AF"
-        autoCapitalize="none"
-      />
+      <Text style={styles.label}>Shift date *</Text>
+
+      <TouchableOpacity activeOpacity={0.8} onPress={openDateModal} style={styles.dateSummary}>
+        <Text style={styles.dateSummaryText}>
+          {shiftDate ? formatIsoToDmy(shiftDate) : "Select date"}
+        </Text>
+        <Text style={styles.dateSummaryChevron}>▾</Text>
+      </TouchableOpacity>
 
       {/* NEW: split time fields */}
       <Text style={styles.label}>Shift time *</Text>
@@ -506,6 +584,77 @@ const normalizedRoleRates = useMemo(() => {
           Tip: Date is YYYY-MM-DD for now. We’ll switch to a date picker later.
         </Text>
       ) : null}
+
+      {/* ✅ Modal date picker */}
+      <Modal
+        visible={dateModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDateModalOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Select shift date</Text>
+
+            <View style={styles.modalPickerRow}>
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={String(tmpDay)}
+                  onValueChange={(v) => setTmpDay(Number(v))}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {days.map((d) => (
+                    <Picker.Item key={`d-${d}`} label={d} value={d} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={styles.modalPickerBox}>
+                <Picker
+                  selectedValue={String(tmpMonth)}
+                  onValueChange={(v) => setTmpMonth(Number(v))}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {months.map((m) => (
+                    <Picker.Item key={`m-${m}`} label={m} value={m} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
+                <Picker
+                  selectedValue={String(tmpYear)}
+                  onValueChange={(v) => setTmpYear(Number(v))}
+                  style={styles.picker}
+                  itemStyle={styles.pickerItem}
+                >
+                  {years.map((y) => (
+                    <Picker.Item key={`y-${y}`} label={y} value={y} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={styles.modalButtonsRow}>
+              <Pressable
+                onPress={() => setDateModalOpen(false)}
+                style={({ pressed }) => [styles.modalBtn, styles.modalBtnGhost, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.modalBtnGhostText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={applyDateModal}
+                style={({ pressed }) => [styles.modalBtn, styles.modalBtnPrimary, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ✅ Modal time picker */}
       <Modal
@@ -858,5 +1007,29 @@ const styles = StyleSheet.create({
     backgroundColor: "#F9FAFB",
     borderColor: "#E5E7EB",
     color: "#6B7280",
+  },
+
+  dateSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#FAFAFA",
+  },
+
+  dateSummaryText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  dateSummaryChevron: {
+    color: "#9CA3AF",
+    fontWeight: "900",
+    marginLeft: 10,
   },
 });

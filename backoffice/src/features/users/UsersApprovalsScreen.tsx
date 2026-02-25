@@ -3,6 +3,42 @@ import { listPendingWorkers, approveWorker, rejectWorker, UserRow } from "./user
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 
+type ReferenceItem = {
+  name?: string;
+  role?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+};
+
+type TimestampLike =
+  | { toDate?: () => Date }
+  | Date
+  | string
+  | number
+  | null
+  | undefined;
+
+function formatTimestamp(value: TimestampLike) {
+  try {
+    if (!value) return "—";
+    if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+      return value.toDate().toLocaleString();
+    }
+    if (value instanceof Date) return value.toLocaleString();
+    if (typeof value === "number") return new Date(value).toLocaleString();
+    if (typeof value === "string") {
+      // If it's already a readable date string, keep it; otherwise try parsing.
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+    }
+    return "—";
+  } catch {
+    return "—";
+  }
+}
+
 export default function UsersApprovalsScreen() {
   const { user } = useAuth();
 
@@ -86,10 +122,10 @@ export default function UsersApprovalsScreen() {
   }, [selected?.id]);
 
   const toggleSkill = (skillKey: string) => {
-  setSelectedSkills((prev) =>
-    prev.includes(skillKey) ? prev.filter((x) => x !== skillKey) : [...prev, skillKey]
-  );
-};
+    setSelectedSkills((prev) =>
+      prev.includes(skillKey) ? prev.filter((x) => x !== skillKey) : [...prev, skillKey]
+    );
+  };
 
   const onApprove = async () => {
     try {
@@ -135,13 +171,18 @@ export default function UsersApprovalsScreen() {
     }
   };
 
+  // These fields may not exist on UserRow yet depending on listPendingWorkers().
+  // We read them defensively to avoid TS issues and runtime crashes.
+  const selectedAny = selected as any;
+  const references: ReferenceItem[] = Array.isArray(selectedAny?.references) ? selectedAny.references : [];
+
   return (
     <div className="page approvalsLayout">
       {/* LEFT */}
       <div className="card">
         <div className="cardHeader">
-          <div style={{ fontWeight: 900 }}>Pending worker approvals</div>
-          <div className="muted mt6" style={{ fontSize: 13 }}>
+          <div className="fw900">Pending worker approvals</div>
+          <div className="muted mt6 fs13">
             {loading ? "Loading…" : `${items.length} pending`}
           </div>
         </div>
@@ -157,11 +198,9 @@ export default function UsersApprovalsScreen() {
                 className={`listItem ${isActive ? "listItemActive" : ""}`}
                 onClick={() => setSelectedId(u.id)}
               >
-                <div style={{ fontWeight: 900 }}>{u.fullName || "Unnamed worker"}</div>
-                <div className="muted mt6" style={{ fontSize: 13 }}>
-                  {u.email || u.id}
-                </div>
-                <div className="mt6" style={{ fontSize: 12, fontWeight: 800, color: "#374151" }}>
+                <div className="fw900">{u.fullName || "Unnamed worker"}</div>
+                <div className="muted mt6 fs13">{u.email || u.id}</div>
+                <div className="mt6 fs12 fw800">
                   role: {u.role || "—"} · status: {u.approvalStatus || "—"}
                 </div>
               </button>
@@ -183,7 +222,7 @@ export default function UsersApprovalsScreen() {
             <>
               <div className="row">
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 900 }}>{selected.fullName || "Unnamed worker"}</div>
+                  <div className="fw900">{selected.fullName || "Unnamed worker"}</div>
                   <div className="muted mt6">{selected.email || selected.id}</div>
                 </div>
 
@@ -201,33 +240,72 @@ export default function UsersApprovalsScreen() {
 
               <div className="sectionGrid">
                 <div className="card cardBody">
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Profile</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#374151" }}>Role: {selected.role || "—"}</div>
-                  <div className="mt6" style={{ fontSize: 13, fontWeight: 800, color: "#374151" }}>
-                    Approval status: {selected.approvalStatus || "—"}
+                  <div className="fw900 mb8">Profile</div>
+
+                  <div className="fs13 fw800">Role: {selected.role || "—"}</div>
+                  <div className="mt6 fs13 fw800">Approval status: {selected.approvalStatus || "—"}</div>
+
+                  <div className="mt12">
+                    <div className="fw900 mb8">IRD & Bank</div>
+
+                    <div className="fs13 fw800">
+                      IRD: {selectedAny?.irdNumber || "—"}
+                    </div>
+                    <div className="muted fs12 fw800 mt6">
+                      Set at: {formatTimestamp(selectedAny?.irdNumberSetAt)}
+                    </div>
+
+                    <div className="mt12 fs13 fw800">
+                      Bank account: {selectedAny?.bankAccountNumber || "—"}
+                    </div>
+                    <div className="muted fs12 fw800 mt6">
+                      Set at: {formatTimestamp(selectedAny?.bankAccountNumberSetAt)}
+                    </div>
                   </div>
                 </div>
 
                 <div className="card cardBody">
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>CV</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
+                  <div className="fw900 mb8">CV</div>
+                  <div className="muted fs13">
                     Not uploaded yet (C1 will add CV upload in worker profile).
                   </div>
                 </div>
 
                 <div className="card cardBody fullRow">
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>References</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    No references yet (C1 will add references in worker profile).
-                  </div>
+                  <div className="fw900 mb8">References</div>
+
+                  {references.length ? (
+                    <div className="historyList">
+                      {references.map((r, idx) => (
+                        <div key={idx} className="historyRow">
+                          <div className="fw900">
+                            {r?.name || "—"}
+                            {r?.role ? ` · ${r.role}` : ""}
+                            {r?.company ? ` @ ${r.company}` : ""}
+                          </div>
+
+                          <div className="muted fs12 fw800 mt6">
+                            {r?.email ? `email: ${r.email}` : ""}
+                            {r?.phone ? (r?.email ? " · " : "") + `phone: ${r.phone}` : ""}
+                          </div>
+
+                          {r?.notes ? (
+                            <div className="muted fs12 fw800 mt6">notes: {r.notes}</div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="muted fs13 fw800">No references.</div>
+                  )}
                 </div>
 
                 <div className="card cardBody fullRow">
                   <div className="fw900 mb8">Status history</div>
 
-                  {Array.isArray((selected as any).statusHistory) && (selected as any).statusHistory.length ? (
+                  {Array.isArray(selectedAny?.statusHistory) && selectedAny.statusHistory.length ? (
                     <div className="historyList">
-                      {(selected as any).statusHistory
+                      {selectedAny.statusHistory
                         .slice(-5)
                         .reverse()
                         .map((h: any, idx: number) => (
@@ -248,19 +326,15 @@ export default function UsersApprovalsScreen() {
                 </div>
 
                 <div className="card cardBody fullRow">
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Skills (controls job visibility later)</div>
+                  <div className="fw900 mb8">Skills (controls job visibility later)</div>
 
                   <div className="skillsWrap">
                     {skillsLoading ? (
-                      <div className="muted" style={{ fontSize: 13, fontWeight: 800 }}>
-                        Loading skills…
-                      </div>
+                      <div className="muted fs13 fw800">Loading skills…</div>
                     ) : skillsError ? (
-                      <div className="error" style={{ fontSize: 13 }}>
-                        {skillsError}
-                      </div>
+                      <div className="error fs13">{skillsError}</div>
                     ) : skills.length === 0 ? (
-                      <div className="muted" style={{ fontSize: 13, fontWeight: 800 }}>
+                      <div className="muted fs13 fw800">
                         No skills found. Add skills in Catalog → Skills.
                       </div>
                     ) : (
@@ -280,7 +354,7 @@ export default function UsersApprovalsScreen() {
                     )}
                   </div>
 
-                  <div className="muted mt10" style={{ fontSize: 12, fontWeight: 800 }}>
+                  <div className="muted mt10 fs12 fw800">
                     Selected: {selectedSkills.length ? selectedSkills.join(", ") : "none"}
                   </div>
                 </div>
