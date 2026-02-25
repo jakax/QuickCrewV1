@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>222676842218-7i5s0fr44db0hsemur0dk2h8eolmlpvj.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.222676842218-7i5s0fr44db0hsemur0dk2h8eolmlpvj</string>
+	<key>API_KEY</key>
+	<string>AIzaSyCoQsaaW0iCFX_7WW8ZqF6OUXUD3IerBbQ</string>
+	<key>GCM_SENDER_ID</key>
+	<string>222676842218</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>QuickCrewiOS</string>
+	<key>PROJECT_ID</key>
+	<string>quickcrew-2c10c</string>
+	<key>STORAGE_BUCKET</key>
+	<string>quickcrew-2c10c.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:222676842218:ios:961c38c055bc8640ce0993</string>
+</dict>
+</plist>

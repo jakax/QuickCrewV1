@@ -13,7 +13,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "bundleIdentifier": "com.jacob.baron.quickcrewapp2",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +29,19 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.222676842218-7i5s0fr44db0hsemur0dk2h8eolmlpvj"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dbd5bca0-b8e6-4936-8a53-f7ac0058578b"
+      }
     }
   }
 }

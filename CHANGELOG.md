@@ -208,7 +208,7 @@ Which tag version am I
 - Shared UI primitives/providers (Prompt/Confirm pattern) used for admin actions
 - Firestore queries and filtering standardized by role + approvalStatus
 
-## v0.9.0 — Config changes, Google login config
+## v0.9.0 — Config changes
 ### Added
 
 - Worker Profile
@@ -226,3 +226,18 @@ Which tag version am I
 - Date Picker
 - Temporarily aligned Date Picker UX/behavior to match the current Time Picker implementation
 - Simplified picker logic for consistency across shift creation
+
+## v0.10.0 - Expo Development Build configuration 
+### Authentication
+
+- Google Login (Initial Setup)
+- Added Google Sign-In configuration
+- Integrated required environment variables and client IDs
+- Prepared authentication flow for Dev Build compatibility
+
+### Dev Infrastructure
+
+- Expo Development Build Preparation
+- Added configuration required for Expo Dev Client
+- Prepared project for EAS development builds
+- Updated app configuration to support custom native modules
