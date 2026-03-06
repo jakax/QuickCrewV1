@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { getJobById, cancelJobApplication } from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift, canCancelApplication } from "../../../utils/jobFormatters";
@@ -450,7 +451,7 @@ export default function WorkerJobDetails() {
   const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Apply Now";
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {showNew ? <Text style={styles.tag}>New shift</Text> : null}
 
@@ -538,14 +539,14 @@ export default function WorkerJobDetails() {
                 <Text style={styles.okButtonText}>OK</Text>
               </Pressable>
 
-              <Pressable style={[styles.modalButton, styles.cancelButton]} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Close</Text>
+              <Pressable style={[styles.modalButton, styles.modalGhost]} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalGhostText}>Close</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -618,4 +619,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
+
+  modalGhost: { backgroundColor: "#F3F4F6" },
+  modalGhostText: { color: "#111827", fontSize: 16, fontWeight: "700" },
 });

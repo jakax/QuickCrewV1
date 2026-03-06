@@ -10,8 +10,6 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { db } from "../../../services/firebase/config";
-import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   // Very lightweight parser for legacy strings like:
@@ -97,12 +95,25 @@ function normKey(v) {
   return String(v || "").trim().toLowerCase();
 }
 
+function formatRoleLabel(key) {
+  // turns "barista" -> "Barista", "front_of_house" -> "Front Of House"
+  const s = String(key || "").trim();
+  if (!s) return "";
+  return s
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ""))
+    .join(" ");
+}
+
 export default function JobForm({
   mode, // "create" | "edit"
   initialValues,
   orgName, // display only
   submitLabel,
   loading,
+  disabled = false,
   error,
   onSubmit,
   onCancel, // optional
@@ -145,7 +156,7 @@ export default function JobForm({
     // keep day valid when month/year changes
     const max = daysInMonth(tmpYear, tmpMonth);
     if (tmpDay > max) setTmpDay(max);
-  }, [tmpYear, tmpMonth]);
+  }, [tmpYear, tmpMonth, tmpDay]);
 
   const applyDateModal = () => {
     const iso = composeIsoDate({ year: tmpYear, month: tmpMonth, day: tmpDay });
@@ -168,40 +179,6 @@ export default function JobForm({
   const [localError, setLocalError] = useState(null);
 
   const ALSO_SKILLS_MAX = 5;
-
-  const [skills, setSkills] = useState([]);
-  const [skillsLoading, setSkillsLoading] = useState(true);
-  const [skillsError, setSkillsError] = useState(null);
-
-  useEffect(() => {
-    const q = query(
-      collection(db, "skillsCatalog"),
-      where("isActive", "==", true),
-      orderBy("name", "asc")
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const next = snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ...data,
-          key: normKey(data.key),
-        };
-      });
-        setSkills(next);
-        setSkillsLoading(false);
-      },
-      (err) => {
-        setSkillsError(err?.message || "Could not load skills.");
-        setSkillsLoading(false);
-      }
-    );
-
-    return () => unsub();
-  }, []);
 
   const [businessApprovalRequired, setBusinessApprovalRequired] = useState(
     initialValues?.businessApprovalRequired !== false
@@ -291,6 +268,16 @@ const normalizedRoleRates = useMemo(() => {
     return out;
   }, [roleRates]);
 
+  const skills = useMemo(() => {
+    const keys = Object.keys(normalizedRoleRates || {});
+    keys.sort((a, b) => a.localeCompare(b));
+
+    return keys.map((k) => ({
+      key: normKey(k),
+      name: formatRoleLabel(k),
+    }));
+  }, [normalizedRoleRates]);
+
   const agreedRate = primaryRoleKey ? normalizedRoleRates[primaryRoleKey] ?? null : null;
 
   useEffect(() => {
@@ -303,12 +290,26 @@ const normalizedRoleRates = useMemo(() => {
     return (
       !!title.trim() &&
       !!shiftDate.trim() &&
+      !!primaryRoleKey &&
+      agreedRate != null &&
       !!startHour && !!startMinute && !!startMeridiem &&
       !!endHour && !!endMinute && !!endMeridiem
     );
-  }, [title, shiftDate, startHour, startMinute, startMeridiem, endHour, endMinute, endMeridiem]);
+  }, [
+    title,
+    shiftDate,
+    primaryRoleKey,
+    agreedRate,
+    startHour,
+    startMinute,
+    startMeridiem,
+    endHour,
+    endMinute,
+    endMeridiem,
+  ]);
 
   const submit = () => {
+    if (disabled || loading) return;
     setLocalError(null);
 
     if (agreedRate == null) {
@@ -399,10 +400,10 @@ const normalizedRoleRates = useMemo(() => {
       <Text style={styles.label}>Primary role *</Text>
       <Text style={styles.hintText}>This sets the default rate and the main target profile.</Text>
 
-      {skillsLoading ? (
-        <Text style={styles.hintText}>Loading skills…</Text>
-      ) : skillsError ? (
-        <Text style={styles.errorBox}>{skillsError}</Text>
+      {skills.length === 0 ? (
+        <Text style={styles.errorBox}>
+          No roles are configured for this company yet. Please add role rates in Back Office.
+        </Text>
       ) : (
         <View style={styles.skillGrid}>
           {skills.map((s) => {
@@ -412,7 +413,7 @@ const normalizedRoleRates = useMemo(() => {
 
             return (
               <Pressable
-                key={`primary-${s.key}`}
+                key={`primary-${key}`}
                 onPress={() => {
                   setPrimaryRoleKey(key);
                   setAlsoSkills((prev) => prev.filter((k) => normKey(k) !== key));
@@ -437,7 +438,7 @@ const normalizedRoleRates = useMemo(() => {
       <Text style={styles.label}>Also acceptable (optional)</Text>
       <Text style={styles.hintText}>Workers matching any of these skills will also see the job.</Text>
 
-      {(!skillsLoading && !skillsError) ? (
+      {skills.length > 0 ? (
         <View style={styles.skillGrid}>
           {skills
             .filter((s) => normKey(s.key) !== primaryRoleKey)
@@ -448,7 +449,7 @@ const normalizedRoleRates = useMemo(() => {
 
               return (
                 <Pressable
-                  key={`also-${s.key}`}
+                  key={`also-${key}`}
                   onPress={() => {
                     setAlsoSkills((prev) => {
                       const prevNorm = prev.map(normKey);
@@ -568,22 +569,16 @@ const normalizedRoleRates = useMemo(() => {
 
         <Pressable
           onPress={submit}
-          disabled={!canSubmit || loading}
+          disabled={!canSubmit || loading || disabled}
           style={({ pressed }) => [
             styles.primaryBtn,
             (pressed || loading) && { opacity: 0.9 },
-            (!canSubmit || loading) && { opacity: 0.6 },
+            (!canSubmit || loading || disabled) && { opacity: 0.6 },
           ]}
         >
           <Text style={styles.primaryText}>{loading ? "Saving..." : submitLabel}</Text>
         </Pressable>
       </View>
-
-      {mode === "create" ? (
-        <Text style={styles.helper}>
-          Tip: Date is YYYY-MM-DD for now. We’ll switch to a date picker later.
-        </Text>
-      ) : null}
 
       {/* ✅ Modal date picker */}
       <Modal
@@ -827,8 +822,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryText: { color: "#fff", fontWeight: "900" },
-
-  helper: { marginTop: 10, color: "#6B7280", fontSize: 12, lineHeight: 16 },
 
   switchRow: {
     flexDirection: "row",

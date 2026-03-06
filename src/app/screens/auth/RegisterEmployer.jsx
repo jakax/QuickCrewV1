@@ -6,13 +6,11 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
 } from "react-native";
 import Checkbox from "expo-checkbox";
 import { registerEmployer } from "../../../services/signup.service";
 import { searchOrganizationsByNamePrefix } from "../../../services/organization.service";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
@@ -177,195 +175,191 @@ export default function RegisterEmployer({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create employer account</Text>
-        <Text style={styles.subtitle}>
-          If your business already exists in QuickCrew, we’ll link you to it.
-        </Text>
+    <OuterWrapper style={styles.screen}>
+      <InnerWrapper contentContainerStyle={styles.content}>
+        <>
+          <Text style={styles.title}>Create employer account</Text>
+          <Text style={styles.subtitle}>
+            If your business already exists in QuickCrew, we’ll link you to it.
+          </Text>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Your name</Text>
-          <TextInput
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="e.g., Maria Gomez"
-            autoCapitalize="words"
-            style={styles.input}
-            editable={!isSubmitting}
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Your name</Text>
+            <TextInput
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="e.g., Maria Gomez"
+              autoCapitalize="words"
+              style={styles.input}
+              editable={!isSubmitting}
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Legal business name</Text>
-          <TextInput
-            value={legalBusinessName}
-            onChangeText={onChangeBusinessName}
-            placeholder="Start typing your business name..."
-            autoCapitalize="words"
-            style={styles.input}
-            editable={!isSubmitting}
-          />
+          <View style={styles.field}>
+            <Text style={styles.label}>Legal business name</Text>
+            <TextInput
+              value={legalBusinessName}
+              onChangeText={onChangeBusinessName}
+              placeholder="Start typing your business name..."
+              autoCapitalize="words"
+              style={styles.input}
+              editable={!isSubmitting}
+            />
 
-          {/* ✅ Typeahead list when checkbox ON */}
+            {businessAlreadyRegistered ? (
+              <View style={styles.typeaheadBox}>
+                {orgLoading ? (
+                  <View style={styles.typeaheadRow}>
+                    <ActivityIndicator size="small" />
+                    <Text style={styles.typeaheadMuted}>Searching organizations…</Text>
+                  </View>
+                ) : selectedOrg ? (
+                  <View style={styles.selectedRow}>
+                    <Text style={styles.selectedText}>Selected: {selectedOrg.name}</Text>
+                    <Pressable onPress={() => setSelectedOrg(null)} disabled={isSubmitting}>
+                      <Text style={styles.clearText}>Clear</Text>
+                    </Pressable>
+                  </View>
+                ) : orgResults.length > 0 ? (
+                  orgResults.map((org) => (
+                    <Pressable
+                      key={org.id}
+                      onPress={() => {
+                        setSelectedOrg(org);
+                        setOrgResults([]);
+                        setLegalBusinessName(org.name);
+                      }}
+                      style={styles.suggestionRow}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.suggestionTitle}>{org.name}</Text>
+                      {!!org.city || !!org.country ? (
+                        <Text style={styles.suggestionMeta}>
+                          {[org.city, org.country].filter(Boolean).join(", ")}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  ))
+                ) : legalBusinessName.trim().length >= 2 ? (
+                  <Text style={styles.typeaheadMuted}>
+                    No matches found. If your business isn’t registered, uncheck the box and create a new organization.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.checkboxRow}>
+            <Checkbox
+              value={businessAlreadyRegistered}
+              onValueChange={onToggleRegistered}
+              disabled={isSubmitting}
+            />
+            <Text style={styles.checkboxText}>Business already registered</Text>
+          </View>
+
           {businessAlreadyRegistered ? (
-            <View style={styles.typeaheadBox}>
-              {orgLoading ? (
-                <View style={styles.typeaheadRow}>
-                  <ActivityIndicator size="small" />
-                  <Text style={styles.typeaheadMuted}>Searching organizations…</Text>
-                </View>
-              ) : selectedOrg ? (
-                <View style={styles.selectedRow}>
-                  <Text style={styles.selectedText}>Selected: {selectedOrg.name}</Text>
-                  <Pressable onPress={() => setSelectedOrg(null)} disabled={isSubmitting}>
-                    <Text style={styles.clearText}>Clear</Text>
-                  </Pressable>
-                </View>
-              ) : orgResults.length > 0 ? (
-                orgResults.map((org) => (
-                  <Pressable
-                    key={org.id}
-                    onPress={() => {
-                      setSelectedOrg(org);
-                      setOrgResults([]);
-                      // optionally sync input exactly to selected org name
-                      setLegalBusinessName(org.name);
-                    }}
-                    style={styles.suggestionRow}
-                    disabled={isSubmitting}
-                  >
-                    <Text style={styles.suggestionTitle}>{org.name}</Text>
-                    {!!org.city || !!org.country ? (
-                      <Text style={styles.suggestionMeta}>
-                        {[org.city, org.country].filter(Boolean).join(", ")}
+            <View style={styles.field}>
+              <Text style={styles.label}>Your role in the organization</Text>
+              <View style={styles.roleRow}>
+                {ROLE_OPTIONS.map((opt) => {
+                  const selected = memberRole === opt.value;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => setMemberRole(opt.value)}
+                      style={[styles.rolePill, selected && styles.rolePillSelected]}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={[styles.roleText, selected && styles.roleTextSelected]}>
+                        {opt.label}
                       </Text>
-                    ) : null}
-                  </Pressable>
-                ))
-              ) : legalBusinessName.trim().length >= 2 ? (
-                <Text style={styles.typeaheadMuted}>
-                  No matches found. If your business isn’t registered, uncheck the box and create a new organization.
-                </Text>
-              ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           ) : null}
-        </View>
 
-        <View style={styles.checkboxRow}>
-          <Checkbox
-            value={businessAlreadyRegistered}
-            onValueChange={onToggleRegistered}
-            disabled={isSubmitting}
-          />
-          <Text style={styles.checkboxText}>Business already registered</Text>
-        </View>
-
-        {/*Choose Role if Business already exists*/}
-        {businessAlreadyRegistered ? (
           <View style={styles.field}>
-            <Text style={styles.label}>Your role in the organization</Text>
-            <View style={styles.roleRow}>
-              {ROLE_OPTIONS.map((opt) => {
-                const selected = memberRole === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => setMemberRole(opt.value)}
-                    style={[styles.rolePill, selected && styles.rolePillSelected]}
-                    disabled={isSubmitting}
-                  >
-                    <Text style={[styles.roleText, selected && styles.roleTextSelected]}>
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="business@email.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+              editable={!isSubmitting}
+            />
           </View>
-        ) : null }
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="business@email.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-            editable={!isSubmitting}
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Minimum 6 characters"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+              editable={!isSubmitting}
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Minimum 6 characters"
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-            editable={!isSubmitting}
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Confirm password</Text>
+            <TextInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Re-enter your password"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+              editable={!isSubmitting}
+              onSubmitEditing={() => {
+                if (canSubmit) onRegister();
+              }}
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Confirm password</Text>
-          <TextInput
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Re-enter your password"
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-            editable={!isSubmitting}
-            onSubmitEditing={() => {
-              if (canSubmit) onRegister();
-            }}
-          />
-        </View>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable
-          onPress={onRegister}
-          disabled={!canSubmit}
-          style={({ pressed }) => [
-            styles.button,
-            !canSubmit && styles.buttonDisabled,
-            pressed && canSubmit && styles.buttonPressed,
-          ]}
-        >
-          {isSubmitting ? <ActivityIndicator /> : <Text style={styles.buttonText}>Register</Text>}
-        </Pressable>
-
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Already have an account?</Text>
-          <Pressable onPress={() => navigation.navigate("Login")} disabled={isSubmitting}>
-            <Text style={styles.linkText}>Log in</Text>
+          <Pressable
+            onPress={onRegister}
+            disabled={!canSubmit}
+            style={({ pressed }) => [
+              styles.button,
+              !canSubmit && styles.buttonDisabled,
+              pressed && canSubmit && styles.buttonPressed,
+            ]}
+          >
+            {isSubmitting ? <ActivityIndicator /> : <Text style={styles.buttonText}>Register</Text>}
           </Pressable>
-        </View>
 
-        <Pressable
-          onPress={() => navigation.navigate("RegisterWorker")}
-          disabled={isSubmitting}
-          style={styles.secondaryLinkBtn}
-        >
-          <Text style={styles.secondaryLinkText}>Create a worker account instead</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <Pressable onPress={() => navigation.navigate("Login")} disabled={isSubmitting}>
+              <Text style={styles.linkText}>Log in</Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => navigation.navigate("RegisterWorker")}
+            disabled={isSubmitting}
+            style={styles.secondaryLinkBtn}
+          >
+            <Text style={styles.secondaryLinkText}>Create a worker account instead</Text>
+          </Pressable>
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingTop: 40 },
+  content: { padding: 20, paddingTop: 40, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: "700", marginBottom: 6 },
   subtitle: { fontSize: 14, opacity: 0.75, marginBottom: 14 },
 

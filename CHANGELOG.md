@@ -241,3 +241,47 @@ Which tag version am I
 - Added configuration required for Expo Dev Client
 - Prepared project for EAS development builds
 - Updated app configuration to support custom native modules
+
+## v0.11.0 Forgot Password
+### Added
+
+- Added org-specific role loading for shift creation and editing.
+- Added support for loading role rates from organizations/{orgId}/roleRates.
+- Added role-to-rate auto population based on the selected primary role.
+- Added reusable ScreenScrollKeyboard layout wrapper to centralize keyboard-safe form screens.
+- Added Forgot Password flow using Firebase Auth password reset email.
+- Added success and error states for Forgot Password.
+- Added web-safe handling for auth/form screens so inputs remain usable in browser testing.
+- Added Safe Area handling with react-native-safe-area-context where needed for better mobile layout support.
+
+### Changed
+
+- Reworked Create Shift form so roles/skills no longer come from the global skillsCatalog.
+- Updated Create Shift and Edit Shift flows to use company-specific configured roles only.
+- Updated primary role selection to be required before enabling submit.
+- Updated submit logic so role rate must exist before a shift can be created or updated.
+- Updated Create Shift and Edit Shift screens to disable submission while company role rates are still loading.
+- Updated Edit Shift to support legacy fallback for primaryRoleKey using existing job skill data.
+- Updated multiple auth and form screens to use the shared keyboard-safe layout pattern instead of duplicated per-screen wrappers.
+- Improved scroll behavior and keyboard dismissal UX across form screens:
+- tap outside to dismiss keyboard on mobile
+- drag to dismiss keyboard on mobile
+- cleaner browser behavior for web testing
+- Improved Worker Job Details layout with Safe Area support and better long-content scrolling behavior.
+
+### Fixed
+
+- Fixed role source mismatch between form UI and company-configured role data.
+- Fixed form submit button becoming active before a primary role was selected.
+- Fixed potential invalid role/rate UX during shift create/edit flows.
+- Fixed web typing/focus issues caused by mobile keyboard wrappers on auth/form screens.
+- Fixed date modal useEffect dependency warning in JobForm.
+- Fixed layout safety issues on screens with bottom fixed actions by introducing safe area handling.
+- Fixed duplicated keyboard wrapper logic across multiple screens by centralizing it into a reusable layout component.
+
+### Refactored
+
+- Removed direct skillsCatalog fetching from JobForm.
+- Simplified role option generation by deriving selectable roles from normalized roleRates.
+- Cleaned Create Shift and Edit Shift screens by moving keyboard/scroll behavior into reusable wrappers.
+- Standardized auth and organization creation screens around the same screen layout pattern.

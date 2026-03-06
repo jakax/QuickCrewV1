@@ -1,8 +1,16 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Pressable,
+} from "react-native";
 import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
 import { loginAndLoadProfile, loginWithGoogleAndLoadProfile } from "../../../services/auth.service";
 import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -37,103 +45,108 @@ const Login = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      {/* LOGO / TITULO */}
-      <View style={styles.logoContainer}>
-        <Text style={styles.logoText}>QuickCrew</Text>
-      </View>
+    <OuterWrapper style={styles.screen}>
+      <InnerWrapper contentContainerStyle={styles.container}>
+        <>
+          {/* LOGO / TITULO */}
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>QuickCrew</Text>
+          </View>
 
-      {/* SUBTÍTULOS */}
-      <Text style={styles.title}>Welcome Back</Text>
-      <Text style={styles.subtitle}>Log in to continue</Text>
+          {/* SUBTÍTULOS */}
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Log in to continue</Text>
 
-      {/* EMAIL */}
-      <Text style={styles.label}>Email</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="you@example.com"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        editable={!loading}
-      />
+          {/* EMAIL */}
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="you@example.com"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            editable={!loading}
+          />
 
-      {/* PASSWORD */}
-      <Text style={styles.label}>Password</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="••••••••"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        editable={!loading}
-      />
+          {/* PASSWORD */}
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!loading}
+          />
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {/* LOGIN BUTTON */}
-      <TouchableOpacity
-        style={[styles.loginButton, loading ? styles.buttonDisabled : null]}
-        onPress={onLoginPress}
-        disabled={loading}
-      >
-        <Text style={styles.loginButtonText}>{loading ? "Loading..." : "Log In"}</Text>
-      </TouchableOpacity>
+          {/* LOGIN BUTTON */}
+          <TouchableOpacity
+            style={[styles.loginButton, loading ? styles.buttonDisabled : null]}
+            onPress={onLoginPress}
+            disabled={loading}
+          >
+            <Text style={styles.loginButtonText}>{loading ? "Loading..." : "Log In"}</Text>
+          </TouchableOpacity>
 
-      {/* OR DIVIDER */}
-      <View style={styles.orRow}>
-        <View style={styles.orLine} />
-        <Text style={styles.orText}>or</Text>
-        <View style={styles.orLine} />
-      </View>
+          {/* OR DIVIDER */}
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>or</Text>
+            <View style={styles.orLine} />
+          </View>
 
-      {/* GOOGLE BUTTON */}
-      <TouchableOpacity
-        style={[styles.googleButton, loading ? styles.buttonDisabled : null]}
-        onPress={onGooglePress}
-        disabled={loading}
-      >
-        <Text style={styles.googleButtonText}>Continue with Google</Text>
-      </TouchableOpacity>
+          {/* GOOGLE BUTTON */}
+          <TouchableOpacity
+            style={[styles.googleButton, loading ? styles.buttonDisabled : null]}
+            onPress={onGooglePress}
+            disabled={loading}
+          >
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
 
-      {/* FORGOT PASSWORD */}
-      <TouchableOpacity disabled={loading} onPress={() => navigation.navigate("ForgotPassword")}>
-        <Text style={styles.forgotText}>Forgot Password?</Text>
-      </TouchableOpacity>
+          {/* FORGOT PASSWORD */}
+          <TouchableOpacity disabled={loading} onPress={() => navigation.navigate("ForgotPassword")}>
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </TouchableOpacity>
 
-      {/* REGISTER footers */}
-      <View style={styles.footerLinks}>
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Don’t have an account?</Text>
-          <Pressable disabled={loading} onPress={() => navigation.navigate("RegisterWorker")}>
-            <Text style={styles.linkText}>Create one</Text>
-          </Pressable>
-        </View>
+          {/* REGISTER footers */}
+          <View style={styles.footerLinks}>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Don’t have an account?</Text>
+              <Pressable disabled={loading} onPress={() => navigation.navigate("RegisterWorker")}>
+                <Text style={styles.linkText}>Create one</Text>
+              </Pressable>
+            </View>
 
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Are you an employer?</Text>
-          <Pressable disabled={loading} onPress={() => navigation.navigate("RegisterEmployer")}>
-            <Text style={styles.linkText}>Create a business account</Text>
-          </Pressable>
-        </View>
-      </View>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Are you an employer?</Text>
+              <Pressable disabled={loading} onPress={() => navigation.navigate("RegisterEmployer")}>
+                <Text style={styles.linkText}>Create a business account</Text>
+              </Pressable>
+            </View>
+          </View>
 
-      {/* Register later */}
-      <TouchableOpacity
-        style={[styles.skipButton, loading ? styles.buttonDisabled : null]}
-        onPress={() => navigation.navigate("JobDetails")}
-        disabled={loading}
-      >
-        <Text style={styles.skipButtonText}>Register later</Text>
-      </TouchableOpacity>
-    </View>
+          {/* Register later */}
+          <TouchableOpacity
+            style={[styles.skipButton, loading ? styles.buttonDisabled : null]}
+            onPress={() => navigation.navigate("JobDetails")}
+            disabled={loading}
+          >
+            <Text style={styles.skipButtonText}>Register later</Text>
+          </TouchableOpacity>
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 };
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#fff" },
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: 25,
     justifyContent: "center",
     backgroundColor: "#fff",
@@ -276,6 +289,7 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
+
 });
 
 export default Login;

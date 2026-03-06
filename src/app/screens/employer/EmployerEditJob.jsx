@@ -4,9 +4,6 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
@@ -14,7 +11,8 @@ import { getJobById, updateJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
 
 import { db } from "../../../services/firebase/config";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
@@ -55,6 +53,8 @@ export default function EmployerEditJob() {
 
         const data = await getJobById(jobId);
 
+        if (!data) throw new Error("Job not found.");
+
         if (orgId && data.orgId !== orgId) {
           throw new Error("You don’t have permission to edit this job.");
         }
@@ -89,20 +89,30 @@ export default function EmployerEditJob() {
 
         if (!orgId) throw new Error("Missing orgId (session).");
 
-        const q = query(
-          collection(db, "organizations", orgId, "roleRates"),
-          where("isActive", "==", true)
-        );
-
-        const snap = await getDocs(q);
+        const ref = collection(db, "organizations", orgId, "roleRates");
+        const snap = await getDocs(ref);
 
         const cleaned = {};
-        snap.forEach((d) => {
-          const data = d.data() || {};
-          const key = normKey(data.roleKey || d.id);
-          const rate = data.ratePerHour;
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() || {};
 
-          if (key && typeof rate === "number" && Number.isFinite(rate)) {
+          // source of truth: doc id is the skill name (barista/bartender/...)
+          const key = normKey(docSnap.id || "");
+
+          // support both shapes to avoid breaking existing data
+          const rawRate =
+            data.ratePerHour != null ? data.ratePerHour :
+            data.rate != null ? data.rate :
+            null;
+
+          const rate = typeof rawRate === "number"
+            ? rawRate
+            : Number(String(rawRate ?? "").replace(",", "."));
+
+          // optional isActive gate (only if field exists)
+          if (data.isActive === false) return;
+
+          if (key && Number.isFinite(rate)) {
             cleaned[key] = rate;
           }
         });
@@ -154,58 +164,49 @@ export default function EmployerEditJob() {
   const legacy = parseShiftTimeLegacy(job.shiftTime || "");
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.h1}>Edit shift</Text>
+    <OuterWrapper style={styles.screen}>
+      <InnerWrapper contentContainerStyle={styles.content}>
+        <>
+          <Text style={styles.h1}>Edit shift</Text>
 
-        {orgLoading ? (
-          <Text style={styles.hint}>Loading company rates…</Text>
-        ) : orgError ? (
-          <Text style={styles.hintError}>{orgError}</Text>
-        ) : null}
+          {orgLoading ? (
+            <Text style={styles.hint}>Loading company rates…</Text>
+          ) : orgError ? (
+            <Text style={styles.hintError}>{orgError}</Text>
+          ) : null}
 
-        <JobForm
-          mode="edit"
-          initialValues={{
-            title: job.title || "",
-            location: job.location || "",
-            shiftDate: job.shiftDate || "",
+          <JobForm
+            mode="edit"
+            initialValues={{
+              title: job.title || "",
+              location: job.location || "",
+              shiftDate: job.shiftDate || "",
+              shiftStartTime: job.shiftStartTime || legacy.start,
+              shiftEndTime: job.shiftEndTime || legacy.end,
+              shiftTime: job.shiftTime || "",
 
-            shiftStartTime: job.shiftStartTime || legacy.start,
-            shiftEndTime: job.shiftEndTime || legacy.end,
-            shiftTime: job.shiftTime || "",
+              // Rate will be forced by JobForm from roleRates + primaryRoleKey,
+              // but we keep this for display fallback.
+              ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
 
-            // Rate will be forced by JobForm from roleRates + primaryRoleKey,
-            // but we keep this for display fallback.
-            ratePerHour: typeof job.ratePerHour === "number" ? job.ratePerHour : null,
-
-            showRate: job?.showRate !== false,
-
-            primaryRoleKey: normKey(job?.primaryRoleKey || ""),
-            requiredSkills: Array.isArray(job?.requiredSkills) ? job.requiredSkills.map(normKey) : [],
-
-            description: job.description || "",
-            businessApprovalRequired: job?.businessApprovalRequired !== false,
-          }}
-          orgName={job.orgName || orgName}
-          roleRates={roleRates}
-          submitLabel="Save changes"
-          loading={saving}
-          error={error}
-          onSubmit={onSubmit}
-          onCancel={() => navigation.goBack()}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+              showRate: job?.showRate !== false,
+              primaryRoleKey: normKey(job?.primaryRoleKey || job?.roleKey || job?.requiredSkills?.[0] || ""),
+              requiredSkills: Array.isArray(job?.requiredSkills) ? job.requiredSkills.map(normKey) : [],
+              description: job.description || "",
+              businessApprovalRequired: job?.businessApprovalRequired !== false,
+            }}
+            orgName={job.orgName || orgName}
+            roleRates={roleRates}
+            submitLabel="Save changes"
+            loading={saving}
+            disabled={orgLoading}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={() => navigation.goBack()}
+          />
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 

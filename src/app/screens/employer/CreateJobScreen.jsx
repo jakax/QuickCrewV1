@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from "react";
-import { 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  ActivityIndicator, 
+import {
+  Text,
+  StyleSheet,
+  ActivityIndicator,
   View,
-  KeyboardAvoidingView,
-  Platform 
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useSession } from "../../providers/SessionProvider";
 import { createJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
 import { db } from "../../../services/firebase/config";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 export default function CreateJobScreen() {
   const navigation = useNavigation();
@@ -36,20 +34,30 @@ export default function CreateJobScreen() {
 
         if (!orgId) throw new Error("Missing orgId (session).");
 
-        const q = query(
-          collection(db, "organizations", orgId, "roleRates"),
-          where("isActive", "==", true)
-        );
-
-        const snap = await getDocs(q);
+        const ref = collection(db, "organizations", orgId, "roleRates");
+        const snap = await getDocs(ref);
 
         const cleaned = {};
-        snap.forEach((d) => {
-          const data = d.data() || {};
-          const key = String(data.roleKey || d.id || "").trim().toLowerCase();
-          const rate = data.ratePerHour;
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() || {};
 
-          if (key && typeof rate === "number" && Number.isFinite(rate)) {
+          // source of truth: doc id is the skill name (barista/bartender/...)
+          const key = String(docSnap.id || "").trim().toLowerCase();
+
+          // support both shapes to avoid breaking existing data
+          const rawRate =
+            data.ratePerHour != null ? data.ratePerHour :
+            data.rate != null ? data.rate :
+            null;
+
+          const rate = typeof rawRate === "number"
+            ? rawRate
+            : Number(String(rawRate ?? "").replace(",", "."));
+
+          // optional isActive gate (only if field exists)
+          if (data.isActive === false) return;
+
+          if (key && Number.isFinite(rate)) {
             cleaned[key] = rate;
           }
         });
@@ -94,56 +102,45 @@ export default function CreateJobScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.h1}>Create shift</Text>
-        {orgLoading ? (
-          <View style={styles.orgLoadingRow}>
-            <ActivityIndicator />
-            <Text style={styles.orgLoadingText}>Loading company rates…</Text>
-          </View>
-        ) : orgError ? (
-          <Text style={styles.orgErrorText}>{orgError}</Text>
-        ) : null}
-        <JobForm
-          mode="create"
-          initialValues={{
-            title: "",
-            location: "",
-            shiftDate: "",
+    <OuterWrapper style={styles.screen}>
+      <InnerWrapper contentContainerStyle={styles.content}>
+        <>
+          <Text style={styles.h1}>Create shift</Text>
 
-            // NEW (Sprint 1 prep): split time inputs
-            shiftStartTime: "",
-            shiftEndTime: "",
+          {orgLoading ? (
+            <View style={styles.orgLoadingRow}>
+              <ActivityIndicator />
+              <Text style={styles.orgLoadingText}>Loading company rates…</Text>
+            </View>
+          ) : orgError ? (
+            <Text style={styles.orgErrorText}>{orgError}</Text>
+          ) : null}
 
-            // Keep existing for backward compatibility
-            // (we’ll generate it from start/end later in JobForm or the service)
-            shiftTime: "",
-
-            businessApprovalRequired: true,
-
-            ratePerHour: null,
-            description: "",
-          }}
-          orgName={orgName}
-          roleRates={roleRates}
-          submitLabel="Create shift"
-          loading={loading}
-          error={error}
-          onSubmit={onSubmit}
-          onCancel={() => navigation.goBack()}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <JobForm
+            mode="create"
+            initialValues={{
+              title: "",
+              location: "",
+              shiftDate: "",
+              shiftStartTime: "",
+              shiftEndTime: "",
+              shiftTime: "",
+              businessApprovalRequired: true,
+              ratePerHour: null,
+              description: "",
+            }}
+            orgName={orgName}
+            roleRates={roleRates}
+            submitLabel="Create shift"
+            loading={loading}
+            disabled={orgLoading}
+            error={error}
+            onSubmit={onSubmit}
+            onCancel={() => navigation.goBack()}
+          />
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 
@@ -154,14 +151,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
 
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 20,
-  },
-  error: { color: "#b91c1c", fontWeight: "800", textAlign: "center" },
   h1: {
     fontSize: 20,
     fontWeight: "900",

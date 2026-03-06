@@ -5,13 +5,11 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
 } from "react-native";
 import { createOrganizationOrJoinExisting } from "../../../services/organization.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
 import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 
 export default function CreateOrganizationScreen({ route, navigation }) {
@@ -91,99 +89,98 @@ export default function CreateOrganizationScreen({ route, navigation }) {
 }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create your Organization</Text>
-        <Text style={styles.subtitle}>
-          Your employer account needs an organization. Create it now and we’ll link your user.
-        </Text>
+    <OuterWrapper style={styles.root}>
+      <InnerWrapper contentContainerStyle={styles.container}>
+        <>
+          <Text style={styles.title}>Create your Organization</Text>
+          <Text style={styles.subtitle}>
+            Your employer account needs an organization. Create it now and we’ll link your user.
+          </Text>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Organization name *</Text>
-          <TextInput
-            value={org.name}
-            onChangeText={(t) => setField("name", t)}
-            placeholder="e.g. QuickCrew Ltd"
-            style={styles.input}
-            autoCapitalize="words"
-          />
+          <View style={styles.section}>
+            <Text style={styles.label}>Organization name *</Text>
+            <TextInput
+              value={org.name}
+              onChangeText={(t) => setField("name", t)}
+              placeholder="e.g. QuickCrew Ltd"
+              style={styles.input}
+              autoCapitalize="words"
+            />
 
-          <Text style={styles.label}>Legal name (optional)</Text>
-          <TextInput
-            value={org.legalName}
-            onChangeText={(t) => setField("legalName", t)}
-            placeholder="Registered company name"
-            style={styles.input}
-            autoCapitalize="words"
-          />
+            <Text style={styles.label}>Legal name (optional)</Text>
+            <TextInput
+              value={org.legalName}
+              onChangeText={(t) => setField("legalName", t)}
+              placeholder="Registered company name"
+              style={styles.input}
+              autoCapitalize="words"
+            />
 
-          <Text style={styles.label}>Industry (optional)</Text>
-          <TextInput
-            value={org.industry}
-            onChangeText={(t) => setField("industry", t)}
-            placeholder="e.g. Hospitality, Retail, Construction"
-            style={styles.input}
-            autoCapitalize="words"
-          />
+            <Text style={styles.label}>Industry (optional)</Text>
+            <TextInput
+              value={org.industry}
+              onChangeText={(t) => setField("industry", t)}
+              placeholder="e.g. Hospitality, Retail, Construction"
+              style={styles.input}
+              autoCapitalize="words"
+            />
 
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Text style={styles.label}>Country (optional)</Text>
-              <TextInput
-                value={org.country}
-                onChangeText={(t) => setField("country", t)}
-                placeholder="China"
-                style={styles.input}
-                autoCapitalize="words"
-              />
+            <View style={styles.row}>
+              <View style={styles.col}>
+                <Text style={styles.label}>Country (optional)</Text>
+                <TextInput
+                  value={org.country}
+                  onChangeText={(t) => setField("country", t)}
+                  placeholder="China"
+                  style={styles.input}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>City (optional)</Text>
+                <TextInput
+                  value={org.city}
+                  onChangeText={(t) => setField("city", t)}
+                  placeholder="Shanghai"
+                  style={styles.input}
+                  autoCapitalize="words"
+                />
+              </View>
             </View>
-            <View style={styles.col}>
-              <Text style={styles.label}>City (optional)</Text>
-              <TextInput
-                value={org.city}
-                onChangeText={(t) => setField("city", t)}
-                placeholder="Shanghai"
-                style={styles.input}
-                autoCapitalize="words"
-              />
-            </View>
+
+            <Text style={styles.label}>Address (optional)</Text>
+            <TextInput
+              value={org.address}
+              onChangeText={(t) => setField("address", t)}
+              placeholder="Street, number, district..."
+              style={[styles.input, styles.multiline]}
+              multiline
+              numberOfLines={3}
+            />
           </View>
 
-          <Text style={styles.label}>Address (optional)</Text>
-          <TextInput
-            value={org.address}
-            onChangeText={(t) => setField("address", t)}
-            placeholder="Street, number, district..."
-            style={[styles.input, styles.multiline]}
-            multiline
-            numberOfLines={3}
-          />
-        </View>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {error && <Text style={styles.errorText}>{error}</Text>}
+          <Pressable
+            onPress={onSubmit}
+            disabled={!canSubmit}
+            style={({ pressed }) => [
+              styles.button,
+              (!canSubmit || pressed) && styles.buttonPressed,
+              !canSubmit && styles.buttonDisabled,
+            ]}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? "Creating..." : "Create Organization"}
+            </Text>
+          </Pressable>
 
-        <Pressable
-          onPress={onSubmit}
-          disabled={!canSubmit}
-          style={({ pressed }) => [
-            styles.button,
-            (!canSubmit || pressed) && styles.buttonPressed,
-            !canSubmit && styles.buttonDisabled,
-          ]}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? "Creating..." : "Create Organization"}
+          <Text style={styles.helper}>
+            You can edit organization details later in settings.
           </Text>
-        </Pressable>
-
-        <Text style={styles.helper}>
-          You can edit organization details later in settings.
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 

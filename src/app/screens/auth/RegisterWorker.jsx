@@ -6,12 +6,10 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
 } from "react-native";
 import { registerWorker } from "../../../services/signup.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 // Simple email check (good enough for v1)
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
@@ -103,118 +101,113 @@ export default function RegisterWorker({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create worker account</Text>
-        <Text style={styles.subtitle}>
-          You can browse jobs immediately. Approval is only needed when you apply.
-        </Text>
+    <OuterWrapper style={styles.screen}>
+      <InnerWrapper contentContainerStyle={styles.content}>
+        <>
+          <Text style={styles.title}>Create worker account</Text>
+          <Text style={styles.subtitle}>
+            You can browse jobs immediately. Approval is only needed when you apply.
+          </Text>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Full name</Text>
-          <TextInput
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="e.g., Jacob Baron"
-            autoCapitalize="words"
-            style={styles.input}
-            editable={!isSubmitting}
-            returnKeyType="next"
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Full name</Text>
+            <TextInput
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="e.g., Jacob Baron"
+              autoCapitalize="words"
+              style={styles.input}
+              editable={!isSubmitting}
+              returnKeyType="next"
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="jacob@baron.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-            editable={!isSubmitting}
-            returnKeyType="next"
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="jacob@baron.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              style={styles.input}
+              editable={!isSubmitting}
+              returnKeyType="next"
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Minimum 6 characters"
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-            editable={!isSubmitting}
-            returnKeyType="next"
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Minimum 6 characters"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+              editable={!isSubmitting}
+              returnKeyType="next"
+            />
+          </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Confirm password</Text>
-          <TextInput
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Re-enter your password"
-            secureTextEntry
-            autoCapitalize="none"
-            style={styles.input}
-            editable={!isSubmitting}
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              if (canSubmit) onRegister();
-            }}
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Confirm password</Text>
+            <TextInput
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Re-enter your password"
+              secureTextEntry
+              autoCapitalize="none"
+              style={styles.input}
+              editable={!isSubmitting}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (canSubmit) onRegister();
+              }}
+            />
+          </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable
-          onPress={onRegister}
-          disabled={!canSubmit}
-          style={({ pressed }) => [
-            styles.button,
-            !canSubmit && styles.buttonDisabled,
-            pressed && canSubmit && styles.buttonPressed,
-          ]}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={styles.buttonText}>Register</Text>
-          )}
-        </Pressable>
-
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Already have an account?</Text>
           <Pressable
-            onPress={() => navigation.navigate("Login")}
-            disabled={isSubmitting}
-            style={styles.linkBtn}
+            onPress={onRegister}
+            disabled={!canSubmit}
+            style={({ pressed }) => [
+              styles.button,
+              !canSubmit && styles.buttonDisabled,
+              pressed && canSubmit && styles.buttonPressed,
+            ]}
           >
-            <Text style={styles.linkText}>Log in</Text>
+            {isSubmitting ? <ActivityIndicator /> : <Text style={styles.buttonText}>Register</Text>}
           </Pressable>
-        </View>
 
-        <Pressable
-          onPress={() => navigation.navigate("RegisterEmployer")}
-          disabled={isSubmitting}
-          style={styles.secondaryLinkBtn}
-        >
-          <Text style={styles.secondaryLinkText}>Create an employer account instead</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <Pressable
+              onPress={() => navigation.navigate("Login")}
+              disabled={isSubmitting}
+              style={styles.linkBtn}
+            >
+              <Text style={styles.linkText}>Log in</Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => navigation.navigate("RegisterEmployer")}
+            disabled={isSubmitting}
+            style={styles.secondaryLinkBtn}
+          >
+            <Text style={styles.secondaryLinkText}>Create an employer account instead</Text>
+          </Pressable>
+        </>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingTop: 40 },
+  content: { padding: 20, paddingTop: 40, paddingBottom: 40 },
   title: { fontSize: 26, fontWeight: "700", marginBottom: 6 },
   subtitle: { fontSize: 14, opacity: 0.75, marginBottom: 20 },
 

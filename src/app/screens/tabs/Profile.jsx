@@ -1,17 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, Fragment } from "react";
 import {
-   View,
-   Text,
-   StyleSheet,
-   ScrollView,
-   TextInput,
-   Pressable,
-   Image,
-   Linking,
-   Modal,
-   KeyboardAvoidingView,
-   Platform,
- } from "react-native";
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  Pressable,
+  Image,
+  Linking,
+  Modal,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Platform,
+} from "react-native";
 import { signOut } from "firebase/auth";
 import { auth } from "../../../services/firebase/config";
 import { useConfirm } from "../../../app/providers/ConfirmProvider";
@@ -460,328 +462,353 @@ export default function Profile() {
     await saveReferences(next);
   };
 
+  const isWeb = Platform.OS === "web";
+
+  const OuterWrapper = isWeb ? Fragment : TouchableWithoutFeedback;
+  const outerProps = isWeb ? {} : { onPress: Keyboard.dismiss, accessible: false };
+
+  const InnerWrapper = isWeb ? View : KeyboardAvoidingView;
+  const innerProps = isWeb
+    ? { style: styles.screen }
+    : {
+        style: styles.screen,
+        behavior: Platform.OS === "ios" ? "padding" : "height",
+        keyboardVerticalOffset: Platform.OS === "ios" ? 90 : 0,
+      };
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#fff" }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={{ paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header row */}
-        <View style={styles.headerRow}>
-          <Pressable
-            onPress={isWorker ? onPickPhoto : undefined}
-            disabled={!isWorker || uploadingPhoto}
-            style={({ pressed }) => [
-              styles.avatar,
-              pressed && isWorker ? { opacity: 0.9 } : null,
-              uploadingPhoto ? { opacity: 0.6 } : null,
-            ]}
-          >
-            {photoUrl ? (
-              <Image source={{ uri: photoUrl }} style={styles.avatarImg} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>
-                  {uploadingPhoto ? "Uploading…" : isWorker ? "Add photo" : ""}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-
-          <View style={styles.infoContainer}>
-            <Text style={styles.name}>{displayName}</Text>
-
-            {statusInfo ? (
-              <View style={[styles.tag, { backgroundColor: statusInfo.color }]}>
-                <Text style={styles.tagText}>{statusInfo.label}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        {statusInfo?.message ? (
-          <View style={styles.statusBanner}>
-            <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
-          </View>
-        ) : null}
-
-        {/* Worker extras */}
-        {isWorker ? (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Worker Profile</Text>
-
-            {/* CV */}
-            <View style={{ marginTop: 10 }}>
-              <Text style={styles.label}>CV</Text>
-
-              {cvUrl ? (
-                <View style={styles.cvRow}>
-                  <Text style={styles.cvName}>{cvFileName}</Text>
-                  <Pressable onPress={() => openUrl(cvUrl)} style={styles.smallBtn}>
-                    <Text style={styles.smallBtnText}>View</Text>
-                  </Pressable>
+    <OuterWrapper {...outerProps}>
+      <InnerWrapper {...innerProps}>
+        <ScrollView
+          style={styles.screen}
+          contentContainerStyle={[styles.container, { paddingBottom: 40 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={isWeb ? "none" : "on-drag"}
+          onScrollBeginDrag={isWeb ? undefined : Keyboard.dismiss}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header row */}
+          <View style={styles.headerRow}>
+            <Pressable
+              onPress={isWorker ? onPickPhoto : undefined}
+              disabled={!isWorker || uploadingPhoto}
+              style={({ pressed }) => [
+                styles.avatar,
+                pressed && isWorker ? { opacity: 0.9 } : null,
+                uploadingPhoto ? { opacity: 0.6 } : null,
+              ]}
+            >
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.avatarImg} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarPlaceholderText}>
+                    {uploadingPhoto ? "Uploading…" : isWorker ? "Add photo" : ""}
+                  </Text>
                 </View>
-              ) : (
-                <Text style={styles.helper}>No CV uploaded yet.</Text>
               )}
+            </Pressable>
 
-              <Pressable
-                onPress={onPickCv}
-                disabled={uploadingCv || saving}
-                style={({ pressed }) => [
-                  styles.smallBtnPrimary,
-                  (pressed || uploadingCv) && { opacity: 0.9 },
-                  (uploadingCv || saving) && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={styles.smallBtnPrimaryText}>{uploadingCv ? "Uploading…" : "Upload CV"}</Text>
-              </Pressable>
-            </View>
+            <View style={styles.infoContainer}>
+              <Text style={styles.name}>{displayName}</Text>
 
-            {/* References */}
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>References</Text>
-
-              {Array.isArray(references) && references.length > 0 ? (
-                <>
-                  {references.length < 2 ? (
-                    <Text style={styles.helper}>
-                      Please add at least 2 references. This helps employers trust your profile.
-                    </Text>
-                  ) : null}
-
-                  {references.map((r, idx) => (
-                    <View key={`ref-${idx}`} style={styles.refCard}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.refIndex}>Reference {idx + 1}</Text>
-
-                        <Text style={styles.refName}>{r?.name || "—"}</Text>
-                        {r?.company ? <Text style={styles.refLine}>{r.company}</Text> : null}
-                        {r?.role ? <Text style={styles.refLine}>{r.role}</Text> : null}
-                        {r?.phone ? <Text style={styles.refLine}>{r.phone}</Text> : null}
-                        {r?.email ? <Text style={styles.refLine}>{r.email}</Text> : null}
-                        {r?.notes ? <Text style={styles.refNotes}>{r.notes}</Text> : null}
-                      </View>
-
-                      <Pressable onPress={() => removeReference(idx)} style={styles.smallBtnDanger}>
-                        <Text style={styles.smallBtnDangerText}>Remove</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </>
-              ) : (
-                <>
-                  <Text style={styles.helper}>No references yet.</Text>
-                  <Text style={styles.helper}>
-                    Please add at least 2 references. This helps employers trust your profile.
-                  </Text>
-                </>
-              )}
-
-              <Pressable onPress={() => setRefModalOpen(true)} style={styles.smallBtnPrimary}>
-                <Text style={styles.smallBtnPrimaryText}>Add reference</Text>
-              </Pressable>
-            </View>
-
-            {/* Payment details (write-once) */}
-            <View style={{ marginTop: 16 }}>
-              <Text style={styles.label}>Payment details</Text>
-
-              <View style={styles.paymentBanner}>
-                <Text style={styles.paymentBannerText}>
-                  These details will be used for payouts later. We don’t verify them yet.
-                  {"\n"}
-                  Double-check before saving — you won’t be able to edit them in the app.
-                </Text>
-              </View>
-
-              <View style={{ marginTop: 10 }}>
-                <Text style={styles.labelSmall}>IRD number</Text>
-                {paymentLocked ? (
-                  <Text style={styles.readonlyValue}>{profile?.irdNumber || "—"}</Text>
-                ) : (
-                  <TextInput
-                    style={styles.input}
-                    value={irdNumber}
-                    onChangeText={(v) => setIrdNumber(formatIRD(v))}
-                    placeholder="123-456-789"
-                    keyboardType="number-pad"
-                    autoCapitalize="none"
-                  />
-                )}
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.labelSmall}>Bank account number</Text>
-                {paymentLocked ? (
-                  <Text style={styles.readonlyValue}>
-                    {profile?.bankAccountNumber ? maskBank(profile.bankAccountNumber) : "—"}
-                  </Text>
-                ) : (
-                  <TextInput
-                    style={styles.input}
-                    value={bankAccountNumber}
-                    onChangeText={(v) => setBankAccountNumber(formatNZBankAccount(v))}
-                    placeholder="12-1234-1234567-123"
-                    keyboardType="number-pad"
-                    autoCapitalize="none"
-                  />
-                )}
-              </View>
-
-              {paymentLocked ? (
-                <Text style={styles.helper}>
-                  To update these details, contact QuickCrew support.
-                </Text>
-              ) : (
-                <Pressable
-                  onPress={onSavePaymentDetails}
-                  disabled={savingPayment || saving || loggingOut}
-                  style={({ pressed }) => [
-                    styles.smallBtnPrimary,
-                    (pressed || savingPayment) && { opacity: 0.9 },
-                    (savingPayment || saving || loggingOut) && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={styles.smallBtnPrimaryText}>
-                    {savingPayment ? "Saving…" : "Save payment details"}
-                  </Text>
-                </Pressable>
-              )}
+              {statusInfo ? (
+                <View style={[styles.tag, { backgroundColor: statusInfo.color }]}>
+                  <Text style={styles.tagText}>{statusInfo.label}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
-        ) : null}
 
-        {/* Form */}
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Your Information</Text>
+          <View style={styles.divider} />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>First Name</Text>
-            <TextInput
-              style={styles.input}
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder="Enter your first name"
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Last Name</Text>
-            <TextInput
-              style={styles.input}
-              value={lastName}
-              onChangeText={setLastName}
-              placeholder="Enter your last name"
-              autoCapitalize="words"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput style={[styles.input, styles.inputDisabled]} value={email} editable={false} selectTextOnFocus={false} />
-            <Text style={styles.helper}>To change your login email, we’ll add a secure flow later.</Text>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="(+64) 555-1234"
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          {isEmployer ? (
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Account</Text>
-              <Row label="Organization" value={profile?.orgName || "—"} />
-              <Row label="Member role" value={profile?.memberRole || "—"} />
-              <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+          {statusInfo?.message ? (
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
             </View>
           ) : null}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {/* Worker extras */}
+          {isWorker ? (
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Worker Profile</Text>
 
-          <Pressable
-            onPress={onSave}
-            disabled={!canSave}
-            style={({ pressed }) => [
-              styles.saveButton,
-              (!canSave || pressed) && { opacity: 0.9 },
-              !canSave && { opacity: 0.6 },
-            ]}
-          >
-            <Text style={styles.saveButtonText}>{saving ? "Saving..." : "Save Information"}</Text>
-          </Pressable>
+              {/* CV */}
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.label}>CV</Text>
 
-          <Pressable
-            onPress={onLogout}
-            disabled={loggingOut || saving}
-            style={({ pressed }) => [
-              styles.logoutBtn,
-              (pressed || loggingOut) && { opacity: 0.9 },
-              (loggingOut || saving) && { opacity: 0.6 },
-            ]}
-          >
-            <Text style={styles.logoutText}>{loggingOut ? "Logging out..." : "Log out"}</Text>
-          </Pressable>
-        </View>
+                {cvUrl ? (
+                  <View style={styles.cvRow}>
+                    <Text style={styles.cvName}>{cvFileName}</Text>
+                    <Pressable onPress={() => openUrl(cvUrl)} style={styles.smallBtn}>
+                      <Text style={styles.smallBtnText}>View</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Text style={styles.helper}>No CV uploaded yet.</Text>
+                )}
 
-        {/* Add reference modal */}
-        <Modal transparent animationType="fade" visible={refModalOpen} onRequestClose={() => setRefModalOpen(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Add reference</Text>
-
-              <TextInput style={styles.modalInput} value={refName} onChangeText={setRefName} placeholder="Name *" />
-              <TextInput style={styles.modalInput} value={refCompany} onChangeText={setRefCompany} placeholder="Company *" />
-              <TextInput style={styles.modalInput} value={refRole} onChangeText={setRefRole} placeholder="Role *" />
-              <TextInput
-                style={styles.modalInput}
-                value={refPhone}
-                onChangeText={(v) => setRefPhone(sanitizePhone(v))}
-                placeholder="Phone *"
-                keyboardType="phone-pad"
-                autoCapitalize="none"
-              />
-              <TextInput style={styles.modalInput} value={refEmail} onChangeText={setRefEmail} placeholder="Email *" />
-              <TextInput
-                style={[styles.modalInput, { height: 70 }]}
-                value={refNotes}
-                onChangeText={setRefNotes}
-                placeholder="Notes"
-                multiline
-              />
-
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                <Pressable onPress={() => setRefModalOpen(false)} style={[styles.modalBtn, styles.modalBtnGhost]}>
-                  <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                </Pressable>
-                <Pressable onPress={addReference} style={[styles.modalBtn, styles.modalBtnPrimary]}>
-                  <Text style={styles.modalBtnPrimaryText}>Add</Text>
+                <Pressable
+                  onPress={onPickCv}
+                  disabled={uploadingCv || saving}
+                  style={({ pressed }) => [
+                    styles.smallBtnPrimary,
+                    (pressed || uploadingCv) && { opacity: 0.9 },
+                    (uploadingCv || saving) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.smallBtnPrimaryText}>
+                    {uploadingCv ? "Uploading…" : "Upload CV"}
+                  </Text>
                 </Pressable>
               </View>
+
+              {/* References */}
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.label}>References</Text>
+
+                {Array.isArray(references) && references.length > 0 ? (
+                  <>
+                    {references.length < 2 ? (
+                      <Text style={styles.helper}>
+                        Please add at least 2 references. This helps employers trust your profile.
+                      </Text>
+                    ) : null}
+
+                    {references.map((r, idx) => (
+                      <View key={`ref-${idx}`} style={styles.refCard}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.refIndex}>Reference {idx + 1}</Text>
+
+                          <Text style={styles.refName}>{r?.name || "—"}</Text>
+                          {r?.company ? <Text style={styles.refLine}>{r.company}</Text> : null}
+                          {r?.role ? <Text style={styles.refLine}>{r.role}</Text> : null}
+                          {r?.phone ? <Text style={styles.refLine}>{r.phone}</Text> : null}
+                          {r?.email ? <Text style={styles.refLine}>{r.email}</Text> : null}
+                          {r?.notes ? <Text style={styles.refNotes}>{r.notes}</Text> : null}
+                        </View>
+
+                        <Pressable onPress={() => removeReference(idx)} style={styles.smallBtnDanger}>
+                          <Text style={styles.smallBtnDangerText}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.helper}>No references yet.</Text>
+                    <Text style={styles.helper}>
+                      Please add at least 2 references. This helps employers trust your profile.
+                    </Text>
+                  </>
+                )}
+
+                <Pressable onPress={() => setRefModalOpen(true)} style={styles.smallBtnPrimary}>
+                  <Text style={styles.smallBtnPrimaryText}>Add reference</Text>
+                </Pressable>
+              </View>
+
+              {/* Payment details (write-once) */}
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.label}>Payment details</Text>
+
+                <View style={styles.paymentBanner}>
+                  <Text style={styles.paymentBannerText}>
+                    These details will be used for payouts later. We don’t verify them yet.
+                    {"\n"}
+                    Double-check before saving — you won’t be able to edit them in the app.
+                  </Text>
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.labelSmall}>IRD number</Text>
+                  {paymentLocked ? (
+                    <Text style={styles.readonlyValue}>{profile?.irdNumber || "—"}</Text>
+                  ) : (
+                    <TextInput
+                      style={styles.input}
+                      value={irdNumber}
+                      onChangeText={(v) => setIrdNumber(formatIRD(v))}
+                      placeholder="123-456-789"
+                      keyboardType="number-pad"
+                      autoCapitalize="none"
+                    />
+                  )}
+                </View>
+
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.labelSmall}>Bank account number</Text>
+                  {paymentLocked ? (
+                    <Text style={styles.readonlyValue}>
+                      {profile?.bankAccountNumber ? maskBank(profile.bankAccountNumber) : "—"}
+                    </Text>
+                  ) : (
+                    <TextInput
+                      style={styles.input}
+                      value={bankAccountNumber}
+                      onChangeText={(v) => setBankAccountNumber(formatNZBankAccount(v))}
+                      placeholder="12-1234-1234567-123"
+                      keyboardType="number-pad"
+                      autoCapitalize="none"
+                    />
+                  )}
+                </View>
+
+                {paymentLocked ? (
+                  <Text style={styles.helper}>To update these details, contact QuickCrew support.</Text>
+                ) : (
+                  <Pressable
+                    onPress={onSavePaymentDetails}
+                    disabled={savingPayment || saving || loggingOut}
+                    style={({ pressed }) => [
+                      styles.smallBtnPrimary,
+                      (pressed || savingPayment) && { opacity: 0.9 },
+                      (savingPayment || saving || loggingOut) && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.smallBtnPrimaryText}>
+                      {savingPayment ? "Saving…" : "Save payment details"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
+          ) : null}
+
+          {/* Form */}
+          <View style={styles.formSection}>
+            <Text style={styles.sectionTitle}>Your Information</Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Enter your first name"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Enter your last name"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={[styles.input, styles.inputDisabled]}
+                value={email}
+                editable={false}
+                selectTextOnFocus={false}
+              />
+              <Text style={styles.helper}>To change your login email, we’ll add a secure flow later.</Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="(+64) 555-1234"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            {isEmployer ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>Account</Text>
+                <Row label="Organization" value={profile?.orgName || "—"} />
+                <Row label="Member role" value={profile?.memberRole || "—"} />
+                <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+              </View>
+            ) : null}
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Pressable
+              onPress={onSave}
+              disabled={!canSave}
+              style={({ pressed }) => [
+                styles.saveButton,
+                (!canSave || pressed) && { opacity: 0.9 },
+                !canSave && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={styles.saveButtonText}>{saving ? "Saving..." : "Save Information"}</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onLogout}
+              disabled={loggingOut || saving}
+              style={({ pressed }) => [
+                styles.logoutBtn,
+                (pressed || loggingOut) && { opacity: 0.9 },
+                (loggingOut || saving) && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={styles.logoutText}>{loggingOut ? "Logging out..." : "Log out"}</Text>
+            </Pressable>
           </View>
-        </Modal>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          {/* Add reference modal */}
+          <Modal
+            transparent
+            animationType="fade"
+            visible={refModalOpen}
+            onRequestClose={() => setRefModalOpen(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalBox}>
+                <Text style={styles.modalTitle}>Add reference</Text>
+
+                <TextInput style={styles.modalInput} value={refName} onChangeText={setRefName} placeholder="Name *" />
+                <TextInput style={styles.modalInput} value={refCompany} onChangeText={setRefCompany} placeholder="Company *" />
+                <TextInput style={styles.modalInput} value={refRole} onChangeText={setRefRole} placeholder="Role *" />
+                <TextInput
+                  style={styles.modalInput}
+                  value={refPhone}
+                  onChangeText={(v) => setRefPhone(sanitizePhone(v))}
+                  placeholder="Phone *"
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                />
+                <TextInput style={styles.modalInput} value={refEmail} onChangeText={setRefEmail} placeholder="Email *" />
+                <TextInput
+                  style={[styles.modalInput, { height: 70 }]}
+                  value={refNotes}
+                  onChangeText={setRefNotes}
+                  placeholder="Notes"
+                  multiline
+                />
+
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                  <Pressable onPress={() => setRefModalOpen(false)} style={[styles.modalBtn, styles.modalBtnGhost]}>
+                    <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={addReference} style={[styles.modalBtn, styles.modalBtnPrimary]}>
+                    <Text style={styles.modalBtnPrimaryText}>Add</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
+      </InnerWrapper>
+    </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#fff" },
   container: { padding: 20, flex: 1, backgroundColor: "#fff" },
 
   headerRow: { flexDirection: "row", alignItems: "center" },
