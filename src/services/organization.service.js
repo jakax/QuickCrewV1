@@ -97,7 +97,7 @@ export async function createOrganizationOrJoinExisting({ uid, org, memberRole })
         orgIds: [orgRef.id],
         memberRole,
         approvalStatus: "approved",
-        employerOnboardingStatus: "complete",
+        employerOnboardingStatus: "completed",
         updatedAt: serverTimestamp(),
       },
       { merge: true }

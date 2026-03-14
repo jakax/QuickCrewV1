@@ -6,11 +6,13 @@ import {
   Modal,
   Pressable,
   TouchableOpacity,
-  Switch,
   ActivityIndicator,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Checkbox from "expo-checkbox";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { getJobById, cancelJobApplication } from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift, canCancelApplication } from "../../../utils/jobFormatters";
@@ -78,6 +80,10 @@ export default function WorkerJobDetails() {
   const [applicationStatus, setApplicationStatus] = useState(null); // "pending" | "cancelled" | ...
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  const [confirmNoCriminalRecord, setConfirmNoCriminalRecord] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptCancellationPolicies, setAcceptCancellationPolicies] = useState(false);
 
   const { isSaved, toggleSaved } = useSavedJobs();
   const saved = isSaved(jobId);
@@ -440,186 +446,531 @@ export default function WorkerJobDetails() {
     );
   }
 
-  const showNew = isNewShift(job.createdAt, 3);
+  const freshnessTimestamp = job.updatedAt || job.createdAt;
+  const showNew = isNewShift(freshnessTimestamp, 3);
   const dateText = formatShiftDate(job.shiftDate);
   const timeText = job.shiftTime || "";
-  const postedAgo = formatPostedAgo(job.createdAt);
+  const postedAgo = formatPostedAgo(freshnessTimestamp);
   const rateText =
     typeof job.ratePerHour === "number" ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : null;
 
-  const applyDisabled = !applyEligibility.canApply || applyLoading;
-  const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Apply Now";
+  const confirmationsAccepted =
+    confirmNoCriminalRecord && acceptTerms && acceptCancellationPolicies;
+
+  const applyDisabled = !applyEligibility.canApply || !confirmationsAccepted || applyLoading;
+  const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Apply for shift";
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {showNew ? <Text style={styles.tag}>New shift</Text> : null}
-
-        <Text style={styles.title}>{job.title}</Text>
-        <Text style={styles.company}>{job.orgName}</Text>
-
-        {job.location ? <Text style={styles.meta}>{job.location}</Text> : null}
-
-        {dateText || timeText ? (
-          <Text style={styles.meta}>
-            {dateText}
-            {dateText && timeText ? " - " : ""}
-            {timeText}
-          </Text>
-        ) : null}
-
-        {rateText ? <Text style={styles.rate}>{rateText}</Text> : null}
-
-        {job.description ? <Text style={styles.description}>{job.description}</Text> : null}
-        {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
-
-        {applyError ? <Text style={[styles.error, { marginTop: 14 }]}>{applyError}</Text> : null}
-      </ScrollView>
-
-      <View style={styles.bottomBar}>
-        {/* ✅ Hide bookmark once applied */}
-        {!hasActiveApplication ? (
-          <View style={styles.saveContainer}>
-            <Text style={styles.saveText}>Save Job</Text>
-            <Switch value={saved} onValueChange={() => toggleSaved({ jobId: job.id, orgId: job.orgId })} />
-          </View>
-        ) : null}
-
-        {cancelError ? <Text style={styles.applyHint}>{cancelError}</Text> : null}
-
-        {hasActiveApplication ? (
-          <TouchableOpacity
-            style={[styles.cancelButton, (!canCancel || cancelLoading) && styles.applyButtonDisabled]}
-            onPress={onCancelApplication}
-            disabled={!canCancel || cancelLoading}
-          >
-            <Text style={styles.cancelButtonText}>
-              {cancelLoading ? "Cancelling..." : canCancel ? "Cancel application" : "Cancel locked (under 4h)"}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-
-        {!applyEligibility.canApply && applyEligibility.reason ? (
-          <Text style={styles.applyHint}>{applyEligibility.reason}</Text>
-        ) : null}
-
-        <TouchableOpacity
-          style={[styles.applyButton, applyDisabled && styles.applyButtonDisabled]}
-          onPress={applyToJob}
-          disabled={applyDisabled}
+    <LinearGradient
+      colors={["#FFFFFF", "#FFFFFF", "#C2F9FF"]}
+      locations={[0, 0.46, 1]}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.applyButtonText}>{applyButtonLabel}</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.topRow}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Text style={styles.backButtonText}>‹</Text>
+            </TouchableOpacity>
+          </View>
 
-      <Modal transparent animationType="fade" visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalMessage}>
-              {alreadyApplied
-                ? applicationStatus === "accepted"
-                  ? "You’re assigned to this shift ✅ You can view it in your Applied tab."
-                  : "Application submitted. Waiting for employer approval. You can view it in your Applied tab."
-                : applyEligibility.reason || "You can’t apply to this shift right now."}
-            </Text>
+          <View style={styles.detailsCard}>
+            <View style={styles.jobInfoBlock}>
+              <Text style={styles.infoTitle}>{job.title || "Untitled job"}</Text>
+              <Text style={styles.infoLine}>{job.orgName || "QuickCrew"}</Text>
+              {job.location ? (
+                <Text style={styles.infoLine}>{job.location}</Text>
+              ) : null}
 
-            <View style={styles.modalButtonsRow}>
-              <Pressable
-                style={[styles.modalButton, styles.okButton]}
-                onPress={() => {
-                  setModalVisible(false);
-                  const notApproved = String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED";
-                  const inactive = userDoc?.isActive === false;
+              {dateText || timeText ? (
+                <Text style={styles.infoMeta}>
+                  {dateText}
+                  {dateText && timeText ? " - " : ""}
+                  {timeText}
+                </Text>
+              ) : null}
 
-                  if (notApproved || inactive) {
-                    navigation.navigate("Profile");
-                  }
-                }}
+              {rateText ? <Text style={styles.infoMeta}>{rateText}</Text> : null}
+            </View>
+
+            {!hasActiveApplication ? (
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={() => toggleSaved({ jobId: job.id, orgId: job.orgId })}
+                activeOpacity={0.8}
               >
-                <Text style={styles.okButtonText}>OK</Text>
-              </Pressable>
+                <Ionicons
+                  name={saved ? "bookmark" : "bookmark-outline"}
+                  size={20}
+                  color={saved ? "#FFB800" : "#FFB800"}
+                />
+              </TouchableOpacity>
+            ) : null}
 
-              <Pressable style={[styles.modalButton, styles.modalGhost]} onPress={() => setModalVisible(false)}>
-                <Text style={styles.modalGhostText}>Close</Text>
-              </Pressable>
+            <View style={styles.divider} />
+
+            {!!job.description && (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>Company description.</Text>
+                <Text style={styles.sectionBody}>{job.description}</Text>
+              </View>
+            )}
+
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionTitle}>Special requirements</Text>
+              <Text style={styles.sectionBody}>
+                {job?.specialRequirements ||
+                  "QuickCrew is a staffing company that connects reliable talent with casual job opportunities. We specialize in providing fast, flexible, and professional staffing solutions for businesses that need dependable support."}
+              </Text>
+            </View>
+
+            {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
+          </View>
+
+          <View style={styles.confirmationsWrap}>
+            <View style={styles.confirmationRow}>
+              <Text style={styles.confirmationText}>
+                I have confirmed I have no criminal records
+              </Text>
+              <Checkbox
+                value={confirmNoCriminalRecord}
+                onValueChange={setConfirmNoCriminalRecord}
+                color={confirmNoCriminalRecord ? "#70A9DF" : undefined}
+                style={styles.checkbox}
+              />
+            </View>
+
+            <View style={styles.confirmationRow}>
+              <Text style={styles.confirmationText}>
+                I have read and agreed terms and conditions
+              </Text>
+              <Checkbox
+                value={acceptTerms}
+                onValueChange={setAcceptTerms}
+                color={acceptTerms ? "#70A9DF" : undefined}
+                style={styles.checkbox}
+              />
+            </View>
+
+            <View style={styles.confirmationRow}>
+              <Text style={styles.confirmationText}>
+                I have read and accept the cancellation policies
+              </Text>
+              <Checkbox
+                value={acceptCancellationPolicies}
+                onValueChange={setAcceptCancellationPolicies}
+                color={acceptCancellationPolicies ? "#70A9DF" : undefined}
+                style={styles.checkbox}
+              />
             </View>
           </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+
+          <View style={styles.bottomSection}>
+
+            {applyError ? <Text style={styles.inlineError}>{applyError}</Text> : null}
+            {cancelError ? <Text style={styles.inlineError}>{cancelError}</Text> : null}
+            {!applyEligibility.canApply && applyEligibility.reason ? (
+              <Text style={styles.applyHint}>{applyEligibility.reason}</Text>
+            ) : null}
+
+            {hasActiveApplication ? (
+              <TouchableOpacity
+                style={[styles.secondaryActionButton, (!canCancel || cancelLoading) && styles.applyButtonDisabled]}
+                onPress={onCancelApplication}
+                disabled={!canCancel || cancelLoading}
+              >
+                <Text style={styles.secondaryActionButtonText}>
+                  {cancelLoading
+                    ? "Cancelling..."
+                    : canCancel
+                    ? "Cancel application"
+                    : "Cancel locked (under 4h)"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.applyButton, applyDisabled && styles.applyButtonDisabled]}
+              onPress={applyToJob}
+              disabled={applyDisabled}
+            >
+              <Text style={styles.applyButtonText}>{applyButtonLabel}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.backToShiftsButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.backToShiftsButtonText}>Back to shifts</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+
+        <Modal transparent animationType="fade" visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalMessage}>
+                {alreadyApplied
+                  ? applicationStatus === "accepted"
+                    ? "You’re assigned to this shift ✅ You can view it in your Applied tab."
+                    : "Application submitted. Waiting for employer approval. You can view it in your Applied tab."
+                  : applyEligibility.reason || "You can’t apply to this shift right now."}
+              </Text>
+
+              <View style={styles.modalButtonsRow}>
+                <Pressable
+                  style={[styles.modalButton, styles.okButton]}
+                  onPress={() => {
+                    setModalVisible(false);
+                    const notApproved = String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED";
+                    const inactive = userDoc?.isActive === false;
+
+                    if (notApproved || inactive) {
+                      navigation.navigate("Profile");
+                    }
+                  }}
+                >
+                  <Text style={styles.okButtonText}>OK</Text>
+                </Pressable>
+
+                <Pressable style={[styles.modalButton, styles.modalGhost]} onPress={() => setModalVisible(false)}>
+                  <Text style={styles.modalGhostText}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff", padding: 20 },
-
-  tag: {
-    alignSelf: "flex-start",
-    backgroundColor: "#DBEAFE",
-    color: "#1D4ED8",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: "800",
-    marginBottom: 12,
+  gradient: {
+    flex: 1,
   },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#111827" },
-  company: { fontSize: 18, marginTop: 8, fontWeight: "700", color: "#111827" },
-  meta: { marginTop: 8, fontSize: 15, color: "#374151", fontWeight: "600" },
-  rate: { marginTop: 10, fontSize: 16, fontWeight: "900", color: "#111827" },
-  posted: { marginTop: 10, fontSize: 13, color: "#9CA3AF", fontWeight: "700" },
-  description: { marginTop: 16, fontSize: 16, color: "#111827", lineHeight: 22 },
+  container: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
 
-  error: { color: "#b91c1c", textAlign: "center", fontWeight: "800" },
-  link: { color: "#007AFF", fontWeight: "700" },
-
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 15,
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderColor: "#E5E7EB",
+    padding: 20,
   },
 
-  saveContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  saveText: { fontSize: 16, fontWeight: "600" },
-
-  applyHint: { marginBottom: 10, color: "#6B7280", fontWeight: "700" },
-
-  applyButton: { backgroundColor: "#2563EB", paddingVertical: 15, borderRadius: 12 },
-  applyButtonDisabled: { opacity: 0.6 },
-  applyButtonText: { textAlign: "center", color: "#fff", fontSize: 18, fontWeight: "900" },
-
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalBox: { width: "80%", backgroundColor: "#fff", padding: 20, borderRadius: 12, alignItems: "center" },
-  modalMessage: { fontSize: 16, marginBottom: 20, textAlign: "center" },
-  modalButtonsRow: { flexDirection: "row", justifyContent: "space-between", width: "100%" },
-  modalButton: { flex: 1, paddingVertical: 10, marginHorizontal: 5, borderRadius: 8, alignItems: "center" },
-  okButton: { backgroundColor: "#2563EB" },
-  okButtonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 140 },
-
-  cancelButton: {
-    backgroundColor: "#111827",
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+  scroll: {
+    flex: 1,
   },
-  cancelButtonText: {
+
+  scrollContent: {
+    paddingTop: 75,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+    gap: 30,
+  },
+
+  topRow: {
+    alignSelf: "stretch",
+    marginBottom: 6,
+  },
+
+  backButton: {
+    alignSelf: "flex-start",
+    padding: 8,
+  },
+
+  backButtonText: {
+    color: "#C4C4C4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontWeight: "600",
+  },
+
+  detailsCard: {
+    alignSelf: "stretch",
+    position: "relative",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.91)",
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+  },
+
+  jobInfoBlock: {
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingLeft: 12,
+    paddingRight: 28,
+    gap: 10,
+  },
+
+  infoTitle: {
+    color: "#434343",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+
+  infoLine: {
+    color: "#434343",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "500",
+    marginTop: 10,
+  },
+
+  infoMeta: {
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+    marginTop: 10,
+  },
+
+  saveButton: {
+    position: "absolute",
+    top: 15,
+    right: 12,
+    width: 25,
+    height: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "#B7B7B7",
+    marginHorizontal: 22,
+    marginVertical: 18,
+  },
+
+  sectionBlock: {
+    paddingLeft: 12,
+    paddingRight: 12,
+    marginBottom: 26,
+  },
+
+  sectionTitle: {
+    color: "#404040",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "500",
+    marginBottom: 14,
+  },
+
+  sectionBody: {
+    color: "#434343",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+    lineHeight: 26,
+  },
+
+  posted: {
+    marginTop: 4,
+    marginLeft: 12,
+    color: "#2A5FB3",
+    fontSize: 12,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+  },
+
+  confirmationsWrap: {
+    alignSelf: "stretch",
+    gap: 8,
+    marginTop: 6,
+  },
+
+  confirmationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingHorizontal: 8,
+    minHeight: 20,
+  },
+
+  confirmationText: {
+    flex: 1,
+    color: "#F95050",
+    fontSize: 11,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+  },
+
+  checkbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    borderColor: "#70A9DF",
+  },
+
+  bottomSection: {
+    alignSelf: "stretch",
+    gap: 12,
+    marginTop: 10,
+  },
+
+  inlineError: {
+    color: "#b91c1c",
+    fontWeight: "700",
+    fontSize: 13,
+    paddingHorizontal: 8,
+  },
+
+  applyHint: {
+    color: "#6B7280",
+    fontWeight: "700",
+    fontSize: 13,
+    paddingHorizontal: 8,
+  },
+
+  applyButton: {
+    alignSelf: "stretch",
+    height: 40,
+    backgroundColor: "#45BF79",
+    borderTopLeftRadius: 59,
+    borderTopRightRadius: 59,
+    borderBottomRightRadius: 63,
+    borderBottomLeftRadius: 63,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 4,
+  },
+
+  applyButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  applyButtonText: {
     textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  secondaryActionButton: {
+    alignSelf: "stretch",
+    height: 40,
+    backgroundColor: "#111827",
+    borderTopLeftRadius: 59,
+    borderTopRightRadius: 59,
+    borderBottomRightRadius: 63,
+    borderBottomLeftRadius: 63,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  secondaryActionButtonText: {
+    textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  backToShiftsButton: {
+    alignSelf: "stretch",
+    height: 40,
+    backgroundColor: "#70A9DF",
+    borderTopLeftRadius: 59,
+    borderTopRightRadius: 59,
+    borderBottomRightRadius: 63,
+    borderBottomLeftRadius: 63,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  backToShiftsButtonText: {
+    textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  error: {
+    color: "#b91c1c",
+    textAlign: "center",
+    fontWeight: "800",
+  },
+
+  link: {
+    color: "#007AFF",
+    fontWeight: "700",
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  modalBox: {
+    width: "80%",
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  modalMessage: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+
+  modalButtonsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+  },
+
+  modalButton: {
+    flex: 1,
+    paddingVertical: 10,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+
+  okButton: {
+    backgroundColor: "#2563EB",
+  },
+
+  okButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "700",
   },
 
-  modalGhost: { backgroundColor: "#F3F4F6" },
-  modalGhostText: { color: "#111827", fontSize: 16, fontWeight: "700" },
+  modalGhost: {
+    backgroundColor: "#F3F4F6",
+  },
+
+  modalGhostText: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "700",
+  },
 });

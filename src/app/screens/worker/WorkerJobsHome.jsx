@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import { Animated, FlatList, View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import AnimatedHeader from "../../components/jobs/AnimatedHeader.jsx";
 import JobsItem from "../../components/jobs/JobsItem.jsx";
 
@@ -107,7 +108,11 @@ const JobsList = () => {
     !showInactiveBanner && String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED";
 
   return (
-    <>
+    <LinearGradient
+      colors={["#FFFFFF", "#FFFFFF", "#8BE8F1"]}
+      locations={[0, 0.45, 1]}
+      style={styles.screen}
+    >
       <AnimatedHeader scrollY={scrollY} />
 
       {userLoading ? (
@@ -121,12 +126,16 @@ const JobsList = () => {
       ) : showInactiveBanner ? (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Your account is inactive.</Text>
-          <Text style={styles.bannerText}>You can browse shifts, but you can’t apply right now.</Text>
+          <Text style={styles.bannerText}>
+            You can browse shifts, but you can’t apply right now.
+          </Text>
         </View>
       ) : showNotApprovedBanner ? (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Profile not approved yet.</Text>
-          <Text style={styles.bannerText}>You can browse shifts, but you’ll be able to apply once approved.</Text>
+          <Text style={styles.bannerText}>
+            You can browse shifts, but you’ll be able to apply once approved.
+          </Text>
         </View>
       ) : null}
 
@@ -134,27 +143,46 @@ const JobsList = () => {
         data={filteredJobs}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <JobsItem job={item} />}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
         scrollEventThrottle={16}
       />
-    </>
+    </LinearGradient>
   );
 };
 
 export default JobsList;
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+
   banner: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 10,
   },
+
   bannerTitle: {
     fontWeight: "900",
     fontSize: 14,
     marginBottom: 4,
+    color: "#2F2F2F",
   },
+
   bannerText: {
     fontWeight: "700",
     fontSize: 13,
+    color: "#4F4F4F",
+  },
+
+  listContent: {
+    paddingBottom: 110,
+    paddingHorizontal: 10,
+    paddingTop: 4,
   },
 });

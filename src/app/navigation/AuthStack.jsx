@@ -1,4 +1,5 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import LoginEntry from '../screens/auth/LoginEntry';
 import Login from '../screens/auth/Login';
 import RegisterWorker from '../screens/auth/RegisterWorker';
 import RegisterEmployer from '../screens/auth/RegisterEmployer';
@@ -9,6 +10,7 @@ const Stack = createNativeStackNavigator();
 
 const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="LoginEntry" component={LoginEntry} />
     <Stack.Screen name="Login" component={Login} />
     <Stack.Screen name="RegisterWorker" component={RegisterWorker} />
     <Stack.Screen name="RegisterEmployer" component={RegisterEmployer} />

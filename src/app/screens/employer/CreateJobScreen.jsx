@@ -4,8 +4,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   View,
+  Pressable,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+
 import { useSession } from "../../providers/SessionProvider";
 import { createJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
@@ -40,21 +43,20 @@ export default function CreateJobScreen() {
         const cleaned = {};
         snap.forEach((docSnap) => {
           const data = docSnap.data() || {};
-
-          // source of truth: doc id is the skill name (barista/bartender/...)
           const key = String(docSnap.id || "").trim().toLowerCase();
 
-          // support both shapes to avoid breaking existing data
           const rawRate =
-            data.ratePerHour != null ? data.ratePerHour :
-            data.rate != null ? data.rate :
-            null;
+            data.ratePerHour != null
+              ? data.ratePerHour
+              : data.rate != null
+              ? data.rate
+              : null;
 
-          const rate = typeof rawRate === "number"
-            ? rawRate
-            : Number(String(rawRate ?? "").replace(",", "."));
+          const rate =
+            typeof rawRate === "number"
+              ? rawRate
+              : Number(String(rawRate ?? "").replace(",", "."));
 
-          // optional isActive gate (only if field exists)
           if (data.isActive === false) return;
 
           if (key && Number.isFinite(rate)) {
@@ -82,10 +84,6 @@ export default function CreateJobScreen() {
       setError(null);
       setLoading(true);
 
-      // NOTE:
-      // We are intentionally not deriving shiftTime/shiftStartAt here yet,
-      // because we need to update JobForm + createJob() service in a controlled way.
-      // This screen simply forwards whatever JobForm returns.
       await createJob({
         orgId,
         orgName,
@@ -103,78 +101,130 @@ export default function CreateJobScreen() {
 
   return (
     <OuterWrapper style={styles.screen}>
-      <InnerWrapper contentContainerStyle={styles.content}>
-        <>
-          <Text style={styles.h1}>Create shift</Text>
+      <LinearGradient
+        colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+        locations={[0, 0.45, 1]}
+        style={styles.screen}
+      >
+        <InnerWrapper contentContainerStyle={styles.content}>
+          <>
+            <View style={styles.headerBlock}>
+              <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+                <Text style={styles.backArrow}>‹</Text>
+              </Pressable>
 
-          {orgLoading ? (
-            <View style={styles.orgLoadingRow}>
-              <ActivityIndicator />
-              <Text style={styles.orgLoadingText}>Loading company rates…</Text>
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.h1}>Create shift</Text>
+              </View>
             </View>
-          ) : orgError ? (
-            <Text style={styles.orgErrorText}>{orgError}</Text>
-          ) : null}
 
-          <JobForm
-            mode="create"
-            initialValues={{
-              title: "",
-              location: "",
-              shiftDate: "",
-              shiftStartTime: "",
-              shiftEndTime: "",
-              shiftTime: "",
-              businessApprovalRequired: true,
-              ratePerHour: null,
-              description: "",
-            }}
-            orgName={orgName}
-            roleRates={roleRates}
-            submitLabel="Create shift"
-            loading={loading}
-            disabled={orgLoading}
-            error={error}
-            onSubmit={onSubmit}
-            onCancel={() => navigation.goBack()}
-          />
-        </>
-      </InnerWrapper>
+            {orgLoading ? (
+              <View style={styles.infoBanner}>
+                <ActivityIndicator />
+                <Text style={styles.infoBannerText}>Loading company rates…</Text>
+              </View>
+            ) : orgError ? (
+              <Text style={styles.orgErrorText}>{orgError}</Text>
+            ) : null}
+
+            <JobForm
+              mode="create"
+              initialValues={{
+                title: "",
+                location: "",
+                shiftDate: "",
+                shiftStartTime: "",
+                shiftEndTime: "",
+                shiftTime: "",
+                businessApprovalRequired: true,
+                ratePerHour: null,
+                description: "",
+              }}
+              orgName={orgName}
+              roleRates={roleRates}
+              submitLabel="Create shift"
+              loading={loading}
+              disabled={orgLoading}
+              error={error}
+              onSubmit={onSubmit}
+              onCancel={() => navigation.goBack()}
+            />
+          </>
+        </InnerWrapper>
+      </LinearGradient>
     </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
+  screen: {
+    flex: 1,
+  },
+
   content: {
-    paddingBottom: 40, // breathing room for smaller screens
-    backgroundColor: "#fff",
+    flexGrow: 1,
+    paddingTop: 58,
+    paddingBottom: 110,
+    backgroundColor: "transparent",
+  },
+
+  headerBlock: {
+    paddingHorizontal: 12,
+    marginBottom: 18,
+  },
+
+  backButton: {
+    width: 36,
+    height: 36,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+
+  backArrow: {
+    fontSize: 34,
+    lineHeight: 34,
+    color: "#A7A4A4",
+    fontWeight: "400",
+  },
+
+  headerTitleWrap: {
+    paddingHorizontal: 10,
   },
 
   h1: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#111827",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    backgroundColor: "#fff",
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#2A5FB3",
   },
 
-  orgLoadingRow: {
+  infoBanner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFFCC",
+    borderWidth: 1,
+    borderColor: "#DCEAF4",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 10,
   },
-  orgLoadingText: {
+
+  infoBannerText: {
     color: "#6B7280",
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
   },
+
   orgErrorText: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    color: "#b91c1c",
-    fontWeight: "800",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+    padding: 12,
+    borderRadius: 10,
+    fontSize: 13,
   },
 });

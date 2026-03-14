@@ -285,3 +285,92 @@ Which tag version am I
 - Simplified role option generation by deriving selectable roles from normalized roleRates.
 - Cleaned Create Shift and Edit Shift screens by moving keyboard/scroll behavior into reusable wrappers.
 - Standardized auth and organization creation screens around the same screen layout pattern.
+
+## v0.12.0 - Major UI adaptation based on Ivan prototype across auth, worker, and employer flows, including functional worker profile photo upload
+
+### Overview
+This release focused on a broad UI adaptation across both worker and employer flows to align the app more closely with Ivan’s prototype. It includes updated layouts, improved visual consistency, floating navigation refinements, gradient-based screen styling, and a functional worker profile photo upload integrated with Firebase Storage / Firestore.
+
+---
+
+### Pre-login / Auth
+- Adapted pre-login screen styling to better match the prototype
+- Adapted login screen styling
+- Adapted employer registration screen styling
+- Adapted organization registration screen styling
+- Adapted worker registration screen styling
+
+---
+
+### Worker App
+#### Jobs
+- Adapted worker job list screen styling
+- Improved floating bottom navigation styling for worker tabs
+- Refined spacing and layout to better match the prototype
+
+#### Saved
+- Adapted saved jobs screen styling to match updated QuickCrew visual language
+
+#### Applied
+- Adapted applied jobs screen styling to match updated QuickCrew visual language
+
+#### Job Details
+- Adapted worker job details screen styling
+- Improved overall visual consistency with the prototype
+
+#### Profile
+- Adapted worker profile screen styling to closely match the prototype
+- Reworked profile layout, form styling, dropdown styling, and action buttons
+- Added functional worker profile photo upload
+- Integrated profile photo upload with Firebase Storage
+- Stored uploaded photo metadata in Firestore user document
+- Confirmed uploaded photo renders correctly in the profile UI
+
+---
+
+### Employer App
+#### Jobs
+- Adapted employer job list styling
+- Matched employer floating tab navigation styling with worker navigation
+- Improved visual consistency between worker and employer experiences
+
+#### Create Shift
+- Adapted create shift screen styling to match QuickCrew design direction
+- Added gradient-based screen shell and improved layout spacing
+- Updated form styling to better align with the prototype
+- Improved date and time picker presentation
+- Improved button styling and overall visual hierarchy
+
+#### Edit Shift
+- Adapted edit shift screen styling to match create shift / QuickCrew design language
+- Improved spacing and action layout
+- Refined delete shift placement and bottom spacing
+- Improved consistency between create and edit shift flows
+
+#### Profile
+- Adapted employer profile styling partially
+- Improved visual consistency with QuickCrew profile patterns
+- Further refinement still pending
+
+---
+
+### Shared / UX
+- Improved consistency of colors, typography, spacing, borders, and gradients across adapted screens
+- Reworked multiple screen shells so gradients are visible correctly across the full viewport
+- Improved reusable scrolling / screen wrapper behavior for better gradient rendering on web
+- Updated floating bottom navigation styling across worker and employer experiences
+
+---
+
+### Firebase / Storage
+- Enabled functional worker profile photo upload
+- Added Firebase Storage integration for profile image uploads
+- Confirmed Firestore metadata updates after upload
+- Confirmed uploaded assets are stored under the correct user path structure
+
+---
+
+### Notes
+- Employer profile adaptation is still partial
+- Some screens still need a final visual review / polish pass
+- Additional refinement is planned in a follow-up pass, but this release represents a major prototype alignment milestone

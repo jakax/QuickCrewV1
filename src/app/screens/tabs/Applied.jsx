@@ -8,7 +8,10 @@ import {
   TouchableOpacity,
   RefreshControl,
   Pressable,
+  TextInput,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
   collection,
@@ -47,27 +50,23 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
-function statusLabel(statusRaw) {
-  const s = String(statusRaw || "").toLowerCase();
-  if (s === "accepted") return "Accepted";
-  if (s === "rejected") return "Rejected";
-  if (s === "withdrawn") return "Withdrawn";
-  if (s === "cancelled") return "Cancelled";
-  return "Pending";
+function getVisualStatus(app) {
+  const raw = String(app?.status || "").toLowerCase();
+
+  if (raw === "cancelled") return "Cancelled";
+  if (raw === "rejected") return "Cancelled";
+  if (raw === "pending") return "Pending approval";
+  if (raw === "accepted") return "Active";
+
+  return "Pending approval";
 }
 
-function statusStyle(statusRaw) {
-  const s = String(statusRaw || "").toUpperCase();
-  if (s === "ACCEPTED") return styles.pillAccepted;
-  if (s === "REJECTED") return styles.pillRejected;
-  if (s === "WITHDRAWN") return styles.pillWithdrawn;
-  if (s === "CANCELLED") return styles.pillCancelled;
-  return styles.pillApplied;
-}
-
-function isActiveApplication(statusRaw) {
-  const s = String(statusRaw || "").toLowerCase();
-  return s === "pending" || s === "accepted";
+function getVisualStatusStyle(label) {
+  if (label === "Cancelled") return styles.statusCancelled;
+  if (label === "Pending approval") return styles.statusPending;
+  if (label === "Active") return styles.statusActive;
+  if (label === "ON GOING") return styles.statusOngoing;
+  return styles.statusPending;
 }
 
 export default function Applied() {
@@ -79,6 +78,7 @@ export default function Applied() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
 
   const [cancelLoadingId, setCancelLoadingId] = useState(null);
 
@@ -103,9 +103,7 @@ export default function Applied() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const next = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((a) => isActiveApplication(a.status));
+        const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setItems(next);
         setLoading(false);
       },
@@ -132,9 +130,7 @@ export default function Applied() {
       );
 
       const snap = await getDocs(q);
-      const next = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((a) => isActiveApplication(a.status));
+      const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setItems(next);
     } catch (e) {
       setLoadError(e?.message || "Could not refresh.");
@@ -142,6 +138,18 @@ export default function Applied() {
       setRefreshing(false);
     }
   };
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+
+    return items.filter((item) => {
+      const title = String(item?.jobTitle || "").toLowerCase();
+      const org = String(item?.orgName || "").toLowerCase();
+      const location = String(item?.location || "").toLowerCase();
+      return title.includes(q) || org.includes(q) || location.includes(q);
+    });
+  }, [items, search]);
 
   const openJob = (jobId) => {
     if (!jobId) return;
@@ -196,7 +204,6 @@ export default function Applied() {
 
         const jobData = jobSnap.data();
 
-        // Only in auto-assign mode
         const approvalRequired = jobData?.businessApprovalRequired === true;
         if (approvalRequired) {
           throw new Error("This shift requires business approval and can’t be cancelled in this flow.");
@@ -210,10 +217,8 @@ export default function Applied() {
           throw new Error("You can only cancel at least 8 hours before the shift starts.");
         }
 
-        // Remove application
         tx.delete(appRef);
 
-        // Re-open job so it instantly returns to the pool
         const jobStatus = String(jobData?.status || "").toLowerCase();
         if (jobStatus === "pending") {
           tx.update(jobRef, {
@@ -223,7 +228,6 @@ export default function Applied() {
         }
       });
     } catch (e) {
-      // Reuse confirm modal as an error modal (non-destructive)
       await confirm({
         title: "Could not cancel",
         message: e?.message || "Something went wrong.",
@@ -242,140 +246,260 @@ export default function Applied() {
       (item.shiftDate && item.shiftTime ? `${item.shiftDate} - ${item.shiftTime}` : null);
 
     const cancellable = isCancellableUI(item);
+    const visualStatus = getVisualStatus(item);
 
     return (
-      <View style={styles.card}>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => openJob(item.jobId)}>
-          <View style={styles.cardTopRow}>
-            <Text style={styles.title} numberOfLines={1}>
-              {item.jobTitle || "Shift"}
-            </Text>
+      <Pressable
+        onPress={() => openJob(item.jobId)}
+        style={styles.card}
+      >
+        <Text style={styles.cardTitle}>{item.jobTitle || "Shift"}</Text>
+        <Text style={styles.cardCompany}>{item.orgName || "Company name"}</Text>
+        {item.location ? <Text style={styles.cardMeta}>{item.location}</Text> : null}
+        {when ? <Text style={styles.cardMeta}>{when}</Text> : null}
 
-            <View style={[styles.pill, statusStyle(item.status)]}>
-              <Text style={styles.pillText}>{statusLabel(item.status)}</Text>
-            </View>
-          </View>
-
-          {item.orgName ? <Text style={styles.org}>{item.orgName}</Text> : null}
-          {item.location ? <Text style={styles.meta}>{item.location}</Text> : null}
-          {when ? <Text style={styles.meta}>{when}</Text> : null}
-
-          {typeof item.ratePerHour === "number" ? (
-            <Text style={styles.rate}>{`$${Number(item.ratePerHour).toFixed(2)} / hour`}</Text>
-          ) : null}
-        </TouchableOpacity>
+        <Text style={[styles.statusText, getVisualStatusStyle(visualStatus)]}>
+          {visualStatus}
+        </Text>
 
         {cancellable ? (
           <Pressable
-            onPress={() => cancelApplication(item)}
-            style={({ pressed }) => [
-              styles.cancelBtn,
-              pressed && { opacity: 0.9 },
-              cancelLoadingId === item.id && { opacity: 0.6 },
-            ]}
+            onPress={(e) => {
+              e.stopPropagation();
+              cancelApplication(item);
+            }}
+            style={styles.binButton}
             disabled={cancelLoadingId === item.id}
+            hitSlop={10}
           >
-            <Text style={styles.cancelBtnText}>
-              {cancelLoadingId === item.id ? "Cancelling..." : "Cancel shift"}
-            </Text>
+            <Ionicons name="trash-outline" size={18} color="#C0C0C0" />
           </Pressable>
-        ) : null}
-      </View>
+        ) : (
+          <View style={styles.binButton}>
+            <Ionicons name="trash-outline" size={18} color="#C0C0C0" />
+          </View>
+        )}
+      </Pressable>
     );
   };
 
+  const Header = (
+    <View style={styles.header}>
+
+      <Text style={styles.title}>My shifts</Text>
+
+      <Text style={styles.subtitle}>
+        Here you’ll find all the shifts you’ve applied for, including those you need to work
+        (active), ongoing shifts, completed, and any that have been cancelled.
+      </Text>
+
+      {loadError ? <Text style={styles.errorBox}>{loadError}</Text> : null}
+    </View>
+  );
+
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading applied jobs...</Text>
-      </View>
+      <LinearGradient
+        colors={["#FFFFFF", "#FFFFFF", "#8CE8F1"]}
+        locations={[0, 0.52, 1]}
+        style={styles.screen}
+      >
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Loading applied jobs...</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.h1}>Applied</Text>
-
-      {loadError ? <Text style={styles.errorBox}>{loadError}</Text> : null}
-
-      {items.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No applications yet</Text>
-          <Text style={styles.emptySubtitle}>Apply to a shift and it will appear here.</Text>
-        </View>
+    <LinearGradient
+      colors={["#FFFFFF", "#FFFFFF", "#8CE8F1"]}
+      locations={[0, 0.52, 1]}
+      style={styles.screen}
+    >
+      {filteredItems.length === 0 ? (
+        <FlatList
+          data={[]}
+          ListHeaderComponent={Header}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No shifts yet</Text>
+              <Text style={styles.emptySubtitle}>Apply to a shift and it will appear here.</Text>
+            </View>
+          }
+          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          showsVerticalScrollIndicator={false}
+        />
       ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(it) => it.id}
           renderItem={renderItem}
+          ListHeaderComponent={Header}
           contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          showsVerticalScrollIndicator={false}
         />
       )}
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-
-  h1: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#111827",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 10,
-    backgroundColor: "#fff",
+  screen: {
+    flex: 1,
   },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  listContent: {
+    paddingTop: 75,
+    paddingBottom: 110,
+    paddingHorizontal: 20,
+  },
 
-  card: {
+  header: {
+    marginBottom: 28,
+  },
+
+  backButton: {
+    alignSelf: "flex-start",
+    padding: 8,
+    marginBottom: 20,
+  },
+
+  backButtonText: {
+    color: "#A7A4A4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  title: {
+    color: "#2A5FB3",
+    fontSize: 24,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginBottom: 22,
+    paddingHorizontal: 10,
+  },
+
+  searchWrap: {
+    paddingHorizontal: 10,
+    marginBottom: 22,
+  },
+
+  searchInner: {
+    minHeight: 38,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-  },
-
-  cardTopRow: {
+    borderColor: "#828282",
+    paddingLeft: 17,
+    paddingRight: 17,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
   },
 
-  title: { flex: 1, fontSize: 16, fontWeight: "900", color: "#111827" },
-  org: { marginTop: 6, fontSize: 14, fontWeight: "800", color: "#111827" },
-  meta: { marginTop: 6, fontSize: 13, fontWeight: "700", color: "#374151" },
-  rate: { marginTop: 8, fontSize: 13, fontWeight: "900", color: "#111827" },
+  searchInput: {
+    flex: 1,
+    color: "#716C6C",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    paddingRight: 10,
+  },
 
-  pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
-  pillText: { fontSize: 12, fontWeight: "900" },
+  subtitle: {
+    color: "#FFB800",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+    lineHeight: 20,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
 
-  pillApplied: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
-  pillAccepted: { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
-  pillRejected: { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
-  pillWithdrawn: { backgroundColor: "#F3F4F6", borderColor: "#E5E7EB" },
-  pillCancelled: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
-
-  cancelBtn: {
-    marginTop: 12,
+  card: {
+    width: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    position: "relative",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FEF2F2",
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: "center",
+    borderColor: "#E3E1E1",
+    overflow: "hidden",
+    marginBottom: 15,
   },
-  cancelBtnText: { color: "#B91C1C", fontWeight: "900" },
+
+  cardTitle: {
+    color: "#434343",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginTop: 8,
+  },
+
+  cardCompany: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginTop: 12,
+  },
+
+  cardMeta: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+    marginTop: 12,
+  },
+
+  statusText: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "300",
+  },
+
+  statusCancelled: {
+    color: "#FF0404",
+  },
+
+  statusPending: {
+    color: "#6568AC",
+  },
+
+  statusActive: {
+    color: "#FFB800",
+  },
+
+  statusOngoing: {
+    color: "#5BB70B",
+  },
+
+  binButton: {
+    position: "absolute",
+    right: 14,
+    bottom: 14,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   errorBox: {
-    marginHorizontal: 16,
+    marginHorizontal: 12,
+    marginTop: 4,
     marginBottom: 10,
     backgroundColor: "#FEF2F2",
     color: "#B91C1C",
@@ -385,10 +509,35 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  empty: { paddingHorizontal: 16, paddingTop: 30 },
-  emptyTitle: { fontSize: 18, fontWeight: "900", color: "#111827" },
-  emptySubtitle: { marginTop: 8, fontSize: 14, fontWeight: "700", color: "#6B7280", lineHeight: 20 },
+  empty: {
+    paddingHorizontal: 12,
+    paddingTop: 16,
+  },
 
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff", padding: 20 },
-  loadingText: { marginTop: 10, color: "#6B7280", fontWeight: "700" },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  emptySubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+    lineHeight: 20,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+
+  loadingText: {
+    marginTop: 10,
+    color: "#6B7280",
+    fontWeight: "700",
+  },
 });

@@ -14,7 +14,11 @@ import {
   TouchableWithoutFeedback,
   Platform,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
+import { useNavigation } from "@react-navigation/native";
+
 import { auth } from "../../../services/firebase/config";
 import { useConfirm } from "../../../app/providers/ConfirmProvider";
 import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
@@ -23,11 +27,38 @@ import {
   updateUserProfile,
   uploadUserPhoto,
   uploadUserCv,
-  setWorkerPaymentDetailsOnce,
+  uploadUserIdDocument,
 } from "../../../services/profile.service";
 
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+
+const GENDER_OPTIONS = [
+  "Male",
+  "Female",
+  "Non-binary",
+  "Prefer not to say",
+  "Other",
+];
+
+const RELATION_OPTIONS = [
+  "Parent",
+  "Sibling",
+  "Partner",
+  "Friend",
+  "Child",
+  "Other",
+];
+
+const RIGHT_TO_WORK_OPTIONS = [
+  "NZ Citizen",
+  "NZ Resident",
+  "Working Holiday Visa",
+  "Work Visa",
+  "Partner Visa",
+  "Student Visa",
+  "Other",
+];
 
 const splitName = (fullName = "") => {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -38,11 +69,8 @@ const splitName = (fullName = "") => {
 
 const sanitizePhone = (raw = "") => {
   const s = String(raw);
-
-  // keep only digits and +
   let cleaned = s.replace(/[^\d+]/g, "");
 
-  // allow + only at start
   if (cleaned.includes("+")) {
     cleaned = (cleaned[0] === "+" ? "+" : "") + cleaned.replace(/\+/g, "");
   }
@@ -52,40 +80,8 @@ const sanitizePhone = (raw = "") => {
 
 const isValidEmailLoose = (email = "") => {
   const e = String(email).trim();
-  // simple/loose validation (Phase 1)
   return /^\S+@\S+\.\S+$/.test(e);
 };
-
-function formatIRD(input) {
-  const digits = String(input || "").replace(/\D/g, "").slice(0, 9);
-  const a = digits.slice(0, 3);
-  const b = digits.slice(3, 6);
-  const c = digits.slice(6, 9);
-  if (digits.length <= 3) return a;
-  if (digits.length <= 6) return `${a}-${b}`;
-  return `${a}-${b}-${c}`;
-}
-
-function isValidIRD(v) {
-  return /^\d{3}-\d{3}-\d{3}$/.test(String(v || "").trim());
-}
-
-function formatNZBankAccount(input) {
-  const digits = String(input || "").replace(/\D/g, "").slice(0, 16);
-  const a = digits.slice(0, 2);
-  const b = digits.slice(2, 6);
-  const c = digits.slice(6, 13);
-  const d = digits.slice(13, 16);
-
-  if (digits.length <= 2) return a;
-  if (digits.length <= 6) return `${a}-${b}`;
-  if (digits.length <= 13) return `${a}-${b}-${c}`;
-  return `${a}-${b}-${c}-${d}`;
-}
-
-function isValidNZBankAccount(v) {
-  return /^\d{2}-\d{4}-\d{7}-\d{3}$/.test(String(v || "").trim());
-}
 
 function Row({ label, value }) {
   return (
@@ -97,12 +93,14 @@ function Row({ label, value }) {
 }
 
 export default function Profile() {
+  const navigation = useNavigation();
   const { uid, profile, isEmployer, isWorker } = useSession();
   const confirm = useConfirm();
 
   const initial = useMemo(() => {
     const fullName = profile?.fullName || "";
     const { firstName, lastName } = splitName(fullName);
+
     return {
       firstName,
       lastName,
@@ -116,39 +114,57 @@ export default function Profile() {
   const [email, setEmail] = useState(initial.email);
   const [phone, setPhone] = useState(initial.phone);
 
+  const [preferredName, setPreferredName] = useState(profile?.preferredName || "");
+  const [streetAddress, setStreetAddress] = useState(profile?.address?.street || "");
+  const [suburb, setSuburb] = useState(profile?.address?.suburb || "");
+  const [city, setCity] = useState(profile?.address?.city || "");
+  const [postcode, setPostcode] = useState(profile?.address?.postcode || "");
+
+  const [dateOfBirth, setDateOfBirth] = useState(profile?.dateOfBirth || "");
+  const [gender, setGender] = useState(profile?.gender || "");
+  const [nationality, setNationality] = useState(profile?.nationality || "");
+  const [passportNumber, setPassportNumber] = useState(profile?.passportNumber || "");
+  const [passportIssuingCountry, setPassportIssuingCountry] = useState(
+    profile?.passportIssuingCountry || ""
+  );
+
+  const [emergencyContactName, setEmergencyContactName] = useState(
+    profile?.emergencyContact?.name || ""
+  );
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(
+    profile?.emergencyContact?.phone || ""
+  );
+  const [emergencyContactRelation, setEmergencyContactRelation] = useState(
+    profile?.emergencyContact?.relation || ""
+  );
+
+  const [rightToWorkNz, setRightToWorkNz] = useState(profile?.rightToWorkNz || "");
+  const [visaExpiryDate, setVisaExpiryDate] = useState(profile?.visaExpiryDate || "");
+  const [about, setAbout] = useState(profile?.about || "");
+
+  const [criminalCheckConsent, setCriminalCheckConsent] = useState(
+    !!profile?.criminalCheckConsent
+  );
+  const [termsAccepted, setTermsAccepted] = useState(!!profile?.termsAccepted);
+
   const [error, setError] = useState(null);
-  // Worker-only: payment details (write-once)
-  const [irdNumber, setIrdNumber] = useState(profile?.irdNumber || "");
-  const [bankAccountNumber, setBankAccountNumber] = useState(profile?.bankAccountNumber || "");
-  const [savingPayment, setSavingPayment] = useState(false);
-
-  const paymentLocked = useMemo(() => {
-    // if either exists, treat as locked (write-once behavior)
-    return !!profile?.irdNumber && !!profile?.bankAccountNumber;
-  }, [profile?.irdNumber, profile?.bankAccountNumber]);
-
-  const maskBank = (v) => {
-    const s = String(v || "");
-    const digits = s.replace(/\s+/g, "");
-    if (digits.length <= 4) return digits;
-    return `•••••••${digits.slice(-4)}`;
-  };
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Worker-only: CV + references + photo
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingCv, setUploadingCv] = useState(false);
+  const [uploadingIdDocument, setUploadingIdDocument] = useState(false);
 
   const photoUrl = profile?.photo?.url || null;
   const cvUrl = profile?.cv?.url || null;
-  const cvFileName = profile?.cv?.fileName || "CV";
+  const cvFileName = profile?.cv?.fileName || "Resume";
+  const idDocumentUrl = profile?.idDocument?.url || null;
+  const idDocumentFileName = profile?.idDocument?.fileName || "ID document";
 
   const [references, setReferences] = useState(
     Array.isArray(profile?.references) ? profile.references : []
   );
 
-  // modal for adding reference
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [refName, setRefName] = useState("");
   const [refCompany, setRefCompany] = useState("");
@@ -157,38 +173,87 @@ export default function Profile() {
   const [refEmail, setRefEmail] = useState("");
   const [refNotes, setRefNotes] = useState("");
 
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+  const [dateField, setDateField] = useState(null);
+
+  const [selectModalOpen, setSelectModalOpen] = useState(false);
+  const [selectField, setSelectField] = useState(null);
+  const [selectOptions, setSelectOptions] = useState([]);
+  const [tmpSelectedOption, setTmpSelectedOption] = useState("");
+
+  const today = new Date();
+  const currentYear = today.getFullYear();
+
+  const days = useMemo(
+    () => Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")),
+    []
+  );
+  const months = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")),
+    []
+  );
+  const years = useMemo(
+    () => Array.from({ length: 100 }, (_, i) => String(currentYear - i)),
+    [currentYear]
+  );
+  const visaYears = useMemo(
+    () => Array.from({ length: 15 }, (_, i) => String(currentYear + i)),
+    [currentYear]
+  );
+
+  const [tmpDay, setTmpDay] = useState(1);
+  const [tmpMonth, setTmpMonth] = useState(1);
+  const [tmpYear, setTmpYear] = useState(currentYear);
+
   useEffect(() => {
     setFirstName(initial.firstName);
     setLastName(initial.lastName);
+    setEmail(initial.email);
     setPhone(initial.phone);
 
-    setReferences(Array.isArray(profile?.references) ? profile.references : []);
+    setPreferredName(profile?.preferredName || "");
+    setStreetAddress(profile?.address?.street || "");
+    setSuburb(profile?.address?.suburb || "");
+    setCity(profile?.address?.city || "");
+    setPostcode(profile?.address?.postcode || "");
+    setDateOfBirth(profile?.dateOfBirth || "");
+    setGender(profile?.gender || "");
+    setNationality(profile?.nationality || "");
+    setPassportNumber(profile?.passportNumber || "");
+    setPassportIssuingCountry(profile?.passportIssuingCountry || "");
+    setEmergencyContactName(profile?.emergencyContact?.name || "");
+    setEmergencyContactPhone(profile?.emergencyContact?.phone || "");
+    setEmergencyContactRelation(profile?.emergencyContact?.relation || "");
+    setRightToWorkNz(profile?.rightToWorkNz || "");
+    setVisaExpiryDate(profile?.visaExpiryDate || "");
+    setAbout(profile?.about || "");
+    setCriminalCheckConsent(!!profile?.criminalCheckConsent);
+    setTermsAccepted(!!profile?.termsAccepted);
 
-    // payment details
-    setIrdNumber(profile?.irdNumber || "");
-    setBankAccountNumber(profile?.bankAccountNumber || "");
-  }, [initial, profile?.references, profile?.irdNumber, profile?.bankAccountNumber]);
+    setReferences(Array.isArray(profile?.references) ? profile.references : []);
+  }, [initial, profile]);
 
   const displayName = useMemo(() => {
     const name = `${firstName} ${lastName}`.trim();
-    return name || profile?.fullName || "Your profile";
+    return name || profile?.fullName || "My profile";
   }, [firstName, lastName, profile]);
 
   const statusInfo = useMemo(() => {
     if (isEmployer) {
       if (profile?.approvalStatus === "approved") {
-        return { label: "Verified", color: "#16A34A", message: null };
+        return { label: "Verified", color: "#45BF79", message: null };
       }
       return {
         label: "Account under review",
         color: "#F59E0B",
-        message: "Your employer account is pending approval by QuickCrew. Some features may be limited.",
+        message:
+          "Your employer account is pending approval by QuickCrew. Some features may be limited.",
       };
     }
 
     if (isWorker) {
       if (profile?.approvalStatus === "approved") {
-        return { label: "Verified", color: "#16A34A", message: null };
+        return { label: "Verified", color: "#45BF79", message: null };
       }
       return {
         label: "Profile not verified",
@@ -200,87 +265,119 @@ export default function Profile() {
     return null;
   }, [isEmployer, isWorker, profile]);
 
+  const requiresVisaExpiry = useMemo(() => {
+    return !["", "NZ Citizen", "NZ Resident"].includes(rightToWorkNz);
+  }, [rightToWorkNz]);
+
   const canSave = useMemo(() => {
-    if (!uid) return false;
-    if (saving || loggingOut) return false;
-    if (!firstName.trim()) return false;
-    if (!email.trim()) return false;
-    return true;
-  }, [uid, saving, loggingOut, firstName, email]);
+  if (!uid) return false;
+  if (saving || loggingOut) return false;
+  return true;
+}, [uid, saving, loggingOut]);
 
-  const onSave = async () => {
-    setError(null);
+  const openDateModal = (field) => {
+    const source = field === "visaExpiryDate" ? visaExpiryDate : dateOfBirth;
+    const [dd = "01", mm = "01", yyyy = String(currentYear)] = String(source || "").split("/");
 
-    const ok = await confirm({
-      title: "Save changes?",
-      message: "Your profile information will be updated.",
-      confirmText: "Save",
-      cancelText: "Cancel",
-    });
-
-    if (!ok) return;
-
-    try {
-      setSaving(true);
-      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-
-      await updateUserProfile(uid, {
-        fullName,
-        phone: phone.trim(),
-      });
-    } catch (e) {
-      setError(e?.message || "Could not save profile.");
-    } finally {
-      setSaving(false);
-    }
+    setTmpDay(Number(dd) || 1);
+    setTmpMonth(Number(mm) || 1);
+    setTmpYear(Number(yyyy) || currentYear);
+    setDateField(field);
+    setDateModalOpen(true);
   };
 
-  const onSavePaymentDetails = async () => {
+  const applyDateModal = () => {
+    const value = `${String(tmpDay).padStart(2, "0")}/${String(tmpMonth).padStart(
+      2,
+      "0"
+    )}/${tmpYear}`;
+
+    if (dateField === "dateOfBirth") {
+      setDateOfBirth(value);
+    } else if (dateField === "visaExpiryDate") {
+      setVisaExpiryDate(value);
+    }
+
+    setDateModalOpen(false);
+    setDateField(null);
+  };
+
+  const openSelectModal = (field, options) => {
+    setSelectField(field);
+    setSelectOptions(options);
+
+    if (field === "gender") {
+      setTmpSelectedOption(gender || options[0] || "");
+    } else if (field === "emergencyContactRelation") {
+      setTmpSelectedOption(emergencyContactRelation || options[0] || "");
+    } else if (field === "rightToWorkNz") {
+      setTmpSelectedOption(rightToWorkNz || options[0] || "");
+    }
+
+    setSelectModalOpen(true);
+  };
+
+  const applySelectModal = () => {
+    if (selectField === "gender") {
+      setGender(tmpSelectedOption);
+    } else if (selectField === "emergencyContactRelation") {
+      setEmergencyContactRelation(tmpSelectedOption);
+    } else if (selectField === "rightToWorkNz") {
+      setRightToWorkNz(tmpSelectedOption);
+    }
+
+    setSelectModalOpen(false);
+    setSelectField(null);
+    setSelectOptions([]);
+    setTmpSelectedOption("");
+  };
+
+  const onSave = async () => {
     try {
       setError(null);
-      if (!uid) throw new Error("Missing session.");
-      if (!isWorker) throw new Error("Only workers can set payment details.");
-
-      if (paymentLocked) {
-        throw new Error("Payment details are locked. Contact QuickCrew to update them.");
-      }
-
-      const ird = String(irdNumber || "").trim();
-      const bank = String(bankAccountNumber || "").trim();
-
-      if (!ird || !bank) {
-        throw new Error("IRD number and bank account number are required.");
-      }
-
-      if (!isValidIRD(ird)) {
-        throw new Error("IRD number must be in the format 123-456-789.");
-      }
-
-      if (!isValidNZBankAccount(bank)) {
-        throw new Error("Bank account number must be in the format xx-xxxx-xxxxxxx-xxx.");
-      }
 
       const ok = await confirm({
-        title: "Save payment details?",
-        message:
-          "Please double-check. You won’t be able to change these details in the app after saving. To change them later, you’ll need to contact QuickCrew.",
+        title: "Save profile?",
+        message: "Your profile information will be updated.",
         confirmText: "Save",
         cancelText: "Cancel",
       });
 
       if (!ok) return;
 
-      setSavingPayment(true);
+      setSaving(true);
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
-      // ✅ write-once enforced in service (transaction)
-      await setWorkerPaymentDetailsOnce(uid, {
-        irdNumber: ird,
-        bankAccountNumber: bank,
+      await updateUserProfile(uid, {
+        fullName,
+        phone: phone.trim(),
+        preferredName: preferredName.trim(),
+        dateOfBirth: dateOfBirth.trim(),
+        gender: gender.trim(),
+        nationality: nationality.trim(),
+        passportNumber: passportNumber.trim(),
+        passportIssuingCountry: passportIssuingCountry.trim(),
+        rightToWorkNz: rightToWorkNz.trim(),
+        visaExpiryDate: requiresVisaExpiry ? visaExpiryDate.trim() : "",
+        about: about.trim(),
+        criminalCheckConsent: !!criminalCheckConsent,
+        termsAccepted: !!termsAccepted,
+        address: {
+          street: streetAddress.trim(),
+          suburb: suburb.trim(),
+          city: city.trim(),
+          postcode: postcode.trim(),
+        },
+        emergencyContact: {
+          name: emergencyContactName.trim(),
+          phone: emergencyContactPhone.trim(),
+          relation: emergencyContactRelation.trim(),
+        },
       });
     } catch (e) {
-      setError(e?.message || "Could not save payment details.");
+      setError(e?.message || "Could not save profile.");
     } finally {
-      setSavingPayment(false);
+      setSaving(false);
     }
   };
 
@@ -305,6 +402,13 @@ export default function Profile() {
       setError(e?.message || "Could not log out.");
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const onBackToShifts = () => {
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+      return;
     }
   };
 
@@ -343,7 +447,11 @@ export default function Profile() {
       if (!uid) throw new Error("Missing session.");
 
       const res = await DocumentPicker.getDocumentAsync({
-        type: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
         copyToCacheDirectory: true,
         multiple: false,
       });
@@ -357,13 +465,47 @@ export default function Profile() {
       await uploadUserCv({
         uid,
         uri: asset.uri,
-        fileName: asset.name || "cv.pdf",
+        fileName: asset.name || "resume.pdf",
         mimeType: asset.mimeType || "application/pdf",
       });
     } catch (e) {
-      setError(e?.message || "Could not upload CV.");
+      setError(e?.message || "Could not upload resume.");
     } finally {
       setUploadingCv(false);
+    }
+  };
+
+  const onPickIdDocument = async () => {
+    try {
+      setError(null);
+      if (!uid) throw new Error("Missing session.");
+
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (res.canceled) return;
+
+      const asset = res.assets?.[0];
+      if (!asset?.uri) throw new Error("Could not read selected file.");
+
+      setUploadingIdDocument(true);
+      await uploadUserIdDocument({
+        uid,
+        uri: asset.uri,
+        fileName: asset.name || "id_document.pdf",
+        mimeType: asset.mimeType || "application/pdf",
+      });
+    } catch (e) {
+      setError(e?.message || "Could not upload ID document.");
+    } finally {
+      setUploadingIdDocument(false);
     }
   };
 
@@ -393,59 +535,59 @@ export default function Profile() {
   };
 
   const addReference = async () => {
-  const name = refName.trim();
-  const company = refCompany.trim();
-  const role = refRole.trim();
-  const phone = sanitizePhone(refPhone.trim());
-  const email = refEmail.trim();
+    const name = refName.trim();
+    const company = refCompany.trim();
+    const role = refRole.trim();
+    const phone = sanitizePhone(refPhone.trim());
+    const email = refEmail.trim();
 
-  if (!name) {
-    setError("Reference name is required.");
-    return;
-  }
-  if (!company) {
-    setError("Company is required.");
-    return;
-  }
-  if (!role) {
-    setError("Role is required.");
-    return;
-  }
-  if (!phone) {
-    setError("Phone is required.");
-    return;
-  }
-  if (!email) {
-    setError("Email is required.");
-    return;
-  }
-  if (!isValidEmailLoose(email)) {
-    setError("Please enter a valid email address.");
-    return;
-  }
+    if (!name) {
+      setError("Reference name is required.");
+      return;
+    }
+    if (!company) {
+      setError("Company / organisation name is required.");
+      return;
+    }
+    if (!role) {
+      setError("Position title is required.");
+      return;
+    }
+    if (!phone) {
+      setError("Phone number is required.");
+      return;
+    }
+    if (!email) {
+      setError("Email is required.");
+      return;
+    }
+    if (!isValidEmailLoose(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
 
-  const next = [
-    ...(Array.isArray(references) ? references : []),
-    {
-      name,
-      company,
-      role,
-      phone, // ✅ sanitized
-      email,
-      notes: refNotes.trim() || "",
-    },
-  ];
+    const next = [
+      ...(Array.isArray(references) ? references : []),
+      {
+        name,
+        company,
+        role,
+        phone,
+        email,
+        notes: refNotes.trim() || "",
+      },
+    ];
 
-  setRefModalOpen(false);
-  setRefName("");
-  setRefCompany("");
-  setRefRole("");
-  setRefPhone("");
-  setRefEmail("");
-  setRefNotes("");
+    setRefModalOpen(false);
+    setRefName("");
+    setRefCompany("");
+    setRefRole("");
+    setRefPhone("");
+    setRefEmail("");
+    setRefNotes("");
 
-  await saveReferences(next);
-};
+    await saveReferences(next);
+  };
 
   const removeReference = async (index) => {
     const ok = await confirm({
@@ -463,7 +605,6 @@ export default function Profile() {
   };
 
   const isWeb = Platform.OS === "web";
-
   const OuterWrapper = isWeb ? Fragment : TouchableWithoutFeedback;
   const outerProps = isWeb ? {} : { onPress: Keyboard.dismiss, accessible: false };
 
@@ -479,22 +620,29 @@ export default function Profile() {
   return (
     <OuterWrapper {...outerProps}>
       <InnerWrapper {...innerProps}>
-        <ScrollView
+        <LinearGradient
+          colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+          locations={[0, 0.45, 1]}
           style={styles.screen}
-          contentContainerStyle={[styles.container, { paddingBottom: 40 }]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={isWeb ? "none" : "on-drag"}
-          onScrollBeginDrag={isWeb ? undefined : Keyboard.dismiss}
-          showsVerticalScrollIndicator={false}
         >
-          {/* Header row */}
-          <View style={styles.headerRow}>
+          <ScrollView
+            style={styles.screen}
+            contentContainerStyle={styles.container}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={isWeb ? "none" : "on-drag"}
+            onScrollBeginDrag={isWeb ? undefined : Keyboard.dismiss}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.headerBlock}>
+              <Text style={styles.title}>My profile</Text>
+            </View>
+
             <Pressable
               onPress={isWorker ? onPickPhoto : undefined}
               disabled={!isWorker || uploadingPhoto}
               style={({ pressed }) => [
                 styles.avatar,
-                pressed && isWorker ? { opacity: 0.9 } : null,
+                (pressed || uploadingPhoto) && isWorker ? { opacity: 0.9 } : null,
                 uploadingPhoto ? { opacity: 0.6 } : null,
               ]}
             >
@@ -503,395 +651,768 @@ export default function Profile() {
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarPlaceholderText}>
-                    {uploadingPhoto ? "Uploading…" : isWorker ? "Add photo" : ""}
+                    {uploadingPhoto ? "Uploading…" : "Add photo"}
                   </Text>
                 </View>
               )}
             </Pressable>
 
-            <View style={styles.infoContainer}>
-              <Text style={styles.name}>{displayName}</Text>
+            <Text style={styles.displayName}>{displayName}</Text>
 
-              {statusInfo ? (
-                <View style={[styles.tag, { backgroundColor: statusInfo.color }]}>
-                  <Text style={styles.tagText}>{statusInfo.label}</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {statusInfo?.message ? (
-            <View style={styles.statusBanner}>
-              <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
-            </View>
-          ) : null}
-
-          {/* Worker extras */}
-          {isWorker ? (
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Worker Profile</Text>
-
-              {/* CV */}
-              <View style={{ marginTop: 10 }}>
-                <Text style={styles.label}>CV</Text>
-
-                {cvUrl ? (
-                  <View style={styles.cvRow}>
-                    <Text style={styles.cvName}>{cvFileName}</Text>
-                    <Pressable onPress={() => openUrl(cvUrl)} style={styles.smallBtn}>
-                      <Text style={styles.smallBtnText}>View</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Text style={styles.helper}>No CV uploaded yet.</Text>
-                )}
-
-                <Pressable
-                  onPress={onPickCv}
-                  disabled={uploadingCv || saving}
-                  style={({ pressed }) => [
-                    styles.smallBtnPrimary,
-                    (pressed || uploadingCv) && { opacity: 0.9 },
-                    (uploadingCv || saving) && { opacity: 0.6 },
-                  ]}
-                >
-                  <Text style={styles.smallBtnPrimaryText}>
-                    {uploadingCv ? "Uploading…" : "Upload CV"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* References */}
-              <View style={{ marginTop: 16 }}>
-                <Text style={styles.label}>References</Text>
-
-                {Array.isArray(references) && references.length > 0 ? (
-                  <>
-                    {references.length < 2 ? (
-                      <Text style={styles.helper}>
-                        Please add at least 2 references. This helps employers trust your profile.
-                      </Text>
-                    ) : null}
-
-                    {references.map((r, idx) => (
-                      <View key={`ref-${idx}`} style={styles.refCard}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.refIndex}>Reference {idx + 1}</Text>
-
-                          <Text style={styles.refName}>{r?.name || "—"}</Text>
-                          {r?.company ? <Text style={styles.refLine}>{r.company}</Text> : null}
-                          {r?.role ? <Text style={styles.refLine}>{r.role}</Text> : null}
-                          {r?.phone ? <Text style={styles.refLine}>{r.phone}</Text> : null}
-                          {r?.email ? <Text style={styles.refLine}>{r.email}</Text> : null}
-                          {r?.notes ? <Text style={styles.refNotes}>{r.notes}</Text> : null}
-                        </View>
-
-                        <Pressable onPress={() => removeReference(idx)} style={styles.smallBtnDanger}>
-                          <Text style={styles.smallBtnDangerText}>Remove</Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.helper}>No references yet.</Text>
-                    <Text style={styles.helper}>
-                      Please add at least 2 references. This helps employers trust your profile.
-                    </Text>
-                  </>
-                )}
-
-                <Pressable onPress={() => setRefModalOpen(true)} style={styles.smallBtnPrimary}>
-                  <Text style={styles.smallBtnPrimaryText}>Add reference</Text>
-                </Pressable>
-              </View>
-
-              {/* Payment details (write-once) */}
-              <View style={{ marginTop: 16 }}>
-                <Text style={styles.label}>Payment details</Text>
-
-                <View style={styles.paymentBanner}>
-                  <Text style={styles.paymentBannerText}>
-                    These details will be used for payouts later. We don’t verify them yet.
-                    {"\n"}
-                    Double-check before saving — you won’t be able to edit them in the app.
-                  </Text>
-                </View>
-
-                <View style={{ marginTop: 10 }}>
-                  <Text style={styles.labelSmall}>IRD number</Text>
-                  {paymentLocked ? (
-                    <Text style={styles.readonlyValue}>{profile?.irdNumber || "—"}</Text>
-                  ) : (
-                    <TextInput
-                      style={styles.input}
-                      value={irdNumber}
-                      onChangeText={(v) => setIrdNumber(formatIRD(v))}
-                      placeholder="123-456-789"
-                      keyboardType="number-pad"
-                      autoCapitalize="none"
-                    />
-                  )}
-                </View>
-
-                <View style={{ marginTop: 12 }}>
-                  <Text style={styles.labelSmall}>Bank account number</Text>
-                  {paymentLocked ? (
-                    <Text style={styles.readonlyValue}>
-                      {profile?.bankAccountNumber ? maskBank(profile.bankAccountNumber) : "—"}
-                    </Text>
-                  ) : (
-                    <TextInput
-                      style={styles.input}
-                      value={bankAccountNumber}
-                      onChangeText={(v) => setBankAccountNumber(formatNZBankAccount(v))}
-                      placeholder="12-1234-1234567-123"
-                      keyboardType="number-pad"
-                      autoCapitalize="none"
-                    />
-                  )}
-                </View>
-
-                {paymentLocked ? (
-                  <Text style={styles.helper}>To update these details, contact QuickCrew support.</Text>
-                ) : (
-                  <Pressable
-                    onPress={onSavePaymentDetails}
-                    disabled={savingPayment || saving || loggingOut}
-                    style={({ pressed }) => [
-                      styles.smallBtnPrimary,
-                      (pressed || savingPayment) && { opacity: 0.9 },
-                      (savingPayment || saving || loggingOut) && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={styles.smallBtnPrimaryText}>
-                      {savingPayment ? "Saving…" : "Save payment details"}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          ) : null}
-
-          {/* Form */}
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Your Information</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>First Name</Text>
-              <TextInput
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="Enter your first name"
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Last Name</Text>
-              <TextInput
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Enter your last name"
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, styles.inputDisabled]}
-                value={email}
-                editable={false}
-                selectTextOnFocus={false}
-              />
-              <Text style={styles.helper}>To change your login email, we’ll add a secure flow later.</Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone</Text>
-              <TextInput
-                style={styles.input}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="(+64) 555-1234"
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            {isEmployer ? (
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Account</Text>
-                <Row label="Organization" value={profile?.orgName || "—"} />
-                <Row label="Member role" value={profile?.memberRole || "—"} />
-                <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+            {statusInfo ? (
+              <View style={[styles.statusPill, { backgroundColor: statusInfo.color }]}>
+                <Text style={styles.statusPillText}>{statusInfo.label}</Text>
               </View>
             ) : null}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {statusInfo?.message ? (
+              <View style={styles.statusBanner}>
+                <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
+              </View>
+            ) : null}
 
-            <Pressable
-              onPress={onSave}
-              disabled={!canSave}
-              style={({ pressed }) => [
-                styles.saveButton,
-                (!canSave || pressed) && { opacity: 0.9 },
-                !canSave && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={styles.saveButtonText}>{saving ? "Saving..." : "Save Information"}</Text>
-            </Pressable>
+            {isEmployer ? (
+              <View style={styles.accountCard}>
+                <Text style={styles.cardTitle}>Account</Text>
+                <Row label="Organization" value={profile?.orgName || "—"} />
+                <Row label="Member role" value={profile?.memberRole || "—"} />
+                <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+                <Pressable
+                  onPress={onLogout}
+                  disabled={loggingOut || saving}
+                  style={({ pressed }) => [
+                    styles.secondaryGhostButton,
+                    (pressed || loggingOut) && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.secondaryGhostButtonText}>
+                    {loggingOut ? "Logging out..." : "Log out"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
 
-            <Pressable
-              onPress={onLogout}
-              disabled={loggingOut || saving}
-              style={({ pressed }) => [
-                styles.logoutBtn,
-                (pressed || loggingOut) && { opacity: 0.9 },
-                (loggingOut || saving) && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={styles.logoutText}>{loggingOut ? "Logging out..." : "Log out"}</Text>
-            </Pressable>
-          </View>
+            {isWorker ? (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>First name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="Enter your first name"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
 
-          {/* Add reference modal */}
-          <Modal
-            transparent
-            animationType="fade"
-            visible={refModalOpen}
-            onRequestClose={() => setRefModalOpen(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalBox}>
-                <Text style={styles.modalTitle}>Add reference</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Last name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Enter your last name"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
 
-                <TextInput style={styles.modalInput} value={refName} onChangeText={setRefName} placeholder="Name *" />
-                <TextInput style={styles.modalInput} value={refCompany} onChangeText={setRefCompany} placeholder="Company *" />
-                <TextInput style={styles.modalInput} value={refRole} onChangeText={setRefRole} placeholder="Role *" />
-                <TextInput
-                  style={styles.modalInput}
-                  value={refPhone}
-                  onChangeText={(v) => setRefPhone(sanitizePhone(v))}
-                  placeholder="Phone *"
-                  keyboardType="phone-pad"
-                  autoCapitalize="none"
-                />
-                <TextInput style={styles.modalInput} value={refEmail} onChangeText={setRefEmail} placeholder="Email *" />
-                <TextInput
-                  style={[styles.modalInput, { height: 70 }]}
-                  value={refNotes}
-                  onChangeText={setRefNotes}
-                  placeholder="Notes"
-                  multiline
-                />
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Preferred name (optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={preferredName}
+                    onChangeText={setPreferredName}
+                    placeholder="Enter your preferred name"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
 
-                <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
-                  <Pressable onPress={() => setRefModalOpen(false)} style={[styles.modalBtn, styles.modalBtnGhost]}>
-                    <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                  </Pressable>
-                  <Pressable onPress={addReference} style={[styles.modalBtn, styles.modalBtnPrimary]}>
-                    <Text style={styles.modalBtnPrimaryText}>Add</Text>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email address</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputDisabled]}
+                    value={email}
+                    editable={false}
+                    selectTextOnFocus={false}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Phone</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="(+64) 555-1234"
+                    placeholderTextColor="#716C6C"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Address</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={streetAddress}
+                    onChangeText={setStreetAddress}
+                    placeholder="Street address"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.stackedInput]}
+                    value={suburb}
+                    onChangeText={setSuburb}
+                    placeholder="Suburb"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.stackedInput]}
+                    value={city}
+                    onChangeText={setCity}
+                    placeholder="City"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.stackedInput]}
+                    value={postcode}
+                    onChangeText={setPostcode}
+                    placeholder="Postcode"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Date of birth</Text>
+                  <Pressable
+                    onPress={() => openDateModal("dateOfBirth")}
+                    style={styles.selectInput}
+                  >
+                    <Text
+                      style={
+                        dateOfBirth ? styles.selectInputText : styles.selectInputPlaceholder
+                      }
+                    >
+                      {dateOfBirth || "dd/mm/yyyy"}
+                    </Text>
+                    <Text style={styles.selectChevron}>▼</Text>
                   </Pressable>
                 </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Gender</Text>
+                  <Pressable
+                    onPress={() => openSelectModal("gender", GENDER_OPTIONS)}
+                    style={styles.selectInput}
+                  >
+                    <Text style={gender ? styles.selectInputText : styles.selectInputPlaceholder}>
+                      {gender || "Select an option"}
+                    </Text>
+                    <Text style={styles.selectChevron}>▼</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Nationality</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={nationality}
+                    onChangeText={setNationality}
+                    placeholder="Enter your nationality"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Passport number</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={passportNumber}
+                    onChangeText={setPassportNumber}
+                    placeholder="Enter your passport number"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Passport issuing country</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={passportIssuingCountry}
+                    onChangeText={setPassportIssuingCountry}
+                    placeholder="Enter passport issuing country"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Emergency contact</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={emergencyContactName}
+                    onChangeText={setEmergencyContactName}
+                    placeholder="Enter contact name"
+                    placeholderTextColor="#716C6C"
+                    autoCapitalize="words"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Emergency contact phone number</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={emergencyContactPhone}
+                    onChangeText={(v) => setEmergencyContactPhone(sanitizePhone(v))}
+                    placeholder="Enter contact phone number"
+                    placeholderTextColor="#716C6C"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Relation</Text>
+                  <Pressable
+                    onPress={() =>
+                      openSelectModal("emergencyContactRelation", RELATION_OPTIONS)
+                    }
+                    style={styles.selectInput}
+                  >
+                    <Text
+                      style={
+                        emergencyContactRelation
+                          ? styles.selectInputText
+                          : styles.selectInputPlaceholder
+                      }
+                    >
+                      {emergencyContactRelation || "Select an option"}
+                    </Text>
+                    <Text style={styles.selectChevron}>▼</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.sectionSpacer} />
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.sectionLabel}>Attach ID</Text>
+                  <Text style={styles.helper}>
+                    *Passport, NZ driver licence or valid NZ ID
+                  </Text>
+                  <Text style={styles.helper}>
+                    File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
+                  </Text>
+
+                  {idDocumentUrl ? (
+                    <View style={styles.fileRow}>
+                      <Text style={styles.fileName}>{idDocumentFileName}</Text>
+                      <Pressable
+                        onPress={() => openUrl(idDocumentUrl)}
+                        style={styles.fileActionButton}
+                      >
+                        <Text style={styles.fileActionButtonText}>View</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.helper}>No ID document uploaded yet.</Text>
+                  )}
+
+                  <Pressable
+                    onPress={onPickIdDocument}
+                    disabled={uploadingIdDocument || saving}
+                    style={({ pressed }) => [
+                      styles.uploadButton,
+                      (pressed || uploadingIdDocument) && { opacity: 0.9 },
+                      (uploadingIdDocument || saving) && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.uploadButtonText}>
+                      {uploadingIdDocument ? "Uploading…" : "Upload ID"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Right to work in NZ</Text>
+                  <Pressable
+                    onPress={() => openSelectModal("rightToWorkNz", RIGHT_TO_WORK_OPTIONS)}
+                    style={styles.selectInput}
+                  >
+                    <Text
+                      style={
+                        rightToWorkNz ? styles.selectInputText : styles.selectInputPlaceholder
+                      }
+                    >
+                      {rightToWorkNz || "Select an option"}
+                    </Text>
+                    <Text style={styles.selectChevron}>▼</Text>
+                  </Pressable>
+                </View>
+
+                {requiresVisaExpiry ? (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Expiry date</Text>
+                    <Pressable
+                      onPress={() => openDateModal("visaExpiryDate")}
+                      style={styles.selectInput}
+                    >
+                      <Text
+                        style={
+                          visaExpiryDate
+                            ? styles.selectInputText
+                            : styles.selectInputPlaceholder
+                        }
+                      >
+                        {visaExpiryDate || "dd/mm/yyyy"}
+                      </Text>
+                      <Text style={styles.selectChevron}>▼</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Tell us about yourself</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={about}
+                    onChangeText={setAbout}
+                    placeholder="Write a short introduction about yourself"
+                    placeholderTextColor="#716C6C"
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <View style={styles.referencesBlock}>
+                  <Text style={styles.sectionLabel}>Add your work experience</Text>
+
+                  {Array.isArray(references) && references.length > 0 ? (
+                    <>
+                      {references.length < 2 ? (
+                        <Text style={styles.helper}>
+                          Please add at least 2 references. This helps employers trust your
+                          profile.
+                        </Text>
+                      ) : null}
+
+                      {references.map((r, idx) => (
+                        <View key={`ref-${idx}`} style={styles.referenceCard}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.referenceIndex}>Reference {idx + 1}</Text>
+                            <Text style={styles.referenceTitle}>{r?.name || "—"}</Text>
+                            {r?.company ? (
+                              <Text style={styles.referenceLine}>{r.company}</Text>
+                            ) : null}
+                            {r?.role ? <Text style={styles.referenceLine}>{r.role}</Text> : null}
+                            {r?.phone ? <Text style={styles.referenceLine}>{r.phone}</Text> : null}
+                            {r?.email ? <Text style={styles.referenceLine}>{r.email}</Text> : null}
+                            {r?.notes ? (
+                              <Text style={styles.referenceNotes}>{r.notes}</Text>
+                            ) : null}
+                          </View>
+
+                          <Pressable
+                            onPress={() => removeReference(idx)}
+                            style={styles.removeReferenceButton}
+                          >
+                            <Text style={styles.removeReferenceButtonText}>Remove</Text>
+                          </Pressable>
+                        </View>
+                      ))}
+                    </>
+                  ) : (
+                    <Text style={styles.helper}>No references yet.</Text>
+                  )}
+
+                  <Pressable
+                    onPress={() => setRefModalOpen(true)}
+                    style={styles.uploadButton}
+                  >
+                    <Text style={styles.uploadButtonText}>Add reference</Text>
+                  </Pressable>
+                </View>
+
+                <Pressable
+                  onPress={() => setCriminalCheckConsent((prev) => !prev)}
+                  style={styles.checkboxRow}
+                >
+                  <Text style={styles.checkboxLabel}>
+                    I agree to have criminal records checked
+                  </Text>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      criminalCheckConsent && styles.checkboxChecked,
+                    ]}
+                  />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => setTermsAccepted((prev) => !prev)}
+                  style={styles.checkboxRow}
+                >
+                  <Text style={styles.checkboxLabel}>
+                    I accept all terms and conditions
+                  </Text>
+                  <View
+                    style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}
+                  />
+                </Pressable>
+
+                <View style={styles.resumeBlock}>
+                  <Text style={styles.sectionLabel}>Resume</Text>
+                  <Text style={styles.helper}>
+                    File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
+                  </Text>
+
+                  {cvUrl ? (
+                    <View style={styles.fileRow}>
+                      <Text style={styles.fileName}>{cvFileName}</Text>
+                      <Pressable
+                        onPress={() => openUrl(cvUrl)}
+                        style={styles.fileActionButton}
+                      >
+                        <Text style={styles.fileActionButtonText}>View</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.helper}>No resume uploaded yet.</Text>
+                  )}
+
+                  <Pressable
+                    onPress={onPickCv}
+                    disabled={uploadingCv || saving}
+                    style={({ pressed }) => [
+                      styles.uploadButton,
+                      (pressed || uploadingCv) && { opacity: 0.9 },
+                      (uploadingCv || saving) && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.uploadButtonText}>
+                      {uploadingCv ? "Uploading…" : "Upload file"}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                <View style={styles.actionsBlock}>
+                  <Pressable
+                    onPress={onSave}
+                    disabled={!canSave}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      (!canSave || pressed) && { opacity: 0.9 },
+                      !canSave && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>
+                      {saving ? "Saving..." : "Save Profile"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={onBackToShifts}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Back to shifts</Text>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={onLogout}
+                    disabled={loggingOut || saving}
+                    style={({ pressed }) => [
+                      styles.secondaryGhostButton,
+                      (pressed || loggingOut) && { opacity: 0.9 },
+                      (loggingOut || saving) && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.secondaryGhostButtonText}>
+                      {loggingOut ? "Logging out..." : "Log out"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+
+            <Modal
+              visible={dateModalOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setDateModalOpen(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalBox}>
+                  <Text style={styles.modalTitle}>
+                    {dateField === "visaExpiryDate"
+                      ? "Select expiry date"
+                      : "Select date of birth"}
+                  </Text>
+
+                  <View style={styles.modalPickerRow}>
+                    <View style={styles.modalPickerBox}>
+                      <Picker
+                        selectedValue={String(tmpDay)}
+                        onValueChange={(v) => setTmpDay(Number(v))}
+                      >
+                        {days.map((d) => (
+                          <Picker.Item key={`d-${d}`} label={d} value={Number(d)} />
+                        ))}
+                      </Picker>
+                    </View>
+
+                    <View style={styles.modalPickerBox}>
+                      <Picker
+                        selectedValue={String(tmpMonth)}
+                        onValueChange={(v) => setTmpMonth(Number(v))}
+                      >
+                        {months.map((m) => (
+                          <Picker.Item key={`m-${m}`} label={m} value={Number(m)} />
+                        ))}
+                      </Picker>
+                    </View>
+
+                    <View style={styles.modalPickerBox}>
+                      <Picker
+                        selectedValue={String(tmpYear)}
+                        onValueChange={(v) => setTmpYear(Number(v))}
+                      >
+                        {(dateField === "visaExpiryDate" ? visaYears : years).map((y) => (
+                          <Picker.Item key={`y-${y}`} label={y} value={Number(y)} />
+                        ))}
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <View style={styles.modalButtonsRow}>
+                    <Pressable
+                      onPress={() => setDateModalOpen(false)}
+                      style={[styles.modalBtn, styles.modalBtnGhost]}
+                    >
+                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={applyDateModal}
+                      style={[styles.modalBtn, styles.modalBtnPrimary]}
+                    >
+                      <Text style={styles.modalBtnPrimaryText}>Done</Text>
+                    </Pressable>
+                  </View>
+                </View>
               </View>
-            </View>
-          </Modal>
-        </ScrollView>
+            </Modal>
+
+            <Modal
+              visible={selectModalOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setSelectModalOpen(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalBox}>
+                  <Text style={styles.modalTitle}>Select an option</Text>
+
+                  <View style={styles.singlePickerBox}>
+                    <Picker
+                      selectedValue={tmpSelectedOption}
+                      onValueChange={(v) => setTmpSelectedOption(String(v))}
+                    >
+                      {selectOptions.map((option) => (
+                        <Picker.Item key={option} label={option} value={option} />
+                      ))}
+                    </Picker>
+                  </View>
+
+                  <View style={styles.modalButtonsRow}>
+                    <Pressable
+                      onPress={() => setSelectModalOpen(false)}
+                      style={[styles.modalBtn, styles.modalBtnGhost]}
+                    >
+                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={applySelectModal}
+                      style={[styles.modalBtn, styles.modalBtnPrimary]}
+                    >
+                      <Text style={styles.modalBtnPrimaryText}>Done</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
+            <Modal
+              transparent
+              animationType="fade"
+              visible={refModalOpen}
+              onRequestClose={() => setRefModalOpen(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalBox}>
+                  <Text style={styles.modalTitle}>Add reference</Text>
+
+                  <TextInput
+                    style={styles.modalInput}
+                    value={refName}
+                    onChangeText={setRefName}
+                    placeholder="Reference name *"
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    value={refCompany}
+                    onChangeText={setRefCompany}
+                    placeholder="Company / Organisation Name *"
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    value={refRole}
+                    onChangeText={setRefRole}
+                    placeholder="Position Title *"
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    value={refPhone}
+                    onChangeText={(v) => setRefPhone(sanitizePhone(v))}
+                    placeholder="Phone *"
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    style={styles.modalInput}
+                    value={refEmail}
+                    onChangeText={setRefEmail}
+                    placeholder="Email *"
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    style={[styles.modalInput, { height: 80 }]}
+                    value={refNotes}
+                    onChangeText={setRefNotes}
+                    placeholder="Notes"
+                    multiline
+                  />
+
+                  <View style={styles.modalButtonsRow}>
+                    <Pressable
+                      onPress={() => setRefModalOpen(false)}
+                      style={[styles.modalBtn, styles.modalBtnGhost]}
+                    >
+                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={addReference}
+                      style={[styles.modalBtn, styles.modalBtnPrimary]}
+                    >
+                      <Text style={styles.modalBtnPrimaryText}>Add</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+          </ScrollView>
+        </LinearGradient>
       </InnerWrapper>
     </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  container: { padding: 20, flex: 1, backgroundColor: "#fff" },
+  screen: {
+    flex: 1,
+  },
 
-  headerRow: { flexDirection: "row", alignItems: "center" },
+  container: {
+    paddingTop: 75,
+    paddingHorizontal: 12,
+    paddingBottom: 170,
+  },
+
+  headerBlock: {
+    marginBottom: 28,
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#2A5FB3",
+  },
 
   avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#E5E7EB",
+    width: 123,
+    height: 123,
+    borderRadius: 61.5,
+    backgroundColor: "#E1E1E1",
+    borderWidth: 3,
+    borderColor: "#81E6F0",
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "center",
+    overflow: "hidden",
   },
-  avatarImg: { width: "100%", height: "100%" },
-  avatarPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center" },
-  avatarPlaceholderText: { color: "#374151", fontWeight: "800", fontSize: 12 },
 
-  infoContainer: { marginLeft: 15 },
-  name: { fontSize: 22, fontWeight: "bold" },
-
-  tag: {
-    marginTop: 5,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    alignSelf: "flex-start",
+  avatarImg: {
+    width: "100%",
+    height: "100%",
   },
-  tagText: { color: "#fff", fontSize: 12, fontWeight: "600" },
 
-  divider: { height: 1, backgroundColor: "#e0e0e0", marginVertical: 10, opacity: 0.6 },
+  avatarPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
 
-  formSection: { marginTop: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 10 },
-
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: "600", marginBottom: 6 },
-
-  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, fontSize: 16 },
-
-  helper: { marginTop: 6, color: "#6B7280", fontSize: 12, lineHeight: 16 },
-
-  saveButton: { backgroundColor: "#007AFF", paddingVertical: 14, borderRadius: 10, marginTop: 6 },
-  saveButtonText: { textAlign: "center", color: "#fff", fontSize: 16, fontWeight: "700" },
-
-  error: {
-    backgroundColor: "#FEF2F2",
-    color: "#B91C1C",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
+  avatarPlaceholderText: {
+    color: "#434343",
+    fontWeight: "600",
     fontSize: 13,
+    textAlign: "center",
   },
 
-  logoutBtn: { marginTop: 12, backgroundColor: "#EF4444", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
-  logoutText: { color: "white", fontWeight: "700" },
-  inputDisabled: { backgroundColor: "#F3F4F6", color: "#6B7280" },
+  displayName: {
+    marginTop: 14,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#2A5FB3",
+  },
 
-  sectionCard: {
-    marginTop: 18,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    padding: 14,
-    backgroundColor: "#fff",
+  statusPill: {
+    marginTop: 10,
+    alignSelf: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
   },
-  rowLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+
+  statusPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
-  rowLabel: { color: "#6B7280", fontWeight: "700" },
-  rowValue: { color: "#111827", fontWeight: "800" },
 
   statusBanner: {
+    marginTop: 16,
+    marginBottom: 16,
     backgroundColor: "#FFFBEB",
     borderWidth: 1,
     borderColor: "#FDE68A",
     borderRadius: 12,
     padding: 12,
-    marginBottom: 14,
   },
+
   statusBannerText: {
     color: "#92400E",
     fontSize: 13,
@@ -899,46 +1420,218 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // CV + refs
-  cvRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
-  cvName: { color: "#111827", fontWeight: "800" },
+  accountCard: {
+    marginTop: 18,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+  },
 
-  smallBtn: {
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#434343",
+    marginBottom: 8,
+  },
+
+  rowLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F1F1",
+  },
+
+  rowLabel: {
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+
+  rowValue: {
+    color: "#111827",
+    fontWeight: "700",
+  },
+
+  inputGroup: {
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+
+  label: {
+    fontSize: 14,
+    fontWeight: "300",
+    color: "#434343",
+    marginBottom: 5,
+  },
+
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#434343",
+    marginBottom: 8,
+  },
+
+  input: {
+    minHeight: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    fontSize: 15,
+    color: "#434343",
+  },
+
+  stackedInput: {
+    marginTop: 10,
+  },
+
+  inputDisabled: {
+    backgroundColor: "#F8F8F8",
+    color: "#6B7280",
+  },
+
+  selectInput: {
+    minHeight: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  selectInputText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#434343",
+  },
+
+  selectInputPlaceholder: {
+    flex: 1,
+    fontSize: 15,
+    color: "#716C6C",
+    fontStyle: "italic",
+  },
+
+  selectChevron: {
+    color: "#FFB800",
+    fontSize: 14,
+    fontWeight: "700",
+    marginLeft: 10,
+  },
+
+  helper: {
+    marginTop: 6,
+    color: "#6B7280",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  sectionSpacer: {
+    height: 10,
+  },
+
+  fileRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  fileName: {
+    flex: 1,
+    color: "#111827",
+    fontWeight: "700",
+  },
+
+  fileActionButton: {
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
   },
-  smallBtnText: { fontWeight: "900", color: "#111827" },
 
-  smallBtnPrimary: {
+  fileActionButtonText: {
+    color: "#111827",
+    fontWeight: "700",
+  },
+
+  uploadButton: {
+    width: 160,
     marginTop: 10,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
-    backgroundColor: "#2563EB",
-    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#C4BCBC",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  smallBtnPrimaryText: { color: "#fff", fontWeight: "900" },
 
-  refCard: {
+  uploadButtonText: {
+    color: "#6B7280",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  textArea: {
+    minHeight: 159,
+    paddingTop: 10,
+    textAlignVertical: "top",
+  },
+
+  referencesBlock: {
+    marginTop: 8,
+    paddingHorizontal: 8,
+  },
+
+  referenceCard: {
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#CDCDCD",
     borderRadius: 12,
     padding: 12,
     flexDirection: "row",
     gap: 10,
     alignItems: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
   },
-  refName: { fontWeight: "900", color: "#111827" },
-  refLine: { marginTop: 4, color: "#374151", fontWeight: "700" },
-  refNotes: { marginTop: 6, color: "#6B7280", fontWeight: "700" },
 
-  smallBtnDanger: {
+  referenceIndex: {
+    color: "#6B7280",
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+
+  referenceTitle: {
+    color: "#111827",
+    fontWeight: "800",
+  },
+
+  referenceLine: {
+    marginTop: 4,
+    color: "#374151",
+    fontWeight: "600",
+  },
+
+  referenceNotes: {
+    marginTop: 6,
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+
+  removeReferenceButton: {
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 10,
@@ -946,49 +1639,197 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
     backgroundColor: "#FEF2F2",
   },
-  smallBtnDangerText: { fontWeight: "900", color: "#B91C1C" },
 
-  // modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center", padding: 18 },
-  modalBox: { width: "100%", maxWidth: 420, backgroundColor: "#fff", padding: 14, borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB" },
-  modalTitle: { fontSize: 16, fontWeight: "900", marginBottom: 10, color: "#111827" },
-  modalInput: { borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10, marginTop: 8, backgroundColor: "#fff" },
-
-  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
-  modalBtnGhost: { borderWidth: 1, borderColor: "#D1D5DB", backgroundColor: "#fff" },
-  modalBtnGhostText: { fontWeight: "900", color: "#111827" },
-  modalBtnPrimary: { backgroundColor: "#2563EB" },
-  modalBtnPrimaryText: { fontWeight: "900", color: "#fff" },
-
-  paymentBanner: {
-    marginTop: 6,
-    backgroundColor: "#FFFBEB",
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-    borderRadius: 12,
-    padding: 12,
-  },
-  paymentBannerText: {
-    color: "#92400E",
-    fontSize: 12,
-    lineHeight: 16,
+  removeReferenceButtonText: {
+    color: "#B91C1C",
     fontWeight: "700",
   },
-  labelSmall: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#374151",
-    marginBottom: 6,
+
+  checkboxRow: {
+    paddingHorizontal: 8,
+    marginTop: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
   },
-  readonlyValue: {
+
+  checkboxLabel: {
+    flex: 1,
+    color: "#434343",
+    fontSize: 13,
+    fontStyle: "italic",
+    fontWeight: "300",
+  },
+
+  checkbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#70A9DF",
+    backgroundColor: "#D9D9D9",
+  },
+
+  checkboxChecked: {
+    backgroundColor: "#70A9DF",
+  },
+
+  resumeBlock: {
+    marginTop: 24,
+    paddingHorizontal: 8,
+  },
+
+  actionsBlock: {
+    marginTop: 24,
+    gap: 15,
+  },
+
+  primaryButton: {
+    height: 40,
+    backgroundColor: "#45BF79",
+    borderRadius: 63,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  secondaryButton: {
+    height: 40,
+    backgroundColor: "#70A9DF",
+    borderRadius: 63,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  secondaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  secondaryGhostButton: {
+    marginTop: 12,
+    height: 40,
+    borderRadius: 63,
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  secondaryGhostButtonText: {
+    color: "#434343",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  error: {
+    marginTop: 16,
+    backgroundColor: "#FEF2F2",
+    color: "#B91C1C",
+    padding: 12,
+    borderRadius: 10,
+    fontSize: 13,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 18,
+  },
+
+  modalBox: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 10,
+    color: "#111827",
+  },
+
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+    backgroundColor: "#FFFFFF",
+  },
+
+  modalPickerRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+
+  modalPickerBox: {
+    flex: 1,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 10,
-    padding: 12,
-    backgroundColor: "#F9FAFB",
-    color: "#111827",
-    fontWeight: "900",
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
   },
 
-  refIndex: { color: "#6B7280", fontWeight: "800", marginBottom: 6 },
+  singlePickerBox: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    marginTop: 8,
+  },
+
+  modalButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  modalBtnGhost: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+  },
+
+  modalBtnGhostText: {
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  modalBtnPrimary: {
+    backgroundColor: "#2563EB",
+  },
+
+  modalBtnPrimaryText: {
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
 });

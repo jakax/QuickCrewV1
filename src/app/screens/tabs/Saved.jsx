@@ -1,9 +1,20 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, FlatList, Text, RefreshControl } from "react-native";
+import {
+  View,
+  FlatList,
+  Text,
+  RefreshControl,
+  StyleSheet,
+  Pressable,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { collection, getDocs, query, where, documentId } from "firebase/firestore";
-import { db } from "../../../services/firebase/config"; // adjust
+import { useNavigation } from "@react-navigation/native";
+
+import { db } from "../../../services/firebase/config";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
-import JobsItem from "../../components/jobs/JobsItem";
+import { formatShiftDate } from "../../../utils/jobFormatters";
 
 const chunk = (arr, size) => {
   const out = [];
@@ -11,12 +22,12 @@ const chunk = (arr, size) => {
   return out;
 };
 
-export default function Saved({ navigation }) {
+export default function Saved() {
+  const navigation = useNavigation();
   const { loading: savedLoading, savedMap, toggleSaved } = useSavedJobs();
 
   const savedIds = useMemo(() => Array.from(savedMap.keys()), [savedMap]);
 
-  // local list for instant removal on unsave
   const [visibleIds, setVisibleIds] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
@@ -38,7 +49,6 @@ export default function Saved({ navigation }) {
       snap.forEach((d) => fetched.push({ id: d.id, ...d.data() }));
     }
 
-    // preserve visible order
     const map = new Map(fetched.map((j) => [j.id, j]));
     return ids.map((id) => map.get(id)).filter(Boolean);
   }, []);
@@ -71,18 +81,14 @@ export default function Saved({ navigation }) {
 
   const handleUnsave = useCallback(
     async (job) => {
-      // optimistic UI
       setVisibleIds((prev) => prev.filter((id) => id !== job.id));
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
 
       try {
-        // orgId can come from job OR savedMap data
         const orgId = job.orgId ?? savedMap.get(job.id)?.orgId;
-
         await toggleSaved({ jobId: job.id, orgId });
       } catch (e) {
         console.log("Unsave failed:", e);
-        // rollback by resyncing from store
         setVisibleIds(savedIds);
       }
     },
@@ -91,31 +97,216 @@ export default function Saved({ navigation }) {
 
   const empty = !savedLoading && !loadingJobs && jobs.length === 0;
 
+  const renderSavedCard = ({ item }) => {
+    const dateText = formatShiftDate(item?.shiftDate);
+    const timeText = item?.shiftTime || "";
+
+    return (
+      <Pressable
+        onPress={() => navigation.navigate("WorkerJobDetails", { jobId: item.id })}
+        style={styles.card}
+      >
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            handleUnsave(item);
+          }}
+          hitSlop={10}
+          style={styles.saveButton}
+        >
+          <Ionicons name="bookmark" size={20} color="#FFB800" />
+        </Pressable>
+
+        <View style={styles.cardContent}>
+          <Text style={styles.cardTitle}>{item?.title || "Untitled job"}</Text>
+          <Text style={styles.cardCompany}>{item?.orgName || "Company name"}</Text>
+
+          {item?.location ? (
+            <Text style={styles.cardMeta}>{item.location}</Text>
+          ) : null}
+
+          {dateText || timeText ? (
+            <Text style={styles.cardMeta}>
+              {dateText}
+              {dateText && timeText ? " - " : ""}
+              {timeText}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+    );
+  };
+
+  const Header = (
+    <View style={styles.header}>
+
+      <Text style={styles.title}>Saved Job</Text>
+
+      <Text style={styles.subtitle}>
+        Only saved jobs are shown here. This does not mean you have applied to all of them.
+        Check your active shifts in the Applied tab.
+      </Text>
+    </View>
+  );
+
   if (empty) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 16 }}>
-        <Text style={{ textAlign: "center" }}>
-          No saved jobs yet. Tap the bookmark on a job to save it for later.
-        </Text>
-      </View>
+      <LinearGradient
+        colors={["#FFFFFF", "#FFFFFF", "#8CE8F1"]}
+        locations={[0, 0.52, 1]}
+        style={styles.screen}
+      >
+        <View style={styles.emptyWrap}>
+          {Header}
+          <View style={styles.emptyCard}>
+            <Text style={styles.subtitle}>
+              No saved jobs yet. Tap the bookmark on a job to save it for later.
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <LinearGradient
+      colors={["#FFFFFF", "#FFFFFF", "#8CE8F1"]}
+      locations={[0, 0.52, 1]}
+      style={styles.screen}
+    >
       <FlatList
         data={jobs}
         keyExtractor={(item) => item.id}
+        renderItem={renderSavedCard}
+        ListHeaderComponent={Header}
+        contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item }) => (
-          <JobsItem
-            job={item}
-            forceBookmarked={true}
-            onBookmarkPress={handleUnsave}
-            onPressOverride={() => navigation.navigate("WorkerJobDetails", { jobId: item.id })}
-          />
-        )}
+        showsVerticalScrollIndicator={false}
       />
-    </View>
+    </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
+
+  listContent: {
+    paddingTop: 75,
+    paddingBottom: 110,
+    paddingHorizontal: 20,
+    gap: 15,
+  },
+
+  header: {
+    marginBottom: 28,
+  },
+
+  backButton: {
+    alignSelf: "flex-start",
+    padding: 8,
+    marginBottom: 14,
+  },
+
+  backButtonText: {
+    color: "#A7A4A4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  title: {
+    color: "#2A5FB3",
+    fontSize: 24,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginBottom: 18,
+    paddingHorizontal: 10,
+  },
+
+  subtitle: {
+    color: "#FFB800",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+    lineHeight: 20,
+  },
+
+  card: {
+    alignSelf: "stretch",
+    padding: 12,
+    position: "relative",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E3E1E1",
+    overflow: "hidden",
+    marginBottom: 15,
+  },
+
+  cardContent: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 12,
+  },
+
+  cardTitle: {
+    color: "#434343",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "500",
+  },
+
+  cardCompany: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "500",
+  },
+
+  cardMeta: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontStyle: "italic",
+    fontWeight: "300",
+  },
+
+  saveButton: {
+    position: "absolute",
+    top: 15,
+    right: 12,
+    width: 25,
+    height: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+
+  emptyWrap: {
+    flex: 1,
+    paddingTop: 75,
+    paddingBottom: 110,
+    paddingHorizontal: 20,
+  },
+
+  emptyCard: {
+    marginTop: 8,
+    padding: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E3E1E1",
+    backgroundColor: "#FFFFFF",
+  },
+
+  emptyText: {
+    textAlign: "center",
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    lineHeight: 22,
+  },
+});

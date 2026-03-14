@@ -2,13 +2,13 @@ import { createNavigationContainerRef, CommonActions } from "@react-navigation/n
 
 export const navigationRef = createNavigationContainerRef();
 
-export function resetTo(routeName) {
+export function resetTo(routeName, params) {
   if (!navigationRef.isReady()) return;
 
   navigationRef.dispatch(
     CommonActions.reset({
       index: 0,
-      routes: [{ name: routeName }],
+      routes: [{ name: routeName, params }],
     })
   );
 }

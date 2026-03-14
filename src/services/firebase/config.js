@@ -16,7 +16,7 @@ const firebaseConfig = {
 
   // NOTE: storageBucket should usually look like: quickcrew-2c10c.appspot.com
   // If yours works as-is, keep it. If Storage fails later, this is the first thing to verify in Firebase console.
-  storageBucket: "quickcrew-2c10c.appspot.com",
+  storageBucket: "quickcrew-2c10c.firebasestorage.app",
 
   messagingSenderId: "222676842218",
   appId: "1:222676842218:web:2ac84790955c34ccce0993",

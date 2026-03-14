@@ -43,12 +43,13 @@ export const registerEmployer = async ({
   // Not registered -> send to create org flow
   if (!businessAlreadyRegistered) {
     await setDoc(doc(db, "users", uid), {
-      ...baseUserDoc,
-      orgIds: [],
-      employerOnboardingStatus: "needs_org",
-      legalBusinessNameDraft: legalBusinessName?.trim() || "",
-      approvalStatus: "pending", // optional; or omit until org exists
-    });
+    ...baseUserDoc,
+    orgIds: [],
+    employerOnboardingStatus: "needs_org_creation",
+    legalBusinessNameDraft: legalBusinessName?.trim() || "",
+    approvalStatus: "pending",
+    updatedAt: serverTimestamp(),
+  });
 
     return { uid, needsOrgCreation: true };
   }

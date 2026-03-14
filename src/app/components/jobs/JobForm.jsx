@@ -12,9 +12,6 @@ import {
 import { Picker } from "@react-native-picker/picker";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
-  // Very lightweight parser for legacy strings like:
-  // "9:00 am to 5:00 pm" or "09:00 to 17:00"
-  // If it can’t parse, returns empty strings.
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
 
   const normalized = shiftTimeRaw.replace(/\s+/g, " ").trim();
@@ -28,16 +25,14 @@ function parseTimeParts(raw) {
   if (!raw || typeof raw !== "string") return null;
   const t = raw.trim().toLowerCase().replace(/\s+/g, " ");
 
-  // "9:00 am"
   const m1 = t.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
   if (m1) {
-    const h = String(Number(m1[1])); // normalize "09" -> "9"
+    const h = String(Number(m1[1]));
     const mm = m1[2];
     const ap = m1[3].toUpperCase();
     return { hour: h, minute: mm, meridiem: ap };
   }
 
-  // "09:00" (assume 24h -> convert to AM/PM)
   const m2 = t.match(/^(\d{1,2}):(\d{2})$/);
   if (m2) {
     let hh = Number(m2[1]);
@@ -76,7 +71,6 @@ function parseIsoDateParts(iso) {
 }
 
 function daysInMonth(year, month) {
-  // month: 1-12
   return new Date(year, month, 0).getDate();
 }
 
@@ -96,7 +90,6 @@ function normKey(v) {
 }
 
 function formatRoleLabel(key) {
-  // turns "barista" -> "Barista", "front_of_house" -> "Front Of House"
   const s = String(key || "").trim();
   if (!s) return "";
   return s
@@ -107,26 +100,35 @@ function formatRoleLabel(key) {
     .join(" ");
 }
 
+function ModernToggle({ value, onChange }) {
+  return (
+    <Pressable
+      onPress={() => onChange(!value)}
+      style={[styles.toggleTrack, value && styles.toggleTrackActive]}
+    >
+      <View style={[styles.toggleThumb, value && styles.toggleThumbActive]} />
+    </Pressable>
+  );
+}
+
 export default function JobForm({
-  mode, // "create" | "edit"
+  mode,
   initialValues,
-  orgName, // display only
+  orgName,
   submitLabel,
   loading,
   disabled = false,
   error,
   onSubmit,
-  onCancel, // optional
-  roleRates, // { [skillKey]: number } optional; org-configured rates
+  onCancel,
+  roleRates,
 }) {
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [location, setLocation] = useState(initialValues?.location ?? "");
-  const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? ""); // keep YYYY-MM-DD for now
+  const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? "");
 
-  // ✅ Modal date picker (same UX as time)
   const [dateModalOpen, setDateModalOpen] = useState(false);
 
-  // current date parts for the modal
   const today = new Date();
   const parsedInitialDate = parseIsoDateParts(shiftDate) || {
     year: today.getFullYear(),
@@ -134,7 +136,6 @@ export default function JobForm({
     day: today.getDate(),
   };
 
-  // Temp values for modal editing
   const [tmpYear, setTmpYear] = useState(parsedInitialDate.year);
   const [tmpMonth, setTmpMonth] = useState(parsedInitialDate.month);
   const [tmpDay, setTmpDay] = useState(parsedInitialDate.day);
@@ -153,7 +154,6 @@ export default function JobForm({
   };
 
   useEffect(() => {
-    // keep day valid when month/year changes
     const max = daysInMonth(tmpYear, tmpMonth);
     if (tmpDay > max) setTmpDay(max);
   }, [tmpYear, tmpMonth, tmpDay]);
@@ -166,7 +166,9 @@ export default function JobForm({
   };
 
   const initialPrimary = initialValues?.primaryRoleKey || initialValues?.roleKey || "";
-  const initialRequiredSkills = Array.isArray(initialValues?.requiredSkills) ? initialValues.requiredSkills : [];
+  const initialRequiredSkills = Array.isArray(initialValues?.requiredSkills)
+    ? initialValues.requiredSkills
+    : [];
 
   const [primaryRoleKey, setPrimaryRoleKey] = useState(initialPrimary);
 
@@ -175,7 +177,6 @@ export default function JobForm({
   });
 
   const [showRate, setShowRate] = useState(initialValues?.showRate !== false);
-
   const [localError, setLocalError] = useState(null);
 
   const ALSO_SKILLS_MAX = 5;
@@ -184,18 +185,23 @@ export default function JobForm({
     initialValues?.businessApprovalRequired !== false
   );
 
-  // NEW: split time inputs
   const legacyParsed = parseShiftTimeLegacy(initialValues?.shiftTime ?? "");
 
   const startPartsInit =
     parseTimeParts(initialValues?.shiftStartTime) ||
-    parseTimeParts(legacyParsed.start) ||
-    { hour: "9", minute: "00", meridiem: "AM" };
+    parseTimeParts(legacyParsed.start) || {
+      hour: "9",
+      minute: "00",
+      meridiem: "AM",
+    };
 
   const endPartsInit =
     parseTimeParts(initialValues?.shiftEndTime) ||
-    parseTimeParts(legacyParsed.end) ||
-    { hour: "5", minute: "00", meridiem: "PM" };
+    parseTimeParts(legacyParsed.end) || {
+      hour: "5",
+      minute: "00",
+      meridiem: "PM",
+    };
 
   const [startHour, setStartHour] = useState(startPartsInit.hour);
   const [startMinute, setStartMinute] = useState(startPartsInit.minute);
@@ -205,49 +211,47 @@ export default function JobForm({
   const [endMinute, setEndMinute] = useState(endPartsInit.minute);
   const [endMeridiem, setEndMeridiem] = useState(endPartsInit.meridiem);
 
-  // ✅ Modal time picker (Option A)
-const [timeModalOpen, setTimeModalOpen] = useState(false);
+  const [timeModalOpen, setTimeModalOpen] = useState(false);
 
-// Temp values for modal editing (so Cancel doesn't mutate your real state)
-const [tmpStartHour, setTmpStartHour] = useState(startHour);
-const [tmpStartMinute, setTmpStartMinute] = useState(startMinute);
-const [tmpStartMeridiem, setTmpStartMeridiem] = useState(startMeridiem);
+  const [tmpStartHour, setTmpStartHour] = useState(startHour);
+  const [tmpStartMinute, setTmpStartMinute] = useState(startMinute);
+  const [tmpStartMeridiem, setTmpStartMeridiem] = useState(startMeridiem);
 
-const [tmpEndHour, setTmpEndHour] = useState(endHour);
-const [tmpEndMinute, setTmpEndMinute] = useState(endMinute);
-const [tmpEndMeridiem, setTmpEndMeridiem] = useState(endMeridiem);
+  const [tmpEndHour, setTmpEndHour] = useState(endHour);
+  const [tmpEndMinute, setTmpEndMinute] = useState(endMinute);
+  const [tmpEndMeridiem, setTmpEndMeridiem] = useState(endMeridiem);
 
-const openTimeModal = () => {
-  setTmpStartHour(startHour);
-  setTmpStartMinute(startMinute);
-  setTmpStartMeridiem(startMeridiem);
+  const openTimeModal = () => {
+    setTmpStartHour(startHour);
+    setTmpStartMinute(startMinute);
+    setTmpStartMeridiem(startMeridiem);
 
-  setTmpEndHour(endHour);
-  setTmpEndMinute(endMinute);
-  setTmpEndMeridiem(endMeridiem);
+    setTmpEndHour(endHour);
+    setTmpEndMinute(endMinute);
+    setTmpEndMeridiem(endMeridiem);
 
-  setTimeModalOpen(true);
-};
+    setTimeModalOpen(true);
+  };
 
-const applyTimeModal = () => {
-  setStartHour(tmpStartHour);
-  setStartMinute(tmpStartMinute);
-  setStartMeridiem(tmpStartMeridiem);
+  const applyTimeModal = () => {
+    setStartHour(tmpStartHour);
+    setStartMinute(tmpStartMinute);
+    setStartMeridiem(tmpStartMeridiem);
 
-  setEndHour(tmpEndHour);
-  setEndMinute(tmpEndMinute);
-  setEndMeridiem(tmpEndMeridiem);
+    setEndHour(tmpEndHour);
+    setEndMinute(tmpEndMinute);
+    setEndMeridiem(tmpEndMeridiem);
 
-  if (localError) setLocalError(null);
-  setTimeModalOpen(false);
-};
+    if (localError) setLocalError(null);
+    setTimeModalOpen(false);
+  };
 
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
   const minutes = ["00", "15", "30", "45"];
   const meridiems = ["AM", "PM"];
 
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1));
-  const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() + i)); // current year + 5
+  const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() + i));
   const maxDaysForTmp = daysInMonth(tmpYear, tmpMonth);
   const days = Array.from({ length: maxDaysForTmp }, (_, i) => String(i + 1));
 
@@ -255,7 +259,7 @@ const applyTimeModal = () => {
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
   );
 
-const normalizedRoleRates = useMemo(() => {
+  const normalizedRoleRates = useMemo(() => {
     const src = roleRates && typeof roleRates === "object" ? roleRates : {};
     const out = {};
 
@@ -292,8 +296,12 @@ const normalizedRoleRates = useMemo(() => {
       !!shiftDate.trim() &&
       !!primaryRoleKey &&
       agreedRate != null &&
-      !!startHour && !!startMinute && !!startMeridiem &&
-      !!endHour && !!endMinute && !!endMeridiem
+      !!startHour &&
+      !!startMinute &&
+      !!startMeridiem &&
+      !!endHour &&
+      !!endMinute &&
+      !!endMeridiem
     );
   }, [
     title,
@@ -324,39 +332,40 @@ const normalizedRoleRates = useMemo(() => {
 
     const rate = agreedRate;
 
-    // Basic date format sanity (YYYY-MM-DD)
     const isoOk = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate.trim());
     if (!isoOk) {
       setLocalError("Shift date is required.");
       return;
     }
 
-    const composedStart = composeTimeParts({ hour: startHour, minute: startMinute, meridiem: startMeridiem });
-    const composedEnd = composeTimeParts({ hour: endHour, minute: endMinute, meridiem: endMeridiem });
+    const composedStart = composeTimeParts({
+      hour: startHour,
+      minute: startMinute,
+      meridiem: startMeridiem,
+    });
+    const composedEnd = composeTimeParts({
+      hour: endHour,
+      minute: endMinute,
+      meridiem: endMeridiem,
+    });
+
     if (!composedStart || !composedEnd) {
       setLocalError("Shift start time and end time are required.");
       return;
     }
 
-    // Build legacy shiftTime string for backwards compatibility
     const composedShiftTime = `${composedStart} to ${composedEnd}`;
 
     onSubmit?.({
       title: title.trim(),
       location: location.trim(),
       shiftDate: shiftDate.trim(),
-
-      // NEW fields (source of truth for us going forward)
       shiftStartTime: composedStart,
       shiftEndTime: composedEnd,
       businessApprovalRequired,
-
-      // Keep writing legacy too (until we fully migrate UI everywhere)
       shiftTime: composedShiftTime,
-
       ratePerHour: rate,
       description: description.trim(),
-
       primaryRoleKey,
       requiredSkills: [primaryRoleKey, ...alsoSkills],
       showRate,
@@ -382,7 +391,7 @@ const normalizedRoleRates = useMemo(() => {
         }}
         style={styles.input}
         placeholder="e.g. Bartender"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#716C6C"
       />
 
       <Text style={styles.label}>Location</Text>
@@ -394,11 +403,13 @@ const normalizedRoleRates = useMemo(() => {
         }}
         style={styles.input}
         placeholder="e.g. Queenstown"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#716C6C"
       />
 
       <Text style={styles.label}>Primary role *</Text>
-      <Text style={styles.hintText}>This sets the default rate and the main target profile.</Text>
+      <Text style={styles.hintText}>
+        This sets the default rate and the main target profile.
+      </Text>
 
       {skills.length === 0 ? (
         <Text style={styles.errorBox}>
@@ -436,7 +447,9 @@ const normalizedRoleRates = useMemo(() => {
       )}
 
       <Text style={styles.label}>Also acceptable (optional)</Text>
-      <Text style={styles.hintText}>Workers matching any of these skills will also see the job.</Text>
+      <Text style={styles.hintText}>
+        Workers matching any of these skills will also see the job.
+      </Text>
 
       {skills.length > 0 ? (
         <View style={styles.skillGrid}>
@@ -445,7 +458,7 @@ const normalizedRoleRates = useMemo(() => {
             .map((s) => {
               const key = normKey(s.key);
               const checked = alsoSkills.map(normKey).includes(key);
-              const disabled = !checked && alsoSkills.length >= ALSO_SKILLS_MAX;
+              const isDisabled = !checked && alsoSkills.length >= ALSO_SKILLS_MAX;
 
               return (
                 <Pressable
@@ -462,11 +475,11 @@ const normalizedRoleRates = useMemo(() => {
                     });
                     if (localError) setLocalError(null);
                   }}
-                  disabled={disabled}
+                  disabled={isDisabled}
                   style={({ pressed }) => [
                     styles.skillChip,
                     checked && styles.skillChipSelected,
-                    disabled && styles.skillChipDisabled,
+                    isDisabled && styles.skillChipDisabled,
                     pressed && styles.pressed,
                   ]}
                 >
@@ -474,7 +487,7 @@ const normalizedRoleRates = useMemo(() => {
                     style={[
                       styles.skillChipText,
                       checked && styles.skillChipTextSelected,
-                      disabled && styles.skillChipTextDisabled,
+                      isDisabled && styles.skillChipTextDisabled,
                     ]}
                   >
                     {s.name}
@@ -489,57 +502,63 @@ const normalizedRoleRates = useMemo(() => {
       <View style={styles.switchRow}>
         <View style={styles.switchCopy}>
           <Text style={styles.switchTitle}>Show rate on job post</Text>
-          <Text style={styles.switchHint}>If disabled, workers won’t see the rate, but it’s still stored.</Text>
+          <Text style={styles.switchHint}>
+            If disabled, workers won’t see the rate, but it’s still stored.
+          </Text>
         </View>
-        <Switch value={showRate} onValueChange={setShowRate} />
+        <ModernToggle value={showRate} onChange={setShowRate} />
       </View>
 
       <Text style={styles.label}>Shift date *</Text>
-
-      <TouchableOpacity activeOpacity={0.8} onPress={openDateModal} style={styles.dateSummary}>
-        <Text style={styles.dateSummaryText}>
+      <TouchableOpacity activeOpacity={0.8} onPress={openDateModal} style={styles.summaryInput}>
+        <Text style={styles.summaryInputText}>
           {shiftDate ? formatIsoToDmy(shiftDate) : "Select date"}
         </Text>
-        <Text style={styles.dateSummaryChevron}>▾</Text>
+        <Text style={styles.summaryChevron}>▼</Text>
       </TouchableOpacity>
 
-      {/* NEW: split time fields */}
       <Text style={styles.label}>Shift time *</Text>
-
-      <TouchableOpacity activeOpacity={0.8} onPress={openTimeModal} style={styles.timeSummary}>
-        <Text style={styles.timeSummaryText}>
-          {composeTimeParts({ hour: startHour, minute: startMinute, meridiem: startMeridiem }) || "Start"}{" "}
+      <TouchableOpacity activeOpacity={0.8} onPress={openTimeModal} style={styles.summaryInput}>
+        <Text style={styles.summaryInputText}>
+          {composeTimeParts({
+            hour: startHour,
+            minute: startMinute,
+            meridiem: startMeridiem,
+          }) || "Start"}{" "}
           –{" "}
-          {composeTimeParts({ hour: endHour, minute: endMinute, meridiem: endMeridiem }) || "End"}
+          {composeTimeParts({
+            hour: endHour,
+            minute: endMinute,
+            meridiem: endMeridiem,
+          }) || "End"}
         </Text>
-        <Text style={styles.timeSummaryChevron}>▾</Text>
+        <Text style={styles.summaryChevron}>▼</Text>
       </TouchableOpacity>
 
       <Text style={styles.label}>Approval</Text>
       <View style={styles.switchRow}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.switchCopy}>
           <Text style={styles.switchTitle}>Require approval before assigning</Text>
           <Text style={styles.switchHint}>Recommended for most shifts.</Text>
         </View>
-        <Switch value={businessApprovalRequired} onValueChange={setBusinessApprovalRequired} />
+        <ModernToggle
+          value={businessApprovalRequired}
+          onChange={setBusinessApprovalRequired}
+        />
       </View>
-
-      {/* Keep legacy field hidden from the user.
-          We still keep it in state for compatibility, but we don't render it. */}
-      {/* <Text style={styles.label}>Shift time *</Text> ... */}
 
       <Text style={styles.label}>Rate per hour</Text>
       <TextInput
         value={rateText}
         style={[styles.input, styles.inputDisabled]}
         placeholder="—"
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#716C6C"
         editable={false}
         selectTextOnFocus={false}
       />
-      {!rateText ?
-        <Text style={styles.hintText}>Select a primary role to see the agreed rate.</Text> 
-      : null}
+      {!rateText ? (
+        <Text style={styles.hintText}>Select a primary role to see the agreed rate.</Text>
+      ) : null}
       <Text style={styles.hintText}>
         Rate is set by your company agreement for this role.
       </Text>
@@ -553,7 +572,7 @@ const normalizedRoleRates = useMemo(() => {
         }}
         style={[styles.input, styles.multiline]}
         placeholder="Optional notes for workers..."
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#716C6C"
         multiline
       />
 
@@ -580,7 +599,6 @@ const normalizedRoleRates = useMemo(() => {
         </Pressable>
       </View>
 
-      {/* ✅ Modal date picker */}
       <Modal
         visible={dateModalOpen}
         transparent
@@ -635,14 +653,22 @@ const normalizedRoleRates = useMemo(() => {
             <View style={styles.modalButtonsRow}>
               <Pressable
                 onPress={() => setDateModalOpen(false)}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnGhost, pressed && { opacity: 0.9 }]}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  styles.modalBtnGhost,
+                  pressed && { opacity: 0.9 },
+                ]}
               >
                 <Text style={styles.modalBtnGhostText}>Cancel</Text>
               </Pressable>
 
               <Pressable
                 onPress={applyDateModal}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnPrimary, pressed && { opacity: 0.9 }]}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  styles.modalBtnPrimary,
+                  pressed && { opacity: 0.9 },
+                ]}
               >
                 <Text style={styles.modalBtnPrimaryText}>Done</Text>
               </Pressable>
@@ -651,7 +677,6 @@ const normalizedRoleRates = useMemo(() => {
         </View>
       </Modal>
 
-      {/* ✅ Modal time picker */}
       <Modal
         visible={timeModalOpen}
         transparent
@@ -749,14 +774,22 @@ const normalizedRoleRates = useMemo(() => {
             <View style={styles.modalButtonsRow}>
               <Pressable
                 onPress={() => setTimeModalOpen(false)}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnGhost, pressed && { opacity: 0.9 }]}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  styles.modalBtnGhost,
+                  pressed && { opacity: 0.9 },
+                ]}
               >
                 <Text style={styles.modalBtnGhostText}>Cancel</Text>
               </Pressable>
 
               <Pressable
                 onPress={applyTimeModal}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnPrimary, pressed && { opacity: 0.9 }]}
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  styles.modalBtnPrimary,
+                  pressed && { opacity: 0.9 },
+                ]}
               >
                 <Text style={styles.modalBtnPrimaryText}>Done</Text>
               </Pressable>
@@ -769,107 +802,161 @@ const normalizedRoleRates = useMemo(() => {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#fff", padding: 16 },
-
-  label: { fontSize: 13, color: "#374151", marginBottom: 6, marginTop: 10 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: "#111827",
-    backgroundColor: "#fff",
+  root: {
+    flex: 1,
+    backgroundColor: "transparent",
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 36,
   },
-  multiline: { minHeight: 90, textAlignVertical: "top" },
+
+  label: {
+    fontSize: 14,
+    fontWeight: "300",
+    color: "#434343",
+    marginBottom: 5,
+    marginTop: 12,
+  },
+
+  input: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#434343",
+    backgroundColor: "#FFFFFF",
+    fontSize: 15,
+  },
+
+  multiline: {
+    minHeight: 120,
+    textAlignVertical: "top",
+    paddingTop: 10,
+  },
 
   readonlyBox: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: "#F9FAFB",
   },
-  readonlyText: { color: "#111827", fontWeight: "800" },
+
+  readonlyText: {
+    color: "#111827",
+    fontWeight: "700",
+  },
 
   errorBox: {
     backgroundColor: "#FEF2F2",
     color: "#B91C1C",
     padding: 12,
     borderRadius: 10,
-    marginBottom: 8,
+    marginBottom: 10,
     fontSize: 13,
   },
 
-  buttonsRow: { flexDirection: "row", gap: 12, marginTop: 16 },
+  buttonsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 28,
+    marginBottom: 28,
+    paddingBottom: 12,
+  },
+
   secondaryBtn: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    paddingVertical: 14,
-    borderRadius: 12,
+    borderColor: "#CDCDCD",
+    paddingVertical: 12,
+    borderRadius: 999,
     alignItems: "center",
-    backgroundColor: "#fff",
+    justifyContent: "center",
+    backgroundColor: "#70A9DF",
   },
-  secondaryText: { color: "#111827", fontWeight: "900" },
+
+  secondaryText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 16,
+  },
 
   primaryBtn: {
     flex: 2,
-    backgroundColor: "#2563EB",
-    paddingVertical: 14,
-    borderRadius: 12,
+    backgroundColor: "#45BF79",
+    paddingVertical: 12,
+    borderRadius: 999,
     alignItems: "center",
+    justifyContent: "center",
   },
-  primaryText: { color: "#fff", fontWeight: "900" },
+
+  primaryText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 16,
+  },
 
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
-    backgroundColor: "#fff",
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
   },
-  switchTitle: { fontWeight: "900", color: "#111827" },
-  switchHint: { marginTop: 2, fontSize: 12, fontWeight: "700", color: "#6B7280" },
 
-  timeSummary: {
+  switchTitle: {
+    fontWeight: "700",
+    color: "#111827",
+  },
+
+  switchHint: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+
+  summaryInput: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#FFFFFF",
   },
 
-  timeSummaryText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
+  summaryInputText: {
+    fontSize: 15,
+    fontWeight: "400",
+    color: "#434343",
   },
 
-  timeSummaryChevron: {
-    color: "#9CA3AF",
-    fontWeight: "900",
+  summaryChevron: {
+    color: "#FFB800",
+    fontWeight: "700",
     marginLeft: 10,
+    fontSize: 14,
   },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "center",
     padding: 18,
   },
 
   modalCard: {
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
@@ -878,14 +965,14 @@ const styles = StyleSheet.create({
 
   modalTitle: {
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#111827",
     marginBottom: 10,
   },
 
   modalSectionTitle: {
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "800",
     color: "#6B7280",
     marginBottom: 6,
   },
@@ -924,21 +1011,21 @@ const styles = StyleSheet.create({
   modalBtnGhost: {
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
   },
 
   modalBtnPrimary: {
-    backgroundColor: "#2563EB",
+    backgroundColor: "#70A9DF",
   },
 
   modalBtnGhostText: {
     color: "#111827",
-    fontWeight: "900",
+    fontWeight: "800",
   },
 
   modalBtnPrimaryText: {
-    color: "#fff",
-    fontWeight: "900",
+    color: "#FFFFFF",
+    fontWeight: "800",
   },
 
   picker: {
@@ -951,11 +1038,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  hintText: { color: "#6B7280", fontSize: 12, fontWeight: "700", marginTop: 2, marginBottom: 8 },
+  hintText: {
+    color: "#6B7280",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+    marginBottom: 8,
+  },
 
-  switchCopy: { flex: 1 },
+  switchCopy: {
+    flex: 1,
+  },
 
-  pressed: { opacity: 0.9 },
+  pressed: {
+    opacity: 0.9,
+  },
 
   skillGrid: {
     flexDirection: "row",
@@ -966,34 +1063,28 @@ const styles = StyleSheet.create({
 
   skillChip: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
+    borderColor: "#D7E6F7",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 18,
+    minHeight: 42,
+    justifyContent: "center",
   },
 
   skillChipSelected: {
-    borderColor: "#2563EB",
-    backgroundColor: "#DBEAFE",
-  },
-
-  skillChipDisabled: {
-    opacity: 0.5,
+    borderColor: "#70A9DF",
+    backgroundColor: "#70A9DF",
   },
 
   skillChipText: {
     fontSize: 13,
-    fontWeight: "800",
-    color: "#111827",
+    fontWeight: "600",
+    color: "#2F2F2F",
   },
 
   skillChipTextSelected: {
-    color: "#1D4ED8",
-  },
-
-  skillChipTextDisabled: {
-    color: "#6B7280",
+    color: "#FFFFFF",
   },
 
   inputDisabled: {
@@ -1002,27 +1093,28 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
 
-  dateSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+  toggleTrack: {
+    width: 50,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "#D9E6F2",
+    paddingHorizontal: 3,
+    justifyContent: "center",
+  },
+
+  toggleTrackActive: {
+    backgroundColor: "#70A9DF",
+  },
+
+  toggleThumb: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: "#FFFFFF",
+    alignSelf: "flex-start",
   },
 
-  dateSummaryText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  dateSummaryChevron: {
-    color: "#9CA3AF",
-    fontWeight: "900",
-    marginLeft: 10,
+  toggleThumbActive: {
+    alignSelf: "flex-end",
   },
 });

@@ -1,4 +1,4 @@
-import { doc, updateDoc, serverTimestamp, runTransaction } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase/config";
 
@@ -60,40 +60,22 @@ export async function uploadUserCv({ uid, uri, fileName, mimeType }) {
   return { url, path };
 }
 
-// ✅ Write-once (enforced server-side via transaction)
-// - Saves IRD + bank account only if they are not already set
-// - If already set, throws (worker must contact QuickCrew)
-export async function setWorkerPaymentDetailsOnce(uid, { irdNumber, bankAccountNumber }) {
+export async function uploadUserIdDocument({ uid, uri, fileName, mimeType }) {
   if (!uid) throw new Error("Missing uid");
+  if (!uri) throw new Error("Missing file uri");
 
-  const ird = String(irdNumber || "").trim();
-  const bank = String(bankAccountNumber || "").trim();
+  const blob = await uriToBlob(uri);
 
-  if (!ird || !bank) {
-    throw new Error("IRD number and bank account number are required.");
-  }
+  const safeName = (fileName || "id_document").replace(/[^\w.-]+/g, "_");
+  const path = `users/${uid}/idDocument/${safeName}`;
+  const r = storageRef(storage, path);
 
-  const userRef = doc(db, "users", uid);
+  await uploadBytes(r, blob, { contentType: mimeType || "application/pdf" });
+  const url = await getDownloadURL(r);
 
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(userRef);
-    if (!snap.exists()) throw new Error("User not found.");
-
-    const data = snap.data() || {};
-
-    // ✅ write-once enforcement
-    if (data.irdNumber || data.bankAccountNumber) {
-      throw new Error("Payment details are already set. Contact QuickCrew to update them.");
-    }
-
-    tx.update(userRef, {
-      irdNumber: ird,
-      bankAccountNumber: bank,
-      irdNumberSetAt: serverTimestamp(),
-      bankAccountNumberSetAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+  await updateUserProfile(uid, {
+    idDocument: { url, path, fileName: safeName, uploadedAt: serverTimestamp() },
   });
 
-  return { ok: true };
+  return { url, path };
 }

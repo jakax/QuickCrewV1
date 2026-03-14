@@ -12,6 +12,7 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  deleteDoc,
 } from "firebase/firestore";
 
 /**
@@ -287,6 +288,41 @@ export async function updateJob(jobId, updates) {
     ...next,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function deleteJobIfAllowed({ jobId, expectedOrgId }) {
+  if (!jobId) throw new Error("Missing jobId");
+
+  const jobRef = doc(db, "jobs", jobId);
+  const jobSnap = await getDoc(jobRef);
+
+  if (!jobSnap.exists()) throw new Error("Job not found.");
+
+  const job = jobSnap.data();
+
+  if (expectedOrgId && job?.orgId !== expectedOrgId) {
+    throw new Error("You don’t have permission to delete this job.");
+  }
+
+  // Safe MVP rule:
+  // if any application exists for this job, do not allow delete
+  const appsQ = query(
+    collection(db, "applications"),
+    where("jobId", "==", jobId),
+    limit(1)
+  );
+
+  const appsSnap = await getDocs(appsQ);
+
+  if (!appsSnap.empty) {
+    throw new Error(
+      "This shift cannot be deleted because it already has worker applications or assignments."
+    );
+  }
+
+  await deleteDoc(jobRef);
+
+  return { ok: true };
 }
 
 /**

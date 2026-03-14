@@ -8,7 +8,7 @@ const WorkerRoot = () => {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="WorkerTabs" component={WorkerTabs} />
-      <Stack.Screen name="WorkerJobDetails" component={WorkerJobDetails} options={{ headerShown: true, title: "Job details" }} />
+      <Stack.Screen name="WorkerJobDetails" component={WorkerJobDetails} />
     </Stack.Navigator>
   );
 };

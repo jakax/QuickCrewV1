@@ -33,11 +33,13 @@ const JobsItem = ({
 
   const { isEmployer, isWorker, uid } = useSession();
 
-  const showNew = useMemo(() => isNewShift(job?.createdAt, 3), [job?.createdAt]);
+  const freshnessTimestamp = job?.updatedAt || job?.createdAt;
+
+  const showNew = useMemo(() => isNewShift(freshnessTimestamp, 3), [freshnessTimestamp]);
 
   const dateText = formatShiftDate(job?.shiftDate);
   const timeText = job?.shiftTime || "";
-  const postedAgo = formatPostedAgo(job?.createdAt);
+  const postedAgo = formatPostedAgo(freshnessTimestamp);
 
   const hasRate = typeof job?.ratePerHour === "number" && !Number.isNaN(job.ratePerHour);
   const rateText = hasRate ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : "";
@@ -174,13 +176,14 @@ const JobsItem = ({
   // - worker
   // - NOT already applied
   // - job still open (defensive)
-  const canShowBookmark =
+  const canShowBookmark = isWorker;
+  const canToggleBookmark =
     isWorker && !alreadyApplied && String(job?.status || "").toLowerCase() === "open";
 
   return (
     <Pressable onPress={onPress} style={styles.container}>
       <View style={styles.topRow}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={styles.badgesRow}>
           {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : null}
 
           {isEmployer && employerStatusLabel ? (
@@ -192,11 +195,29 @@ const JobsItem = ({
       </View>
 
       {canShowBookmark ? (
-        <Pressable onPress={handleBookmarkPress} hitSlop={10} style={styles.saveBtn}>
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            console.log("Bookmark pressed", {
+              jobId: job?.id,
+              title: job?.title,
+              saved,
+              canToggleBookmark,
+              status: job?.status,
+              alreadyApplied,
+              orgId: job?.orgId,
+            });
+
+            if (!canToggleBookmark) return;
+            handleBookmarkPress(e);
+          }}
+          hitSlop={10}
+          style={styles.saveBtn}
+        >
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
             size={20}
-            color={saved ? "#111" : "#6B7280"}
+            color={saved ? "#FFD66D" : "#FFD66D"}
           />
         </Pressable>
       ) : null}
@@ -234,67 +255,118 @@ const JobsItem = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E3E1E1",
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+    marginBottom: 15,
     position: "relative",
+    overflow: "hidden",
   },
 
   topRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 6,
+  },
+
+  badgesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
   },
 
   tag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
     overflow: "hidden",
-    backgroundColor: "#DBEAFE",
-    color: "#1D4ED8",
+    backgroundColor: "#FFB800",
+    color: "#FFFFFF",
     alignSelf: "flex-start",
+    fontSize: 12,
+    fontFamily: "Inter",
+    fontWeight: "500",
   },
 
-  posted: { color: "#9CA3AF" },
+  posted: {
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    paddingRight: 30,
+  },
 
-  title: { color: "#111827" },
-  company: { marginTop: 6, color: "#111827" },
-  location: { marginTop: 4, color: "#6B7280" },
-  shiftLine: { marginTop: 8, color: "#374151" },
+  title: {
+    color: "#000000",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginTop: 6,
+  },
+
+  company: {
+    marginTop: 12,
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "500",
+  },
+
+  location: {
+    marginTop: 12,
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    fontStyle: "italic",
+  },
+
+  shiftLine: {
+    marginTop: 12,
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    fontStyle: "italic",
+  },
 
   rate: {
-    marginTop: 8,
-    marginBottom: 8,
-    color: "#111827",
-    fontWeight: "800",
+    marginTop: 12,
+    marginBottom: 12,
+    color: "#000000",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    fontStyle: "italic",
   },
 
   saveBtn: {
     position: "absolute",
-    top: 18,
+    top: 15,
     right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 25,
+    height: 25,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: "transparent",
     zIndex: 5,
   },
 
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
     overflow: "hidden",
     alignSelf: "flex-start",
-    fontWeight: "800",
+    fontSize: 12,
+    fontFamily: "Inter",
+    fontWeight: "500",
   },
 
   statusOpen: {
@@ -305,10 +377,10 @@ const styles = StyleSheet.create({
   },
 
   statusApplied: {
-    backgroundColor: "#FFFBEB",
-    color: "#92400E",
+    backgroundColor: "#FFF4CC",
+    color: "#8A5A00",
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#F5D36A",
   },
 
   statusAssigned: {
@@ -333,19 +405,20 @@ const styles = StyleSheet.create({
   },
 
   reviewBtn: {
-    marginTop: 12,
+    marginTop: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+    borderColor: "#E3E1E1",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
 
   reviewBtnText: {
     color: "#111827",
+    fontFamily: "Inter",
     fontWeight: "700",
   },
 });

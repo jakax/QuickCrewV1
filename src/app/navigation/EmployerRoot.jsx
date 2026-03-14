@@ -10,7 +10,7 @@ const EmployerRoot = () => {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="EmployerTabs" component={EmployerTabs} />
-      <Stack.Screen name="EmployerEditJob" component={EmployerEditJob} options={{ headerShown: true, title: "Edit Shift" }} />
+      <Stack.Screen name="EmployerEditJob" component={EmployerEditJob} />
       <Stack.Screen 
         name="EmployerJobApplicants"
         component={EmployerJobApplicants}
@@ -19,7 +19,6 @@ const EmployerRoot = () => {
       <Stack.Screen 
         name="CreateJob"
         component={CreateJobScreen}
-        options={{ headerShown: true, title: "Create Shift" }}
       />
     </Stack.Navigator>
   );

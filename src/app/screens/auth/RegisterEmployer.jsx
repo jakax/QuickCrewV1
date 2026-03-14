@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import Checkbox from "expo-checkbox";
 import { registerEmployer } from "../../../services/signup.service";
@@ -177,222 +178,372 @@ export default function RegisterEmployer({ navigation }) {
   return (
     <OuterWrapper style={styles.screen}>
       <InnerWrapper contentContainerStyle={styles.content}>
-        <>
-          <Text style={styles.title}>Create employer account</Text>
-          <Text style={styles.subtitle}>
-            If your business already exists in QuickCrew, we’ll link you to it.
-          </Text>
+        <View style={styles.page}>
+          <Image
+            source={require("../../../img/Background.jpeg")}
+            resizeMode="cover"
+            style={styles.background}
+          />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Your name</Text>
-            <TextInput
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder="e.g., Maria Gomez"
-              autoCapitalize="words"
-              style={styles.input}
-              editable={!isSubmitting}
-            />
-          </View>
+          <View style={styles.inner}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              disabled={isSubmitting}
+              style={styles.backButton}
+            >
+              <Text style={styles.backButtonText}>‹</Text>
+            </Pressable>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Legal business name</Text>
-            <TextInput
-              value={legalBusinessName}
-              onChangeText={onChangeBusinessName}
-              placeholder="Start typing your business name..."
-              autoCapitalize="words"
-              style={styles.input}
-              editable={!isSubmitting}
-            />
+            <View style={styles.logoWrap}>
+              <Image
+                source={require("../../../img/abf297f026b0c5de82d56a99a7f6e93149b500b7.png")}
+                resizeMode="contain"
+                style={styles.logoImage}
+              />
+            </View>
+
+            <Text style={styles.subtitle}>
+              If your business already exists in QuickCrew, we’ll link you to it.
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Your name</Text>
+              <TextInput
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="e.g., Maria Gomez"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Legal business name</Text>
+              <TextInput
+                value={legalBusinessName}
+                onChangeText={onChangeBusinessName}
+                placeholder="Start typing your business name..."
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
+
+              {businessAlreadyRegistered ? (
+                <View style={styles.typeaheadBox}>
+                  {orgLoading ? (
+                    <View style={styles.typeaheadRow}>
+                      <ActivityIndicator size="small" />
+                      <Text style={styles.typeaheadMuted}>Searching organizations…</Text>
+                    </View>
+                  ) : selectedOrg ? (
+                    <View style={styles.selectedRow}>
+                      <Text style={styles.selectedText}>Selected: {selectedOrg.name}</Text>
+                      <Pressable onPress={() => setSelectedOrg(null)} disabled={isSubmitting}>
+                        <Text style={styles.clearText}>Clear</Text>
+                      </Pressable>
+                    </View>
+                  ) : orgResults.length > 0 ? (
+                    orgResults.map((org) => (
+                      <Pressable
+                        key={org.id}
+                        onPress={() => {
+                          setSelectedOrg(org);
+                          setOrgResults([]);
+                          setLegalBusinessName(org.name);
+                        }}
+                        style={styles.suggestionRow}
+                        disabled={isSubmitting}
+                      >
+                        <Text style={styles.suggestionTitle}>{org.name}</Text>
+                        {!!org.city || !!org.country ? (
+                          <Text style={styles.suggestionMeta}>
+                            {[org.city, org.country].filter(Boolean).join(", ")}
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                    ))
+                  ) : legalBusinessName.trim().length >= 2 ? (
+                    <Text style={styles.typeaheadMuted}>
+                      No matches found. If your business isn’t registered, uncheck the box and create a new organization.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.checkboxRow}>
+              <Checkbox
+                value={businessAlreadyRegistered}
+                onValueChange={onToggleRegistered}
+                disabled={isSubmitting}
+              />
+              <Text style={styles.checkboxText}>Business already registered</Text>
+            </View>
 
             {businessAlreadyRegistered ? (
-              <View style={styles.typeaheadBox}>
-                {orgLoading ? (
-                  <View style={styles.typeaheadRow}>
-                    <ActivityIndicator size="small" />
-                    <Text style={styles.typeaheadMuted}>Searching organizations…</Text>
-                  </View>
-                ) : selectedOrg ? (
-                  <View style={styles.selectedRow}>
-                    <Text style={styles.selectedText}>Selected: {selectedOrg.name}</Text>
-                    <Pressable onPress={() => setSelectedOrg(null)} disabled={isSubmitting}>
-                      <Text style={styles.clearText}>Clear</Text>
-                    </Pressable>
-                  </View>
-                ) : orgResults.length > 0 ? (
-                  orgResults.map((org) => (
-                    <Pressable
-                      key={org.id}
-                      onPress={() => {
-                        setSelectedOrg(org);
-                        setOrgResults([]);
-                        setLegalBusinessName(org.name);
-                      }}
-                      style={styles.suggestionRow}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={styles.suggestionTitle}>{org.name}</Text>
-                      {!!org.city || !!org.country ? (
-                        <Text style={styles.suggestionMeta}>
-                          {[org.city, org.country].filter(Boolean).join(", ")}
+              <View style={styles.field}>
+                <Text style={styles.label}>Your role in the organization</Text>
+                <View style={styles.roleRow}>
+                  {ROLE_OPTIONS.map((opt) => {
+                    const selected = memberRole === opt.value;
+                    return (
+                      <Pressable
+                        key={opt.value}
+                        onPress={() => setMemberRole(opt.value)}
+                        style={[styles.rolePill, selected && styles.rolePillSelected]}
+                        disabled={isSubmitting}
+                      >
+                        <Text style={[styles.roleText, selected && styles.roleTextSelected]}>
+                          {opt.label}
                         </Text>
-                      ) : null}
-                    </Pressable>
-                  ))
-                ) : legalBusinessName.trim().length >= 2 ? (
-                  <Text style={styles.typeaheadMuted}>
-                    No matches found. If your business isn’t registered, uncheck the box and create a new organization.
-                  </Text>
-                ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
             ) : null}
-          </View>
 
-          <View style={styles.checkboxRow}>
-            <Checkbox
-              value={businessAlreadyRegistered}
-              onValueChange={onToggleRegistered}
-              disabled={isSubmitting}
-            />
-            <Text style={styles.checkboxText}>Business already registered</Text>
-          </View>
-
-          {businessAlreadyRegistered ? (
             <View style={styles.field}>
-              <Text style={styles.label}>Your role in the organization</Text>
-              <View style={styles.roleRow}>
-                {ROLE_OPTIONS.map((opt) => {
-                  const selected = memberRole === opt.value;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      onPress={() => setMemberRole(opt.value)}
-                      style={[styles.rolePill, selected && styles.rolePillSelected]}
-                      disabled={isSubmitting}
-                    >
-                      <Text style={[styles.roleText, selected && styles.roleTextSelected]}>
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <Text style={styles.label}>Email address</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="business@email.com"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
             </View>
-          ) : null}
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="business@email.com"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-              editable={!isSubmitting}
-            />
-          </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Minimum 6 characters"
+                placeholderTextColor="#9A9A9A"
+                secureTextEntry
+                autoCapitalize="none"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Minimum 6 characters"
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-              editable={!isSubmitting}
-            />
-          </View>
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Re-enter your password"
+                placeholderTextColor="#9A9A9A"
+                secureTextEntry
+                autoCapitalize="none"
+                style={styles.input}
+                editable={!isSubmitting}
+                onSubmitEditing={() => {
+                  if (canSubmit) onRegister();
+                }}
+              />
+            </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Confirm password</Text>
-            <TextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Re-enter your password"
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-              editable={!isSubmitting}
-              onSubmitEditing={() => {
-                if (canSubmit) onRegister();
-              }}
-            />
-          </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Pressable
+              onPress={onRegister}
+              disabled={!canSubmit}
+              style={({ pressed }) => [
+                styles.button,
+                !canSubmit && styles.buttonDisabled,
+                pressed && canSubmit && styles.buttonPressed,
+              ]}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Create account</Text>
+              )}
+            </Pressable>
 
-          <Pressable
-            onPress={onRegister}
-            disabled={!canSubmit}
-            style={({ pressed }) => [
-              styles.button,
-              !canSubmit && styles.buttonDisabled,
-              pressed && canSubmit && styles.buttonPressed,
-            ]}
-          >
-            {isSubmitting ? <ActivityIndicator /> : <Text style={styles.buttonText}>Register</Text>}
-          </Pressable>
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Already have an account?</Text>
+              <Pressable onPress={() => navigation.navigate("Login")} disabled={isSubmitting}>
+                <Text style={styles.linkText}>Log in</Text>
+              </Pressable>
+            </View>
 
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account?</Text>
-            <Pressable onPress={() => navigation.navigate("Login")} disabled={isSubmitting}>
-              <Text style={styles.linkText}>Log in</Text>
+            <Pressable
+              onPress={() => navigation.navigate("RegisterWorker")}
+              disabled={isSubmitting}
+              style={styles.secondaryLinkBtn}
+            >
+              <Text style={styles.secondaryLinkText}>Create a worker account instead</Text>
             </Pressable>
           </View>
-
-          <Pressable
-            onPress={() => navigation.navigate("RegisterWorker")}
-            disabled={isSubmitting}
-            style={styles.secondaryLinkBtn}
-          >
-            <Text style={styles.secondaryLinkText}>Create a worker account instead</Text>
-          </Pressable>
-        </>
+        </View>
       </InnerWrapper>
     </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingTop: 40, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 6 },
-  subtitle: { fontSize: 14, opacity: 0.75, marginBottom: 14 },
-
-  error: { marginBottom: 12, color: "#B00020", fontWeight: "600" },
-
-  field: { marginBottom: 14 },
-  label: { fontSize: 13, fontWeight: "600", marginBottom: 6, opacity: 0.85 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
+  screen: {
+    flex: 1,
+    backgroundColor: "#ECECEC",
   },
 
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
-  checkboxText: { fontSize: 14, opacity: 0.9 },
+  content: {
+    flexGrow: 1,
+    backgroundColor: "#ECECEC",
+  },
+
+  page: {
+    flex: 1,
+    position: "relative",
+  },
+
+  background: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+
+  inner: {
+    flex: 1,
+    paddingTop: 100,
+    paddingBottom: 30,
+    paddingHorizontal: 30,
+  },
+
+  backButton: {
+    padding: 8,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+
+  backButtonText: {
+    color: "#A7A4A4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  logoWrap: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  logoImage: {
+    width: 263,
+    height: 48,
+  },
+
+  subtitle: {
+    color: "#5F5F5F",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Inter",
+    fontWeight: "400",
+    textAlign: "center",
+    marginBottom: 22,
+    paddingHorizontal: 8,
+  },
+
+  field: {
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+
+  label: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginBottom: 5,
+    paddingHorizontal: 2,
+  },
+
+  input: {
+    height: 37,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
+    paddingRight: 15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#CECECE",
+    color: "#333333",
+    fontSize: 14,
+    fontFamily: "Inter",
+  },
+
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+
+  checkboxText: {
+    fontSize: 14,
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+    fontWeight: "400",
+  },
 
   typeaheadBox: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderColor: "#E2E2E2",
+    borderRadius: 10,
     marginTop: 10,
     overflow: "hidden",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFFFFF",
   },
-  typeaheadRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
-  typeaheadMuted: { padding: 12, color: "#6B7280", fontSize: 13, lineHeight: 18 },
 
-  suggestionRow: { padding: 12, borderTopWidth: 1, borderTopColor: "#F3F4F6" },
-  suggestionTitle: { fontWeight: "800", color: "#111827" },
-  suggestionMeta: { marginTop: 4, color: "#6B7280", fontSize: 12 },
+  typeaheadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+  },
+
+  typeaheadMuted: {
+    padding: 12,
+    color: "#6B7280",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Inter",
+  },
+
+  suggestionRow: {
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F1F1",
+  },
+
+  suggestionTitle: {
+    fontWeight: "700",
+    color: "#3B3B3B",
+    fontFamily: "Inter",
+  },
+
+  suggestionMeta: {
+    marginTop: 4,
+    color: "#6B7280",
+    fontSize: 12,
+    fontFamily: "Inter",
+  },
 
   selectedRow: {
     padding: 12,
@@ -400,36 +551,128 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  selectedText: { fontWeight: "800", color: "#111827" },
-  clearText: { color: "#2563EB", fontWeight: "800" },
 
-  button: {
-    marginTop: 8,
-    backgroundColor: "#111",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
+  selectedText: {
+    fontWeight: "700",
+    color: "#3B3B3B",
+    fontFamily: "Inter",
+    flex: 1,
+    paddingRight: 12,
   },
-  buttonDisabled: { backgroundColor: "#999" },
-  buttonPressed: { opacity: 0.85 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  footerRow: { flexDirection: "row", justifyContent: "center", marginTop: 16, gap: 6 },
-  footerText: { fontSize: 14, opacity: 0.8 },
-  linkText: { fontSize: 14, fontWeight: "700" },
+  clearText: {
+    color: "#2365AF",
+    fontWeight: "700",
+    fontFamily: "Inter",
+  },
 
-  secondaryLinkBtn: { marginTop: 18, alignItems: "center" },
-  secondaryLinkText: { fontSize: 14, fontWeight: "700", opacity: 0.9 },
+  roleRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 4,
+  },
 
-  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rolePill: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: "#CECECE",
     borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
   },
-  rolePillSelected: { backgroundColor: "#111", borderColor: "#111" },
-  roleText: { fontWeight: "700", opacity: 0.9 },
-  roleTextSelected: { color: "#fff", opacity: 1 },
+
+  rolePillSelected: {
+    backgroundColor: "#45BF79",
+    borderColor: "#45BF79",
+  },
+
+  roleText: {
+    fontWeight: "700",
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+  },
+
+  roleTextSelected: {
+    color: "#FFFFFF",
+  },
+
+  button: {
+    width: 327,
+    maxWidth: "100%",
+    alignSelf: "center",
+    height: 40,
+    paddingHorizontal: 33,
+    paddingVertical: 11,
+    backgroundColor: "#45BF79",
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+
+  buttonDisabled: {
+    backgroundColor: "#99CFAF",
+  },
+
+  buttonPressed: {
+    opacity: 0.9,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 18,
+    flexWrap: "wrap",
+  },
+
+  footerText: {
+    fontSize: 14,
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+    fontWeight: "400",
+  },
+
+  linkText: {
+    fontSize: 14,
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+    fontWeight: "700",
+  },
+
+  secondaryLinkBtn: {
+    marginTop: 16,
+    alignItems: "center",
+  },
+
+  secondaryLinkText: {
+    fontSize: 14,
+    color: "#2365AF",
+    fontFamily: "Inter",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  errorText: {
+    backgroundColor: "#FCE9EC",
+    color: "#C94A5A",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 4,
+    marginBottom: 6,
+    marginHorizontal: 8,
+    fontSize: 13,
+    fontFamily: "Inter",
+  },
 });

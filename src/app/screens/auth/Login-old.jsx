@@ -62,41 +62,22 @@ const Login = ({ navigation }) => {
           />
 
           <View style={styles.content}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.navigate("LoginEntry")}
-              disabled={loading}
-            >
-              <Text style={styles.backButtonText}>‹</Text>
-            </TouchableOpacity>
+            <Image
+              source={require("../../../img/Logo.png")}
+              resizeMode="contain"
+              style={styles.logoImage}
+            />
 
-            <Text style={styles.screenTitle}>Sign in worker</Text>
-
-            <View style={styles.socialSection}>
-              <TouchableOpacity
-                style={[styles.socialButton, loading ? styles.buttonDisabled : null]}
-                onPress={onGooglePress}
-                disabled={loading}
-              >
-                <Text style={styles.socialIcon}>G</Text>
-                <Text style={styles.socialButtonText}>Continue with Google</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.socialButton, styles.appleButton, loading ? styles.buttonDisabled : null]}
-                disabled
-              >
-                <Text style={styles.socialIconApple}></Text>
-                <Text style={styles.socialButtonText}>Continue with Apple</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.dividerWrap}>
-              <View style={styles.divider} />
-            </View>
+            <Text style={styles.heroText}>
+              Discover flexible jobs that fit your schedule.{"\n"}
+              Sign in to get started.
+            </Text>
+          
 
             <View style={styles.formSection}>
-              <Text style={styles.label}>Email adress</Text>
+              <View style={styles.divider} />
+
+              <Text style={styles.label}>Email address</Text>
               <TextInput
                 style={styles.input}
                 placeholder="you@example.com"
@@ -130,9 +111,15 @@ const Login = ({ navigation }) => {
                   {loading ? "Loading..." : "Sign in"}
                 </Text>
               </TouchableOpacity>
-            </View>
 
-            <View style={styles.linksSection}>
+              <TouchableOpacity
+                style={[styles.googleButton, loading ? styles.buttonDisabled : null]}
+                onPress={onGooglePress}
+                disabled={loading}
+              >
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 disabled={loading}
                 onPress={() => navigation.navigate("ForgotPassword")}
@@ -149,23 +136,26 @@ const Login = ({ navigation }) => {
                   <Text style={styles.linkText}>Register</Text>
                 </Pressable>
               </View>
-            </View>
 
-            <View style={styles.legalSection}>
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>security & Privacy</Text>
-              </TouchableOpacity>
+              <View style={styles.employerSection}>
+                <Text style={styles.employerText}>
+                  Looking to hire staff for your company?
+                </Text>
 
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Terms & Conditions</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.employerButton, loading ? styles.buttonDisabled : null]}
+                  onPress={() => navigation.navigate("RegisterEmployer")}
+                  disabled={loading}
+                >
+                  <Text style={styles.employerButtonText}>Create an account</Text>
+                </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Protect yourself online</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Contact</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("JobDetails")}
+                disabled={loading}
+              >
+                <Text style={styles.skipText}>Register later</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -179,6 +169,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#ECECEC",
+  },
+
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 72,
+    paddingBottom: 28,
+    justifyContent: "space-between",
   },
 
   container: {
@@ -201,217 +199,199 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 
-  content: {
-    flex: 1,
-    paddingTop: 100,
-    paddingBottom: 30,
-    paddingHorizontal: 30,
-    justifyContent: "flex-start",
-  },
-
-  backButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    alignSelf: "flex-start",
-    marginBottom: 20,
-  },
-
-  backButtonText: {
-    color: "#A7A4A4",
-    fontSize: 34,
-    lineHeight: 34,
-    fontFamily: "Inter",
-    fontWeight: "600",
-  },
-
-  screenTitle: {
-    color: "#716C6C",
-    fontSize: 20,
-    fontFamily: "Inter",
-    fontWeight: "600",
-    marginBottom: 20,
-  },
-
-  socialSection: {
+  bottomBackground: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: "100%",
-    gap: 20,
-    marginBottom: 20,
+    height: 520,
   },
 
-  socialButton: {
-    alignSelf: "stretch",
-    minWidth: 300,
-    height: 45,
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingLeft: 10,
-    paddingRight: 15,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#CDCDCD",
-    flexDirection: "row",
+  topSection: {
     alignItems: "center",
-    gap: 10,
+    marginTop: 36,
+    marginBottom: 120,
+    zIndex: 2,
   },
 
-  appleButton: {
-    marginTop: 0,
+  logoImage: {
+    width: 320,
+    height: 78,
+    marginBottom: 24,
   },
 
-  socialIcon: {
-    width: 24,
+  heroText: {
     textAlign: "center",
-    color: "#4285F4",
-    fontSize: 22,
-    fontWeight: "700",
-  },
-
-  socialIconApple: {
-    width: 24,
-    textAlign: "center",
-    color: "#898989",
-    fontSize: 22,
-    fontWeight: "700",
-  },
-
-  socialButtonText: {
-    flex: 1,
-    textAlign: "center",
-    color: "#716C6C",
-    fontSize: 15,
+    color: "#8E8E8E",
+    fontSize: 17,
+    lineHeight: 28,
     fontFamily: "Inter",
-    fontWeight: "500",
-    marginRight: 24,
-  },
-
-  dividerWrap: {
-    width: "100%",
-    paddingHorizontal: 10,
-    paddingTop: 15,
-    paddingBottom: 15,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-
-  divider: {
-    width: "46%",
-    height: 1,
-    backgroundColor: "#B6A9A9",
+    fontWeight: "400",
+    paddingHorizontal: 22,
   },
 
   formSection: {
-    width: "100%",
-    gap: 8,
-    marginBottom: 20,
+    zIndex: 2,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+  },
+
+  googleButton: {
+    width: "92%",
+    alignSelf: "center",
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: "#C9C9C9",
+    backgroundColor: "#F7F7F7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+  },
+
+  googleButtonText: {
+    color: "#6F6A6A",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+
+  divider: {
+    alignSelf: "center",
+    width: "54%",
+    height: 1.5,
+    backgroundColor: "#9D8B8B",
+    marginBottom: 26,
+    opacity: 0.8,
   },
 
   label: {
-    color: "#434343",
+    color: "#4D4D4D",
     fontSize: 15,
+    lineHeight: 22,
     fontFamily: "Inter",
-    fontWeight: "300",
+    fontWeight: "400",
     marginBottom: 8,
-    paddingHorizontal: 2,
+    marginLeft: 4,
   },
 
   input: {
-    alignSelf: "stretch",
-    height: 37,
-    paddingTop: 10,
-    paddingBottom: 10,
-    paddingLeft: 10,
-    paddingRight: 15,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#CDCDCD",
-    color: "#333333",
+    width: "92%",
+    alignSelf: "center",
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1.2,
+    borderColor: "#D7D7D7",
+    paddingHorizontal: 16,
+    color: "#333",
     fontSize: 15,
     fontFamily: "Inter",
-    marginBottom: 8,
+    marginBottom: 14,
   },
 
   errorText: {
     color: "#D65F5F",
     fontSize: 13,
     fontFamily: "Inter",
-    textAlign: "left",
-    marginTop: 4,
-    marginBottom: 8,
+    textAlign: "center",
+    marginBottom: 14,
   },
 
   loginButton: {
-    width: 327,
-    maxWidth: "100%",
-    height: 40,
-    paddingHorizontal: 33,
-    paddingVertical: 11,
-    backgroundColor: "#45BF79",
-    borderRadius: 48,
-    justifyContent: "center",
+    width: "92%",
+    alignSelf: "center",
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: "#49C277",
     alignItems: "center",
-    alignSelf: "stretch",
-    marginTop: 12,
+    justifyContent: "center",
+    marginTop: 10,
   },
 
   loginButtonText: {
-    textAlign: "center",
     color: "#FFFFFF",
     fontSize: 16,
     fontFamily: "Inter",
     fontWeight: "600",
-  },
-
-  linksSection: {
-    width: "100%",
-    marginBottom: 20,
+    textAlign: "center",
   },
 
   forgotText: {
-    color: "#2365AF",
-    fontSize: 14,
+    marginTop: 22,
+    color: "#2F69C8",
+    fontSize: 16,
+    lineHeight: 24,
     fontFamily: "Inter",
-    fontWeight: "700",
-    lineHeight: 21,
-    paddingVertical: 8,
+    fontWeight: "400",
   },
 
   footerRow: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 4,
+    marginTop: 22,
   },
 
   footerText: {
-    color: "#434343",
+    color: "#474747",
     fontSize: 16,
+    lineHeight: 24,
     fontFamily: "Inter",
-    fontWeight: "300",
-    paddingVertical: 8,
+    fontWeight: "400",
   },
 
   linkText: {
-    color: "#595959",
+    color: "#474747",
     fontSize: 16,
+    lineHeight: 24,
     fontFamily: "Inter",
     fontWeight: "700",
   },
 
-  legalSection: {
-    width: "100%",
-    gap: 10,
+  employerSection: {
+    marginTop: 34,
+    alignItems: "center",
   },
 
-  legalLink: {
-    color: "#595959",
+  employerText: {
+    textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 17,
+    lineHeight: 24,
+    fontFamily: "Inter",
+    fontWeight: "700",
+    marginBottom: 16,
+    paddingHorizontal: 16,
+  },
+
+  employerButton: {
+    width: "100%",
+    height: 62,
+    borderRadius: 999,
+    backgroundColor: "#49C277",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  employerButtonText: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontFamily: "Inter",
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  skipText: {
+    marginTop: 18,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.92)",
     fontSize: 14,
     fontFamily: "Inter",
-    fontWeight: "600",
-    textDecorationLine: "underline",
-    paddingVertical: 8,
+    fontWeight: "500",
   },
 
   buttonDisabled: {

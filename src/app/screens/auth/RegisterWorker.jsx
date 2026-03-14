@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { registerWorker } from "../../../services/signup.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
@@ -103,150 +104,318 @@ export default function RegisterWorker({ navigation }) {
   return (
     <OuterWrapper style={styles.screen}>
       <InnerWrapper contentContainerStyle={styles.content}>
-        <>
-          <Text style={styles.title}>Create worker account</Text>
-          <Text style={styles.subtitle}>
-            You can browse jobs immediately. Approval is only needed when you apply.
-          </Text>
+        <View style={styles.page}>
+          <Image
+            source={require("../../../img/Background.jpeg")}
+            resizeMode="cover"
+            style={styles.background}
+          />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Full name</Text>
-            <TextInput
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder="e.g., Jacob Baron"
-              autoCapitalize="words"
-              style={styles.input}
-              editable={!isSubmitting}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="jacob@baron.com"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={styles.input}
-              editable={!isSubmitting}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Minimum 6 characters"
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-              editable={!isSubmitting}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Confirm password</Text>
-            <TextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Re-enter your password"
-              secureTextEntry
-              autoCapitalize="none"
-              style={styles.input}
-              editable={!isSubmitting}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                if (canSubmit) onRegister();
-              }}
-            />
-          </View>
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <Pressable
-            onPress={onRegister}
-            disabled={!canSubmit}
-            style={({ pressed }) => [
-              styles.button,
-              !canSubmit && styles.buttonDisabled,
-              pressed && canSubmit && styles.buttonPressed,
-            ]}
-          >
-            {isSubmitting ? <ActivityIndicator /> : <Text style={styles.buttonText}>Register</Text>}
-          </Pressable>
-
-          <View style={styles.footerRow}>
-            <Text style={styles.footerText}>Already have an account?</Text>
+          <View style={styles.inner}>
             <Pressable
-              onPress={() => navigation.navigate("Login")}
+              onPress={() => navigation.goBack()}
               disabled={isSubmitting}
-              style={styles.linkBtn}
+              style={styles.backButton}
             >
-              <Text style={styles.linkText}>Log in</Text>
+              <Text style={styles.backButtonText}>‹</Text>
+            </Pressable>
+
+            <View style={styles.logoWrap}>
+              <Image
+                source={require("../../../img/abf297f026b0c5de82d56a99a7f6e93149b500b7.png")}
+                resizeMode="contain"
+                style={styles.logoImage}
+              />
+            </View>
+
+            <Text style={styles.subtitle}>
+              You can browse jobs immediately. Approval is only needed when you apply.
+            </Text>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Full name</Text>
+              <TextInput
+                value={fullName}
+                onChangeText={setFullName}
+                placeholder="e.g., Jacob Baron"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Email address</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="jacob@baron.com"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Minimum 6 characters"
+                placeholderTextColor="#9A9A9A"
+                secureTextEntry
+                autoCapitalize="none"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Re-enter your password"
+                placeholderTextColor="#9A9A9A"
+                secureTextEntry
+                autoCapitalize="none"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  if (canSubmit) onRegister();
+                }}
+              />
+            </View>
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Pressable
+              onPress={onRegister}
+              disabled={!canSubmit}
+              style={({ pressed }) => [
+                styles.button,
+                !canSubmit && styles.buttonDisabled,
+                pressed && canSubmit && styles.buttonPressed,
+              ]}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Create account</Text>
+              )}
+            </Pressable>
+
+            <View style={styles.footerRow}>
+              <Text style={styles.footerText}>Already have an account?</Text>
+              <Pressable
+                onPress={() => navigation.navigate("Login")}
+                disabled={isSubmitting}
+                style={styles.linkBtn}
+              >
+                <Text style={styles.linkText}>Log in</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={() => navigation.navigate("RegisterEmployer")}
+              disabled={isSubmitting}
+              style={styles.secondaryLinkBtn}
+            >
+              <Text style={styles.secondaryLinkText}>
+                Create an employer account instead
+              </Text>
             </Pressable>
           </View>
-
-          <Pressable
-            onPress={() => navigation.navigate("RegisterEmployer")}
-            disabled={isSubmitting}
-            style={styles.secondaryLinkBtn}
-          >
-            <Text style={styles.secondaryLinkText}>Create an employer account instead</Text>
-          </Pressable>
-        </>
+        </View>
       </InnerWrapper>
     </OuterWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 20, paddingTop: 40, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 6 },
-  subtitle: { fontSize: 14, opacity: 0.75, marginBottom: 20 },
+  screen: {
+    flex: 1,
+    backgroundColor: "#ECECEC",
+  },
 
-  field: { marginBottom: 14 },
-  label: { fontSize: 13, fontWeight: "600", marginBottom: 6, opacity: 0.85 },
+  content: {
+    flexGrow: 1,
+    backgroundColor: "#ECECEC",
+  },
+
+  page: {
+    flex: 1,
+    position: "relative",
+  },
+
+  background: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+
+  inner: {
+    flex: 1,
+    paddingTop: 100,
+    paddingBottom: 30,
+    paddingHorizontal: 30,
+  },
+
+  backButton: {
+    padding: 8,
+    alignSelf: "flex-start",
+    marginBottom: 12,
+  },
+
+  backButtonText: {
+    color: "#A7A4A4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  logoWrap: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  logoImage: {
+    width: 263,
+    height: 48,
+  },
+
+  subtitle: {
+    color: "#5F5F5F",
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Inter",
+    fontWeight: "400",
+    textAlign: "center",
+    marginBottom: 22,
+    paddingHorizontal: 8,
+  },
+
+  field: {
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+
+  label: {
+    color: "#434343",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginBottom: 5,
+    paddingHorizontal: 2,
+  },
+
   input: {
+    height: 37,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
+    paddingRight: 15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderColor: "#CECECE",
+    color: "#333333",
+    fontSize: 14,
+    fontFamily: "Inter",
   },
 
   button: {
-    marginTop: 8,
-    backgroundColor: "#111",
-    paddingVertical: 14,
-    borderRadius: 12,
+    width: 327,
+    maxWidth: "100%",
+    alignSelf: "center",
+    height: 40,
+    paddingHorizontal: 33,
+    paddingVertical: 11,
+    backgroundColor: "#45BF79",
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+  },
+
+  buttonDisabled: {
+    backgroundColor: "#99CFAF",
+  },
+
+  buttonPressed: {
+    opacity: 0.9,
+  },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 18,
+    flexWrap: "wrap",
+  },
+
+  footerText: {
+    fontSize: 14,
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+    fontWeight: "400",
+  },
+
+  linkBtn: {
+    paddingHorizontal: 2,
+  },
+
+  linkText: {
+    fontSize: 14,
+    color: "#4F4F4F",
+    fontFamily: "Inter",
+    fontWeight: "700",
+  },
+
+  secondaryLinkBtn: {
+    marginTop: 16,
     alignItems: "center",
   },
-  buttonDisabled: { backgroundColor: "#999" },
-  buttonPressed: { opacity: 0.85 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  footerRow: { flexDirection: "row", justifyContent: "center", marginTop: 16, gap: 6 },
-  footerText: { fontSize: 14, opacity: 0.8 },
-  linkBtn: { paddingHorizontal: 4 },
-  linkText: { fontSize: 14, fontWeight: "700" },
-
-  secondaryLinkBtn: { marginTop: 18, alignItems: "center" },
-  secondaryLinkText: { fontSize: 14, fontWeight: "700", opacity: 0.9 },
+  secondaryLinkText: {
+    fontSize: 14,
+    color: "#2365AF",
+    fontFamily: "Inter",
+    fontWeight: "700",
+    textAlign: "center",
+  },
 
   errorText: {
-    backgroundColor: "#2A0F14",
-    color: "#F87171",
-    padding: 12,
+    backgroundColor: "#FCE9EC",
+    color: "#C94A5A",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 10,
-    marginBottom: 12,
+    marginTop: 4,
+    marginBottom: 6,
+    marginHorizontal: 8,
     fontSize: 13,
+    fontFamily: "Inter",
   },
 });

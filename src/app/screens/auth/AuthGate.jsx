@@ -16,7 +16,10 @@ export default function AuthGate() {
 
     if (isEmployer) {
       if (!orgId) {
-        resetTo("CreateOrganization"); // only if this screen exists in RootStack (see note below)
+        resetTo("Auth", {
+          screen: "CreateOrganization",
+          params: { uid },
+        });
         return;
       }
 

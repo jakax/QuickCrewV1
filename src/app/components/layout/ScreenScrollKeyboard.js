@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  View,
   ScrollView,
   KeyboardAvoidingView,
   Keyboard,
@@ -11,16 +12,7 @@ export function OuterWrapper({ children, style }) {
   const isWeb = Platform.OS === "web";
 
   if (isWeb) {
-    return (
-      <ScrollView
-        style={style}
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-      </ScrollView>
-    );
+    return <View style={style}>{children}</View>;
   }
 
   return (
@@ -36,18 +28,14 @@ export function OuterWrapper({ children, style }) {
   );
 }
 
-export function InnerWrapper({ children, contentContainerStyle }) {
-  const isWeb = Platform.OS === "web";
-
-  // On web we already used ScrollView in OuterWrapper, so here we just render content
-  if (isWeb) return children;
-
+export function InnerWrapper({ children, contentContainerStyle, style }) {
   return (
     <ScrollView
-      contentContainerStyle={contentContainerStyle}
+      style={style}
+      contentContainerStyle={[{ flexGrow: 1 }, contentContainerStyle]}
       keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      onScrollBeginDrag={Keyboard.dismiss}
+      keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
+      onScrollBeginDrag={Platform.OS === "web" ? undefined : Keyboard.dismiss}
       showsVerticalScrollIndicator={false}
     >
       {children}
