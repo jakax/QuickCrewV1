@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, Fragment } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,13 +8,7 @@ import {
   Pressable,
   Image,
   Linking,
-  Modal,
-  KeyboardAvoidingView,
-  Keyboard,
-  TouchableWithoutFeedback,
-  Platform,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { signOut } from "firebase/auth";
 import { useNavigation } from "@react-navigation/native";
@@ -28,10 +22,15 @@ import {
   uploadUserPhoto,
   uploadUserCv,
   uploadUserIdDocument,
+  uploadUserVisaDocument,
 } from "../../../services/profile.service";
+import AddReferenceModal from "../../components/modals/AddReferenceModal";
+import { sanitizePhone } from "../../../utils/formatters";
 
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import DatePickerModal from "../../components/modals/DatePickerModal";
+import SelectOptionModal from "../../components/modals/SelectOptionModal";
 
 const GENDER_OPTIONS = [
   "Male",
@@ -65,22 +64,6 @@ const splitName = (fullName = "") => {
   if (parts.length === 0) return { firstName: "", lastName: "" };
   if (parts.length === 1) return { firstName: parts[0], lastName: "" };
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
-};
-
-const sanitizePhone = (raw = "") => {
-  const s = String(raw);
-  let cleaned = s.replace(/[^\d+]/g, "");
-
-  if (cleaned.includes("+")) {
-    cleaned = (cleaned[0] === "+" ? "+" : "") + cleaned.replace(/\+/g, "");
-  }
-
-  return cleaned;
-};
-
-const isValidEmailLoose = (email = "") => {
-  const e = String(email).trim();
-  return /^\S+@\S+\.\S+$/.test(e);
 };
 
 function Row({ label, value }) {
@@ -161,49 +144,21 @@ export default function Profile() {
   const idDocumentUrl = profile?.idDocument?.url || null;
   const idDocumentFileName = profile?.idDocument?.fileName || "ID document";
 
+  const [uploadingVisaDocument, setUploadingVisaDocument] = useState(false);
+  const visaDocumentUrl = profile?.visaDocument?.url || null;
+  const visaDocumentFileName = profile?.visaDocument?.fileName || "Visa document";
+
   const [references, setReferences] = useState(
     Array.isArray(profile?.references) ? profile.references : []
   );
 
   const [refModalOpen, setRefModalOpen] = useState(false);
-  const [refName, setRefName] = useState("");
-  const [refCompany, setRefCompany] = useState("");
-  const [refRole, setRefRole] = useState("");
-  const [refPhone, setRefPhone] = useState("");
-  const [refEmail, setRefEmail] = useState("");
-  const [refNotes, setRefNotes] = useState("");
 
   const [dateModalOpen, setDateModalOpen] = useState(false);
   const [dateField, setDateField] = useState(null);
 
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [selectField, setSelectField] = useState(null);
-  const [selectOptions, setSelectOptions] = useState([]);
-  const [tmpSelectedOption, setTmpSelectedOption] = useState("");
-
-  const today = new Date();
-  const currentYear = today.getFullYear();
-
-  const days = useMemo(
-    () => Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")),
-    []
-  );
-  const months = useMemo(
-    () => Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")),
-    []
-  );
-  const years = useMemo(
-    () => Array.from({ length: 100 }, (_, i) => String(currentYear - i)),
-    [currentYear]
-  );
-  const visaYears = useMemo(
-    () => Array.from({ length: 15 }, (_, i) => String(currentYear + i)),
-    [currentYear]
-  );
-
-  const [tmpDay, setTmpDay] = useState(1);
-  const [tmpMonth, setTmpMonth] = useState(1);
-  const [tmpYear, setTmpYear] = useState(currentYear);
 
   useEffect(() => {
     setFirstName(initial.firstName);
@@ -274,63 +229,6 @@ export default function Profile() {
   if (saving || loggingOut) return false;
   return true;
 }, [uid, saving, loggingOut]);
-
-  const openDateModal = (field) => {
-    const source = field === "visaExpiryDate" ? visaExpiryDate : dateOfBirth;
-    const [dd = "01", mm = "01", yyyy = String(currentYear)] = String(source || "").split("/");
-
-    setTmpDay(Number(dd) || 1);
-    setTmpMonth(Number(mm) || 1);
-    setTmpYear(Number(yyyy) || currentYear);
-    setDateField(field);
-    setDateModalOpen(true);
-  };
-
-  const applyDateModal = () => {
-    const value = `${String(tmpDay).padStart(2, "0")}/${String(tmpMonth).padStart(
-      2,
-      "0"
-    )}/${tmpYear}`;
-
-    if (dateField === "dateOfBirth") {
-      setDateOfBirth(value);
-    } else if (dateField === "visaExpiryDate") {
-      setVisaExpiryDate(value);
-    }
-
-    setDateModalOpen(false);
-    setDateField(null);
-  };
-
-  const openSelectModal = (field, options) => {
-    setSelectField(field);
-    setSelectOptions(options);
-
-    if (field === "gender") {
-      setTmpSelectedOption(gender || options[0] || "");
-    } else if (field === "emergencyContactRelation") {
-      setTmpSelectedOption(emergencyContactRelation || options[0] || "");
-    } else if (field === "rightToWorkNz") {
-      setTmpSelectedOption(rightToWorkNz || options[0] || "");
-    }
-
-    setSelectModalOpen(true);
-  };
-
-  const applySelectModal = () => {
-    if (selectField === "gender") {
-      setGender(tmpSelectedOption);
-    } else if (selectField === "emergencyContactRelation") {
-      setEmergencyContactRelation(tmpSelectedOption);
-    } else if (selectField === "rightToWorkNz") {
-      setRightToWorkNz(tmpSelectedOption);
-    }
-
-    setSelectModalOpen(false);
-    setSelectField(null);
-    setSelectOptions([]);
-    setTmpSelectedOption("");
-  };
 
   const onSave = async () => {
     try {
@@ -418,23 +316,39 @@ export default function Profile() {
       if (!uid) throw new Error("Missing session.");
 
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) throw new Error("Permission required to select a photo.");
+
+      if (!perm.granted) {
+        if (!perm.canAskAgain) {
+          const ok = await confirm({
+            title: "Photo access required",
+            message: "Please allow QuickCrew to access your photos in Settings.",
+            confirmText: "Open Settings",
+            cancelText: "Cancel",
+          });
+          if (ok) Linking.openSettings();
+          return;
+        }
+        throw new Error("Permission required to select a photo.");
+      }
 
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.85,
       });
+      console.log("📸 Image picker result:", JSON.stringify(res));
 
       if (res.canceled) return;
 
       const uri = res.assets?.[0]?.uri;
+      console.log("📸 Selected URI:", uri);
       if (!uri) throw new Error("Could not read selected image.");
 
       setUploadingPhoto(true);
       await uploadUserPhoto({ uid, uri });
     } catch (e) {
+      console.log("📸 Error:", e?.message);
       setError(e?.message || "Could not upload photo.");
     } finally {
       setUploadingPhoto(false);
@@ -509,6 +423,40 @@ export default function Profile() {
     }
   };
 
+  const onPickVisaDocument = async () => {
+    try {
+      setError(null);
+      if (!uid) throw new Error("Missing session.");
+
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (res.canceled) return;
+
+      const asset = res.assets?.[0];
+      if (!asset?.uri) throw new Error("Could not read selected file.");
+
+      setUploadingVisaDocument(true);
+      await uploadUserVisaDocument({
+        uid,
+        uri: asset.uri,
+        fileName: asset.name || "visa_document.pdf",
+        mimeType: asset.mimeType || "application/pdf",
+      });
+    } catch (e) {
+      setError(e?.message || "Could not upload visa document.");
+    } finally {
+      setUploadingVisaDocument(false);
+    }
+  };
+
   const openUrl = async (url) => {
     try {
       if (!url) return;
@@ -534,61 +482,6 @@ export default function Profile() {
     }
   };
 
-  const addReference = async () => {
-    const name = refName.trim();
-    const company = refCompany.trim();
-    const role = refRole.trim();
-    const phone = sanitizePhone(refPhone.trim());
-    const email = refEmail.trim();
-
-    if (!name) {
-      setError("Reference name is required.");
-      return;
-    }
-    if (!company) {
-      setError("Company / organisation name is required.");
-      return;
-    }
-    if (!role) {
-      setError("Position title is required.");
-      return;
-    }
-    if (!phone) {
-      setError("Phone number is required.");
-      return;
-    }
-    if (!email) {
-      setError("Email is required.");
-      return;
-    }
-    if (!isValidEmailLoose(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
-    const next = [
-      ...(Array.isArray(references) ? references : []),
-      {
-        name,
-        company,
-        role,
-        phone,
-        email,
-        notes: refNotes.trim() || "",
-      },
-    ];
-
-    setRefModalOpen(false);
-    setRefName("");
-    setRefCompany("");
-    setRefRole("");
-    setRefPhone("");
-    setRefEmail("");
-    setRefNotes("");
-
-    await saveReferences(next);
-  };
-
   const removeReference = async (index) => {
     const ok = await confirm({
       title: "Remove reference?",
@@ -604,727 +497,628 @@ export default function Profile() {
     await saveReferences(next);
   };
 
-  const isWeb = Platform.OS === "web";
-  const OuterWrapper = isWeb ? Fragment : TouchableWithoutFeedback;
-  const outerProps = isWeb ? {} : { onPress: Keyboard.dismiss, accessible: false };
-
-  const InnerWrapper = isWeb ? View : KeyboardAvoidingView;
-  const innerProps = isWeb
-    ? { style: styles.screen }
-    : {
-        style: styles.screen,
-        behavior: Platform.OS === "ios" ? "padding" : "height",
-        keyboardVerticalOffset: Platform.OS === "ios" ? 90 : 0,
-      };
-
   return (
-    <OuterWrapper {...outerProps}>
-      <InnerWrapper {...innerProps}>
-        <LinearGradient
-          colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
-          locations={[0, 0.45, 1]}
-          style={styles.screen}
+    <LinearGradient
+        colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+        locations={[0, 0.45, 1]}
+        style={styles.screen}
+    >
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={true}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
+        <View style={styles.headerBlock}>
+          <Text style={styles.title}>My profile</Text>
+        </View>
+
+        <Pressable
+          onPress={onPickPhoto}
+          disabled={uploadingPhoto}
+          style={({ pressed }) => [
+            styles.avatar,
+            pressed || uploadingPhoto ? { opacity: 0.9 } : null,
+            uploadingPhoto ? { opacity: 0.6 } : null,
+          ]}
         >
-          <ScrollView
-            style={styles.screen}
-            contentContainerStyle={styles.container}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={isWeb ? "none" : "on-drag"}
-            onScrollBeginDrag={isWeb ? undefined : Keyboard.dismiss}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.headerBlock}>
-              <Text style={styles.title}>My profile</Text>
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.avatarImg} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarPlaceholderText}>
+                {uploadingPhoto ? "Uploading…" : "Add photo"}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+
+        <Text style={styles.displayName}>{displayName}</Text>
+
+        {statusInfo ? (
+          <View style={[styles.statusPill, { backgroundColor: statusInfo.color }]}>
+            <Text style={styles.statusPillText}>{statusInfo.label}</Text>
+          </View>
+        ) : null}
+
+        {statusInfo?.message ? (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
+          </View>
+        ) : null}
+
+        {isEmployer ? (
+          <View style={styles.accountCard}>
+            <Text style={styles.cardTitle}>Account</Text>
+            <Row label="Organization" value={profile?.orgName || "—"} />
+            <Row label="Member role" value={profile?.memberRole || "—"} />
+            <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+            <Pressable
+              onPress={onLogout}
+              disabled={loggingOut || saving}
+              style={({ pressed }) => [
+                styles.secondaryGhostButton,
+                (pressed || loggingOut) && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.secondaryGhostButtonText}>
+                {loggingOut ? "Logging out..." : "Log out"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {isWorker ? (
+          <>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First name</Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Enter your first name"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last name</Text>
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Enter your last name"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Preferred name (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={preferredName}
+                onChangeText={setPreferredName}
+                placeholder="Enter your preferred name"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email address</Text>
+              <TextInput
+                style={[styles.input, styles.inputDisabled]}
+                value={email}
+                editable={false}
+                selectTextOnFocus={false}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="(+64) 555-1234"
+                placeholderTextColor="#716C6C"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Address</Text>
+              <TextInput
+                style={styles.input}
+                value={streetAddress}
+                onChangeText={setStreetAddress}
+                placeholder="Street address"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+              <TextInput
+                style={[styles.input, styles.stackedInput]}
+                value={suburb}
+                onChangeText={setSuburb}
+                placeholder="Suburb"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+              <TextInput
+                style={[styles.input, styles.stackedInput]}
+                value={city}
+                onChangeText={setCity}
+                placeholder="City"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+              <TextInput
+                style={[styles.input, styles.stackedInput]}
+                value={postcode}
+                onChangeText={setPostcode}
+                placeholder="Postcode"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="characters"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Date of birth</Text>
+              <Pressable
+                onPress={() => { setDateField("dateOfBirth"); setDateModalOpen(true); }}
+                style={styles.selectInput}
+              >
+                <Text
+                  style={
+                    dateOfBirth ? styles.selectInputText : styles.selectInputPlaceholder
+                  }
+                >
+                  {dateOfBirth || "dd/mm/yyyy"}
+                </Text>
+                <Text style={styles.selectChevron}>▼</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Gender</Text>
+              <Pressable
+                onPress={() => { setSelectField("gender"); setSelectModalOpen(true); }}
+                style={styles.selectInput}
+              >
+                <Text style={gender ? styles.selectInputText : styles.selectInputPlaceholder}>
+                  {gender || "Select an option"}
+                </Text>
+                <Text style={styles.selectChevron}>▼</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nationality</Text>
+              <TextInput
+                style={styles.input}
+                value={nationality}
+                onChangeText={setNationality}
+                placeholder="Enter your nationality"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Passport number</Text>
+              <TextInput
+                style={styles.input}
+                value={passportNumber}
+                onChangeText={setPassportNumber}
+                placeholder="Enter your passport number"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="characters"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Passport issuing country</Text>
+              <TextInput
+                style={styles.input}
+                value={passportIssuingCountry}
+                onChangeText={setPassportIssuingCountry}
+                placeholder="Enter passport issuing country"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Emergency contact</Text>
+              <TextInput
+                style={styles.input}
+                value={emergencyContactName}
+                onChangeText={setEmergencyContactName}
+                placeholder="Enter contact name"
+                placeholderTextColor="#716C6C"
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Emergency contact phone number</Text>
+              <TextInput
+                style={styles.input}
+                value={emergencyContactPhone}
+                onChangeText={(v) => setEmergencyContactPhone(sanitizePhone(v))}
+                placeholder="Enter contact phone number"
+                placeholderTextColor="#716C6C"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Relation</Text>
+              <Pressable
+                onPress={() => { setSelectField("emergencyContactRelation"); setSelectModalOpen(true); }}
+                style={styles.selectInput}
+              >
+                <Text
+                  style={
+                    emergencyContactRelation
+                      ? styles.selectInputText
+                      : styles.selectInputPlaceholder
+                  }
+                >
+                  {emergencyContactRelation || "Select an option"}
+                </Text>
+                <Text style={styles.selectChevron}>▼</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.sectionSpacer} />
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.sectionLabel}>Attach ID</Text>
+              <Text style={styles.helper}>
+                *Passport, NZ driver licence or valid NZ ID
+              </Text>
+              <Text style={styles.helper}>
+                File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
+              </Text>
+
+              {idDocumentUrl ? (
+                <View style={styles.fileRow}>
+                  <Text style={styles.fileName}>{idDocumentFileName}</Text>
+                  <Pressable
+                    onPress={() => openUrl(idDocumentUrl)}
+                    style={styles.fileActionButton}
+                  >
+                    <Text style={styles.fileActionButtonText}>View</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.helper}>No ID document uploaded yet.</Text>
+              )}
+
+              <Pressable
+                onPress={onPickIdDocument}
+                disabled={uploadingIdDocument || saving}
+                style={({ pressed }) => [
+                  styles.uploadButton,
+                  (pressed || uploadingIdDocument) && { opacity: 0.9 },
+                  (uploadingIdDocument || saving) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.uploadButtonText}>
+                  {uploadingIdDocument ? "Uploading…" : "Upload ID"}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Right to work in NZ</Text>
+              <Pressable
+                onPress={() => { setSelectField("rightToWorkNz"); setSelectModalOpen(true); }}
+                style={styles.selectInput}
+              >
+                <Text
+                  style={
+                    rightToWorkNz ? styles.selectInputText : styles.selectInputPlaceholder
+                  }
+                >
+                  {rightToWorkNz || "Select an option"}
+                </Text>
+                <Text style={styles.selectChevron}>▼</Text>
+              </Pressable>
+            </View>
+
+            {requiresVisaExpiry ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Expiry date</Text>
+                <Pressable
+                  onPress={() => { setDateField("visaExpiryDate"); setDateModalOpen(true); }}
+                  style={styles.selectInput}
+                >
+                  <Text
+                    style={
+                      visaExpiryDate
+                        ? styles.selectInputText
+                        : styles.selectInputPlaceholder
+                    }
+                  >
+                    {visaExpiryDate || "dd/mm/yyyy"}
+                  </Text>
+                  <Text style={styles.selectChevron}>▼</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {requiresVisaExpiry ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.sectionLabel}>Visa document</Text>
+                <Text style={styles.helper}>
+                  Please upload a document that supports your visa status.
+                </Text>
+                <Text style={styles.helper}>
+                  File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
+                </Text>
+
+                {visaDocumentUrl ? (
+                  <View style={styles.fileRow}>
+                    <Text style={styles.fileName}>{visaDocumentFileName}</Text>
+                    <Pressable
+                      onPress={() => openUrl(visaDocumentUrl)}
+                      style={styles.fileActionButton}
+                    >
+                      <Text style={styles.fileActionButtonText}>View</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Text style={styles.helper}>No visa document uploaded yet.</Text>
+                )}
+
+                <Pressable
+                  onPress={onPickVisaDocument}
+                  disabled={uploadingVisaDocument || saving}
+                  style={({ pressed }) => [
+                    styles.uploadButton,
+                    { alignSelf: "flex-start", paddingHorizontal: 35 },
+                    (pressed || uploadingVisaDocument) && { opacity: 0.9 },
+                    (uploadingVisaDocument || saving) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.uploadButtonText}>
+                    {uploadingVisaDocument ? "Uploading…" : "Upload visa document"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Tell us about yourself</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={about}
+                onChangeText={setAbout}
+                placeholder="Write a short introduction about yourself"
+                placeholderTextColor="#716C6C"
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.referencesBlock}>
+              <Text style={styles.sectionLabel}>Add your work experience</Text>
+
+              {Array.isArray(references) && references.length > 0 ? (
+                <>
+                  {references.length < 2 ? (
+                    <Text style={styles.helper}>
+                      Please add at least 2 references. This helps employers trust your
+                      profile.
+                    </Text>
+                  ) : null}
+
+                  {references.map((r, idx) => (
+                    <View key={`ref-${idx}`} style={styles.referenceCard}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.referenceIndex}>Reference {idx + 1}</Text>
+                        <Text style={styles.referenceTitle}>{r?.name || "—"}</Text>
+                        {r?.company ? (
+                          <Text style={styles.referenceLine}>{r.company}</Text>
+                        ) : null}
+                        {r?.role ? <Text style={styles.referenceLine}>{r.role}</Text> : null}
+                        {r?.phone ? <Text style={styles.referenceLine}>{r.phone}</Text> : null}
+                        {r?.email ? <Text style={styles.referenceLine}>{r.email}</Text> : null}
+                        {r?.notes ? (
+                          <Text style={styles.referenceNotes}>{r.notes}</Text>
+                        ) : null}
+                      </View>
+
+                      <Pressable
+                        onPress={() => removeReference(idx)}
+                        style={styles.removeReferenceButton}
+                      >
+                        <Text style={styles.removeReferenceButtonText}>Remove</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </>
+              ) : (
+                <Text style={styles.helper}>No references yet.</Text>
+              )}
+
+              <Pressable
+                onPress={() => setRefModalOpen(true)}
+                style={styles.uploadButton}
+              >
+                <Text style={styles.uploadButtonText}>Add reference</Text>
+              </Pressable>
             </View>
 
             <Pressable
-              onPress={isWorker ? onPickPhoto : undefined}
-              disabled={!isWorker || uploadingPhoto}
-              style={({ pressed }) => [
-                styles.avatar,
-                (pressed || uploadingPhoto) && isWorker ? { opacity: 0.9 } : null,
-                uploadingPhoto ? { opacity: 0.6 } : null,
-              ]}
+              onPress={() => setCriminalCheckConsent((prev) => !prev)}
+              style={styles.checkboxRow}
             >
-              {photoUrl ? (
-                <Image source={{ uri: photoUrl }} style={styles.avatarImg} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarPlaceholderText}>
-                    {uploadingPhoto ? "Uploading…" : "Add photo"}
-                  </Text>
-                </View>
-              )}
+              <Text style={styles.checkboxLabel}>
+                I agree to have criminal records checked
+              </Text>
+              <View
+                style={[
+                  styles.checkbox,
+                  criminalCheckConsent && styles.checkboxChecked,
+                ]}
+              />
             </Pressable>
 
-            <Text style={styles.displayName}>{displayName}</Text>
-
-            {statusInfo ? (
-              <View style={[styles.statusPill, { backgroundColor: statusInfo.color }]}>
-                <Text style={styles.statusPillText}>{statusInfo.label}</Text>
-              </View>
-            ) : null}
-
-            {statusInfo?.message ? (
-              <View style={styles.statusBanner}>
-                <Text style={styles.statusBannerText}>{statusInfo.message}</Text>
-              </View>
-            ) : null}
-
-            {isEmployer ? (
-              <View style={styles.accountCard}>
-                <Text style={styles.cardTitle}>Account</Text>
-                <Row label="Organization" value={profile?.orgName || "—"} />
-                <Row label="Member role" value={profile?.memberRole || "—"} />
-                <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
-                <Pressable
-                  onPress={onLogout}
-                  disabled={loggingOut || saving}
-                  style={({ pressed }) => [
-                    styles.secondaryGhostButton,
-                    (pressed || loggingOut) && { opacity: 0.9 },
-                  ]}
-                >
-                  <Text style={styles.secondaryGhostButtonText}>
-                    {loggingOut ? "Logging out..." : "Log out"}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            {isWorker ? (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>First name</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    placeholder="Enter your first name"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Last name</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={lastName}
-                    onChangeText={setLastName}
-                    placeholder="Enter your last name"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Preferred name (optional)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={preferredName}
-                    onChangeText={setPreferredName}
-                    placeholder="Enter your preferred name"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Email address</Text>
-                  <TextInput
-                    style={[styles.input, styles.inputDisabled]}
-                    value={email}
-                    editable={false}
-                    selectTextOnFocus={false}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Phone</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="(+64) 555-1234"
-                    placeholderTextColor="#716C6C"
-                    keyboardType="phone-pad"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Address</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={streetAddress}
-                    onChangeText={setStreetAddress}
-                    placeholder="Street address"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={[styles.input, styles.stackedInput]}
-                    value={suburb}
-                    onChangeText={setSuburb}
-                    placeholder="Suburb"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={[styles.input, styles.stackedInput]}
-                    value={city}
-                    onChangeText={setCity}
-                    placeholder="City"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                  <TextInput
-                    style={[styles.input, styles.stackedInput]}
-                    value={postcode}
-                    onChangeText={setPostcode}
-                    placeholder="Postcode"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="characters"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Date of birth</Text>
-                  <Pressable
-                    onPress={() => openDateModal("dateOfBirth")}
-                    style={styles.selectInput}
-                  >
-                    <Text
-                      style={
-                        dateOfBirth ? styles.selectInputText : styles.selectInputPlaceholder
-                      }
-                    >
-                      {dateOfBirth || "dd/mm/yyyy"}
-                    </Text>
-                    <Text style={styles.selectChevron}>▼</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Gender</Text>
-                  <Pressable
-                    onPress={() => openSelectModal("gender", GENDER_OPTIONS)}
-                    style={styles.selectInput}
-                  >
-                    <Text style={gender ? styles.selectInputText : styles.selectInputPlaceholder}>
-                      {gender || "Select an option"}
-                    </Text>
-                    <Text style={styles.selectChevron}>▼</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nationality</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nationality}
-                    onChangeText={setNationality}
-                    placeholder="Enter your nationality"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Passport number</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={passportNumber}
-                    onChangeText={setPassportNumber}
-                    placeholder="Enter your passport number"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="characters"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Passport issuing country</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={passportIssuingCountry}
-                    onChangeText={setPassportIssuingCountry}
-                    placeholder="Enter passport issuing country"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Emergency contact</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={emergencyContactName}
-                    onChangeText={setEmergencyContactName}
-                    placeholder="Enter contact name"
-                    placeholderTextColor="#716C6C"
-                    autoCapitalize="words"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Emergency contact phone number</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={emergencyContactPhone}
-                    onChangeText={(v) => setEmergencyContactPhone(sanitizePhone(v))}
-                    placeholder="Enter contact phone number"
-                    placeholderTextColor="#716C6C"
-                    keyboardType="phone-pad"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Relation</Text>
-                  <Pressable
-                    onPress={() =>
-                      openSelectModal("emergencyContactRelation", RELATION_OPTIONS)
-                    }
-                    style={styles.selectInput}
-                  >
-                    <Text
-                      style={
-                        emergencyContactRelation
-                          ? styles.selectInputText
-                          : styles.selectInputPlaceholder
-                      }
-                    >
-                      {emergencyContactRelation || "Select an option"}
-                    </Text>
-                    <Text style={styles.selectChevron}>▼</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.sectionSpacer} />
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.sectionLabel}>Attach ID</Text>
-                  <Text style={styles.helper}>
-                    *Passport, NZ driver licence or valid NZ ID
-                  </Text>
-                  <Text style={styles.helper}>
-                    File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
-                  </Text>
-
-                  {idDocumentUrl ? (
-                    <View style={styles.fileRow}>
-                      <Text style={styles.fileName}>{idDocumentFileName}</Text>
-                      <Pressable
-                        onPress={() => openUrl(idDocumentUrl)}
-                        style={styles.fileActionButton}
-                      >
-                        <Text style={styles.fileActionButtonText}>View</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Text style={styles.helper}>No ID document uploaded yet.</Text>
-                  )}
-
-                  <Pressable
-                    onPress={onPickIdDocument}
-                    disabled={uploadingIdDocument || saving}
-                    style={({ pressed }) => [
-                      styles.uploadButton,
-                      (pressed || uploadingIdDocument) && { opacity: 0.9 },
-                      (uploadingIdDocument || saving) && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={styles.uploadButtonText}>
-                      {uploadingIdDocument ? "Uploading…" : "Upload ID"}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Right to work in NZ</Text>
-                  <Pressable
-                    onPress={() => openSelectModal("rightToWorkNz", RIGHT_TO_WORK_OPTIONS)}
-                    style={styles.selectInput}
-                  >
-                    <Text
-                      style={
-                        rightToWorkNz ? styles.selectInputText : styles.selectInputPlaceholder
-                      }
-                    >
-                      {rightToWorkNz || "Select an option"}
-                    </Text>
-                    <Text style={styles.selectChevron}>▼</Text>
-                  </Pressable>
-                </View>
-
-                {requiresVisaExpiry ? (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Expiry date</Text>
-                    <Pressable
-                      onPress={() => openDateModal("visaExpiryDate")}
-                      style={styles.selectInput}
-                    >
-                      <Text
-                        style={
-                          visaExpiryDate
-                            ? styles.selectInputText
-                            : styles.selectInputPlaceholder
-                        }
-                      >
-                        {visaExpiryDate || "dd/mm/yyyy"}
-                      </Text>
-                      <Text style={styles.selectChevron}>▼</Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Tell us about yourself</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea]}
-                    value={about}
-                    onChangeText={setAbout}
-                    placeholder="Write a short introduction about yourself"
-                    placeholderTextColor="#716C6C"
-                    multiline
-                    textAlignVertical="top"
-                  />
-                </View>
-
-                <View style={styles.referencesBlock}>
-                  <Text style={styles.sectionLabel}>Add your work experience</Text>
-
-                  {Array.isArray(references) && references.length > 0 ? (
-                    <>
-                      {references.length < 2 ? (
-                        <Text style={styles.helper}>
-                          Please add at least 2 references. This helps employers trust your
-                          profile.
-                        </Text>
-                      ) : null}
-
-                      {references.map((r, idx) => (
-                        <View key={`ref-${idx}`} style={styles.referenceCard}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.referenceIndex}>Reference {idx + 1}</Text>
-                            <Text style={styles.referenceTitle}>{r?.name || "—"}</Text>
-                            {r?.company ? (
-                              <Text style={styles.referenceLine}>{r.company}</Text>
-                            ) : null}
-                            {r?.role ? <Text style={styles.referenceLine}>{r.role}</Text> : null}
-                            {r?.phone ? <Text style={styles.referenceLine}>{r.phone}</Text> : null}
-                            {r?.email ? <Text style={styles.referenceLine}>{r.email}</Text> : null}
-                            {r?.notes ? (
-                              <Text style={styles.referenceNotes}>{r.notes}</Text>
-                            ) : null}
-                          </View>
-
-                          <Pressable
-                            onPress={() => removeReference(idx)}
-                            style={styles.removeReferenceButton}
-                          >
-                            <Text style={styles.removeReferenceButtonText}>Remove</Text>
-                          </Pressable>
-                        </View>
-                      ))}
-                    </>
-                  ) : (
-                    <Text style={styles.helper}>No references yet.</Text>
-                  )}
-
-                  <Pressable
-                    onPress={() => setRefModalOpen(true)}
-                    style={styles.uploadButton}
-                  >
-                    <Text style={styles.uploadButtonText}>Add reference</Text>
-                  </Pressable>
-                </View>
-
-                <Pressable
-                  onPress={() => setCriminalCheckConsent((prev) => !prev)}
-                  style={styles.checkboxRow}
-                >
-                  <Text style={styles.checkboxLabel}>
-                    I agree to have criminal records checked
-                  </Text>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      criminalCheckConsent && styles.checkboxChecked,
-                    ]}
-                  />
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setTermsAccepted((prev) => !prev)}
-                  style={styles.checkboxRow}
-                >
-                  <Text style={styles.checkboxLabel}>
-                    I accept all terms and conditions
-                  </Text>
-                  <View
-                    style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}
-                  />
-                </Pressable>
-
-                <View style={styles.resumeBlock}>
-                  <Text style={styles.sectionLabel}>Resume</Text>
-                  <Text style={styles.helper}>
-                    File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
-                  </Text>
-
-                  {cvUrl ? (
-                    <View style={styles.fileRow}>
-                      <Text style={styles.fileName}>{cvFileName}</Text>
-                      <Pressable
-                        onPress={() => openUrl(cvUrl)}
-                        style={styles.fileActionButton}
-                      >
-                        <Text style={styles.fileActionButtonText}>View</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Text style={styles.helper}>No resume uploaded yet.</Text>
-                  )}
-
-                  <Pressable
-                    onPress={onPickCv}
-                    disabled={uploadingCv || saving}
-                    style={({ pressed }) => [
-                      styles.uploadButton,
-                      (pressed || uploadingCv) && { opacity: 0.9 },
-                      (uploadingCv || saving) && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={styles.uploadButtonText}>
-                      {uploadingCv ? "Uploading…" : "Upload file"}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-
-                <View style={styles.actionsBlock}>
-                  <Pressable
-                    onPress={onSave}
-                    disabled={!canSave}
-                    style={({ pressed }) => [
-                      styles.primaryButton,
-                      (!canSave || pressed) && { opacity: 0.9 },
-                      !canSave && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={styles.primaryButtonText}>
-                      {saving ? "Saving..." : "Save Profile"}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={onBackToShifts}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      pressed && { opacity: 0.9 },
-                    ]}
-                  >
-                    <Text style={styles.secondaryButtonText}>Back to shifts</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={onLogout}
-                    disabled={loggingOut || saving}
-                    style={({ pressed }) => [
-                      styles.secondaryGhostButton,
-                      (pressed || loggingOut) && { opacity: 0.9 },
-                      (loggingOut || saving) && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={styles.secondaryGhostButtonText}>
-                      {loggingOut ? "Logging out..." : "Log out"}
-                    </Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : null}
-
-            <Modal
-              visible={dateModalOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setDateModalOpen(false)}
+            <Pressable
+              onPress={() => setTermsAccepted((prev) => !prev)}
+              style={styles.checkboxRow}
             >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalBox}>
-                  <Text style={styles.modalTitle}>
-                    {dateField === "visaExpiryDate"
-                      ? "Select expiry date"
-                      : "Select date of birth"}
-                  </Text>
+              <Text style={styles.checkboxLabel}>
+                I accept all terms and conditions
+              </Text>
+              <View
+                style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}
+              />
+            </Pressable>
 
-                  <View style={styles.modalPickerRow}>
-                    <View style={styles.modalPickerBox}>
-                      <Picker
-                        selectedValue={String(tmpDay)}
-                        onValueChange={(v) => setTmpDay(Number(v))}
-                      >
-                        {days.map((d) => (
-                          <Picker.Item key={`d-${d}`} label={d} value={Number(d)} />
-                        ))}
-                      </Picker>
-                    </View>
+            <View style={styles.resumeBlock}>
+              <Text style={styles.sectionLabel}>Resume</Text>
+              <Text style={styles.helper}>
+                File types: .pdf, .doc, .docx{"\n"}Max file size: 5MB
+              </Text>
 
-                    <View style={styles.modalPickerBox}>
-                      <Picker
-                        selectedValue={String(tmpMonth)}
-                        onValueChange={(v) => setTmpMonth(Number(v))}
-                      >
-                        {months.map((m) => (
-                          <Picker.Item key={`m-${m}`} label={m} value={Number(m)} />
-                        ))}
-                      </Picker>
-                    </View>
-
-                    <View style={styles.modalPickerBox}>
-                      <Picker
-                        selectedValue={String(tmpYear)}
-                        onValueChange={(v) => setTmpYear(Number(v))}
-                      >
-                        {(dateField === "visaExpiryDate" ? visaYears : years).map((y) => (
-                          <Picker.Item key={`y-${y}`} label={y} value={Number(y)} />
-                        ))}
-                      </Picker>
-                    </View>
-                  </View>
-
-                  <View style={styles.modalButtonsRow}>
-                    <Pressable
-                      onPress={() => setDateModalOpen(false)}
-                      style={[styles.modalBtn, styles.modalBtnGhost]}
-                    >
-                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={applyDateModal}
-                      style={[styles.modalBtn, styles.modalBtnPrimary]}
-                    >
-                      <Text style={styles.modalBtnPrimaryText}>Done</Text>
-                    </Pressable>
-                  </View>
+              {cvUrl ? (
+                <View style={styles.fileRow}>
+                  <Text style={styles.fileName}>{cvFileName}</Text>
+                  <Pressable
+                    onPress={() => openUrl(cvUrl)}
+                    style={styles.fileActionButton}
+                  >
+                    <Text style={styles.fileActionButtonText}>View</Text>
+                  </Pressable>
                 </View>
-              </View>
-            </Modal>
+              ) : (
+                <Text style={styles.helper}>No resume uploaded yet.</Text>
+              )}
 
-            <Modal
-              visible={selectModalOpen}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setSelectModalOpen(false)}
-            >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalBox}>
-                  <Text style={styles.modalTitle}>Select an option</Text>
+              <Pressable
+                onPress={onPickCv}
+                disabled={uploadingCv || saving}
+                style={({ pressed }) => [
+                  styles.uploadButton,
+                  (pressed || uploadingCv) && { opacity: 0.9 },
+                  (uploadingCv || saving) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.uploadButtonText}>
+                  {uploadingCv ? "Uploading…" : "Upload file"}
+                </Text>
+              </Pressable>
+            </View>
 
-                  <View style={styles.singlePickerBox}>
-                    <Picker
-                      selectedValue={tmpSelectedOption}
-                      onValueChange={(v) => setTmpSelectedOption(String(v))}
-                    >
-                      {selectOptions.map((option) => (
-                        <Picker.Item key={option} label={option} value={option} />
-                      ))}
-                    </Picker>
-                  </View>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-                  <View style={styles.modalButtonsRow}>
-                    <Pressable
-                      onPress={() => setSelectModalOpen(false)}
-                      style={[styles.modalBtn, styles.modalBtnGhost]}
-                    >
-                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                    </Pressable>
+            <View style={styles.actionsBlock}>
+              <Pressable
+                onPress={onSave}
+                disabled={!canSave}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  (!canSave || pressed) && { opacity: 0.9 },
+                  !canSave && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {saving ? "Saving..." : "Save Profile"}
+                </Text>
+              </Pressable>
 
-                    <Pressable
-                      onPress={applySelectModal}
-                      style={[styles.modalBtn, styles.modalBtnPrimary]}
-                    >
-                      <Text style={styles.modalBtnPrimaryText}>Done</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </Modal>
+              <Pressable
+                onPress={onBackToShifts}
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.9 },
+                ]}
+              >
+                <Text style={styles.secondaryButtonText}>Back to shifts</Text>
+              </Pressable>
 
-            <Modal
-              transparent
-              animationType="fade"
-              visible={refModalOpen}
-              onRequestClose={() => setRefModalOpen(false)}
-            >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalBox}>
-                  <Text style={styles.modalTitle}>Add reference</Text>
+              <Pressable
+                onPress={onLogout}
+                disabled={loggingOut || saving}
+                style={({ pressed }) => [
+                  styles.secondaryGhostButton,
+                  (pressed || loggingOut) && { opacity: 0.9 },
+                  (loggingOut || saving) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.secondaryGhostButtonText}>
+                  {loggingOut ? "Logging out..." : "Log out"}
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
 
-                  <TextInput
-                    style={styles.modalInput}
-                    value={refName}
-                    onChangeText={setRefName}
-                    placeholder="Reference name *"
-                  />
-                  <TextInput
-                    style={styles.modalInput}
-                    value={refCompany}
-                    onChangeText={setRefCompany}
-                    placeholder="Company / Organisation Name *"
-                  />
-                  <TextInput
-                    style={styles.modalInput}
-                    value={refRole}
-                    onChangeText={setRefRole}
-                    placeholder="Position Title *"
-                  />
-                  <TextInput
-                    style={styles.modalInput}
-                    value={refPhone}
-                    onChangeText={(v) => setRefPhone(sanitizePhone(v))}
-                    placeholder="Phone *"
-                    keyboardType="phone-pad"
-                    autoCapitalize="none"
-                  />
-                  <TextInput
-                    style={styles.modalInput}
-                    value={refEmail}
-                    onChangeText={setRefEmail}
-                    placeholder="Email *"
-                    autoCapitalize="none"
-                  />
-                  <TextInput
-                    style={[styles.modalInput, { height: 80 }]}
-                    value={refNotes}
-                    onChangeText={setRefNotes}
-                    placeholder="Notes"
-                    multiline
-                  />
+        <DatePickerModal
+          visible={dateModalOpen && dateField === "dateOfBirth"}
+          title="Select date of birth"
+          initialValue={dateOfBirth}
+          mode="past"
+          onClose={() => { setDateModalOpen(false); setDateField(null); }}
+          onConfirm={(value) => setDateOfBirth(value)}
+        />
 
-                  <View style={styles.modalButtonsRow}>
-                    <Pressable
-                      onPress={() => setRefModalOpen(false)}
-                      style={[styles.modalBtn, styles.modalBtnGhost]}
-                    >
-                      <Text style={styles.modalBtnGhostText}>Cancel</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={addReference}
-                      style={[styles.modalBtn, styles.modalBtnPrimary]}
-                    >
-                      <Text style={styles.modalBtnPrimaryText}>Add</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            </Modal>
-          </ScrollView>
-        </LinearGradient>
-      </InnerWrapper>
-    </OuterWrapper>
+        <DatePickerModal
+          visible={dateModalOpen && dateField === "visaExpiryDate"}
+          title="Select expiry date"
+          initialValue={visaExpiryDate}
+          mode="future"
+          onClose={() => { setDateModalOpen(false); setDateField(null); }}
+          onConfirm={(value) => setVisaExpiryDate(value)}
+        />
+
+        <SelectOptionModal
+          visible={selectModalOpen && selectField === "gender"}
+          title="Select gender"
+          options={GENDER_OPTIONS}
+          initialValue={gender}
+          onClose={() => { setSelectModalOpen(false); setSelectField(null); }}
+          onConfirm={(value) => setGender(value)}
+        />
+
+        <SelectOptionModal
+          visible={selectModalOpen && selectField === "emergencyContactRelation"}
+          title="Select relation"
+          options={RELATION_OPTIONS}
+          initialValue={emergencyContactRelation}
+          onClose={() => { setSelectModalOpen(false); setSelectField(null); }}
+          onConfirm={(value) => setEmergencyContactRelation(value)}
+        />
+
+        <SelectOptionModal
+          visible={selectModalOpen && selectField === "rightToWorkNz"}
+          title="Right to work in NZ"
+          options={RIGHT_TO_WORK_OPTIONS}
+          initialValue={rightToWorkNz}
+          onClose={() => { setSelectModalOpen(false); setSelectField(null); }}
+          onConfirm={(value) => setRightToWorkNz(value)}
+        />
+
+        <AddReferenceModal
+          visible={refModalOpen}
+          onClose={() => setRefModalOpen(false)}
+          onAdd={(reference) => {
+            setRefModalOpen(false);
+            saveReferences([...references, reference]);
+          }}
+        />
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
@@ -1740,96 +1534,5 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     fontSize: 13,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 18,
-  },
-
-  modalBox: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#FFFFFF",
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 10,
-    color: "#111827",
-  },
-
-  modalInput: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 8,
-    backgroundColor: "#FFFFFF",
-  },
-
-  modalPickerRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-
-  modalPickerBox: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-  },
-
-  singlePickerBox: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    marginTop: 8,
-  },
-
-  modalButtonsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
-
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  modalBtnGhost: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#FFFFFF",
-  },
-
-  modalBtnGhostText: {
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  modalBtnPrimary: {
-    backgroundColor: "#2563EB",
-  },
-
-  modalBtnPrimaryText: {
-    fontWeight: "800",
-    color: "#FFFFFF",
   },
 });

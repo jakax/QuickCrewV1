@@ -11,6 +11,8 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+import { Image } from "react-native";
+import WorkerProfileModal from "../../components/modals/WorkerProfileModal";
 
 import { db } from "../../../services/firebase/config";
 import { useSession } from "../../providers/SessionProvider";
@@ -28,6 +30,8 @@ export default function EmployerJobApplicants() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState(null);
   const [error, setError] = useState(null);
+
+  const [selectedWorker, setSelectedWorker] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -95,10 +99,15 @@ export default function EmployerJobApplicants() {
                 "";
 
             return {
-                ...a,
-                workerUid,
-                workerFullName: fullName,
-                workerPhone: phone,
+              ...a,
+              workerUid,
+              workerFullName: fullName,
+              workerPhone: phone,
+              about: data?.about || null,
+              cv: data?.cv || null,
+              references: data?.references || [],
+              rightToWorkNz: data?.rightToWorkNz || null,
+              visaExpiryDate: data?.visaExpiryDate || null,
             };
             } catch {
             return {
@@ -254,6 +263,13 @@ export default function EmployerJobApplicants() {
         <Text style={styles.name}>{item.workerFullName || "Unnamed worker"}</Text>
         {item.workerPhone ? <Text style={styles.sub}>{item.workerPhone}</Text> : null}
 
+        <Pressable
+          onPress={() => setSelectedWorker(item)}
+          style={styles.viewProfileBtn}
+        >
+          <Text style={styles.viewProfileBtnText}>View full profile</Text>
+        </Pressable>
+
         <View style={styles.actions}>
           <Pressable
             onPress={() => onReject(item)}
@@ -273,6 +289,11 @@ export default function EmployerJobApplicants() {
             </Text>
           </Pressable>
         </View>
+        <WorkerProfileModal
+          visible={!!selectedWorker}
+          worker={selectedWorker}
+          onClose={() => setSelectedWorker(null)}
+        />
       </View>
     );
   };
@@ -351,4 +372,19 @@ const styles = StyleSheet.create({
 
   btnTextPrimary: { color: "#fff", fontWeight: "800" },
   btnTextSecondary: { color: "#111827", fontWeight: "800" },
+
+  viewProfileBtn: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignSelf: "flex-start",
+  },
+  viewProfileBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
 });

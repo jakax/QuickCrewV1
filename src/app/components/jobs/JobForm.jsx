@@ -10,6 +10,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import ShiftTimeModal from "../modals/ShiftTimeModal"
+import DatePickerModal from "../modals/DatePickerModal";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
@@ -118,6 +120,7 @@ export default function JobForm({
   submitLabel,
   loading,
   disabled = false,
+  readOnly = false,
   error,
   onSubmit,
   onCancel,
@@ -134,35 +137,6 @@ export default function JobForm({
     year: today.getFullYear(),
     month: today.getMonth() + 1,
     day: today.getDate(),
-  };
-
-  const [tmpYear, setTmpYear] = useState(parsedInitialDate.year);
-  const [tmpMonth, setTmpMonth] = useState(parsedInitialDate.month);
-  const [tmpDay, setTmpDay] = useState(parsedInitialDate.day);
-
-  const openDateModal = () => {
-    const parsed = parseIsoDateParts(shiftDate) || {
-      year: today.getFullYear(),
-      month: today.getMonth() + 1,
-      day: today.getDate(),
-    };
-
-    setTmpYear(parsed.year);
-    setTmpMonth(parsed.month);
-    setTmpDay(parsed.day);
-    setDateModalOpen(true);
-  };
-
-  useEffect(() => {
-    const max = daysInMonth(tmpYear, tmpMonth);
-    if (tmpDay > max) setTmpDay(max);
-  }, [tmpYear, tmpMonth, tmpDay]);
-
-  const applyDateModal = () => {
-    const iso = composeIsoDate({ year: tmpYear, month: tmpMonth, day: tmpDay });
-    setShiftDate(iso);
-    if (localError) setLocalError(null);
-    setDateModalOpen(false);
   };
 
   const initialPrimary = initialValues?.primaryRoleKey || initialValues?.roleKey || "";
@@ -212,48 +186,6 @@ export default function JobForm({
   const [endMeridiem, setEndMeridiem] = useState(endPartsInit.meridiem);
 
   const [timeModalOpen, setTimeModalOpen] = useState(false);
-
-  const [tmpStartHour, setTmpStartHour] = useState(startHour);
-  const [tmpStartMinute, setTmpStartMinute] = useState(startMinute);
-  const [tmpStartMeridiem, setTmpStartMeridiem] = useState(startMeridiem);
-
-  const [tmpEndHour, setTmpEndHour] = useState(endHour);
-  const [tmpEndMinute, setTmpEndMinute] = useState(endMinute);
-  const [tmpEndMeridiem, setTmpEndMeridiem] = useState(endMeridiem);
-
-  const openTimeModal = () => {
-    setTmpStartHour(startHour);
-    setTmpStartMinute(startMinute);
-    setTmpStartMeridiem(startMeridiem);
-
-    setTmpEndHour(endHour);
-    setTmpEndMinute(endMinute);
-    setTmpEndMeridiem(endMeridiem);
-
-    setTimeModalOpen(true);
-  };
-
-  const applyTimeModal = () => {
-    setStartHour(tmpStartHour);
-    setStartMinute(tmpStartMinute);
-    setStartMeridiem(tmpStartMeridiem);
-
-    setEndHour(tmpEndHour);
-    setEndMinute(tmpEndMinute);
-    setEndMeridiem(tmpEndMeridiem);
-
-    if (localError) setLocalError(null);
-    setTimeModalOpen(false);
-  };
-
-  const hours = Array.from({ length: 12 }, (_, i) => String(i + 1));
-  const minutes = ["00", "15", "30", "45"];
-  const meridiems = ["AM", "PM"];
-
-  const months = Array.from({ length: 12 }, (_, i) => String(i + 1));
-  const years = Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() + i));
-  const maxDaysForTmp = daysInMonth(tmpYear, tmpMonth);
-  const days = Array.from({ length: maxDaysForTmp }, (_, i) => String(i + 1));
 
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
@@ -386,24 +318,28 @@ export default function JobForm({
       <TextInput
         value={title}
         onChangeText={(v) => {
+          if (readOnly) return;
           setTitle(v);
           if (localError) setLocalError(null);
         }}
-        style={styles.input}
+        style={[styles.input, readOnly && styles.inputDisabled]}
         placeholder="e.g. Bartender"
         placeholderTextColor="#716C6C"
+        editable={!readOnly}
       />
 
       <Text style={styles.label}>Location</Text>
       <TextInput
         value={location}
         onChangeText={(v) => {
+          if (readOnly) return;
           setLocation(v);
           if (localError) setLocalError(null);
         }}
-        style={styles.input}
+        style={[styles.input, readOnly && styles.inputDisabled]}
         placeholder="e.g. Queenstown"
         placeholderTextColor="#716C6C"
+        editable={!readOnly}
       />
 
       <Text style={styles.label}>Primary role *</Text>
@@ -426,6 +362,7 @@ export default function JobForm({
               <Pressable
                 key={`primary-${key}`}
                 onPress={() => {
+                  if (readOnly) return;
                   setPrimaryRoleKey(key);
                   setAlsoSkills((prev) => prev.filter((k) => normKey(k) !== key));
                   if (localError) setLocalError(null);
@@ -433,7 +370,8 @@ export default function JobForm({
                 style={({ pressed }) => [
                   styles.skillChip,
                   selected && styles.skillChipSelected,
-                  pressed && styles.pressed,
+                  pressed && !readOnly && styles.pressed,
+                  readOnly && styles.skillChipDisabled,
                 ]}
               >
                 <Text style={[styles.skillChipText, selected && styles.skillChipTextSelected]}>
@@ -464,6 +402,7 @@ export default function JobForm({
                 <Pressable
                   key={`also-${key}`}
                   onPress={() => {
+                    if (readOnly) return;
                     setAlsoSkills((prev) => {
                       const prevNorm = prev.map(normKey);
                       const exists = prevNorm.includes(key);
@@ -475,7 +414,7 @@ export default function JobForm({
                     });
                     if (localError) setLocalError(null);
                   }}
-                  disabled={isDisabled}
+                  disabled={isDisabled || readOnly}
                   style={({ pressed }) => [
                     styles.skillChip,
                     checked && styles.skillChipSelected,
@@ -506,11 +445,15 @@ export default function JobForm({
             If disabled, workers won’t see the rate, but it’s still stored.
           </Text>
         </View>
-        <ModernToggle value={showRate} onChange={setShowRate} />
+        <ModernToggle value={showRate} onChange={readOnly ? () => {} : setShowRate} />
       </View>
 
       <Text style={styles.label}>Shift date *</Text>
-      <TouchableOpacity activeOpacity={0.8} onPress={openDateModal} style={styles.summaryInput}>
+      <TouchableOpacity
+        activeOpacity={readOnly ? 1 : 0.8}
+        onPress={readOnly ? undefined : () => setDateModalOpen(true)}
+        style={[styles.summaryInput, readOnly && styles.inputDisabled]}
+      >
         <Text style={styles.summaryInputText}>
           {shiftDate ? formatIsoToDmy(shiftDate) : "Select date"}
         </Text>
@@ -518,7 +461,11 @@ export default function JobForm({
       </TouchableOpacity>
 
       <Text style={styles.label}>Shift time *</Text>
-      <TouchableOpacity activeOpacity={0.8} onPress={openTimeModal} style={styles.summaryInput}>
+      <TouchableOpacity
+        activeOpacity={readOnly ? 1 : 0.8}
+        onPress={readOnly ? undefined : () => setTimeModalOpen(true)}
+        style={[styles.summaryInput, readOnly && styles.inputDisabled]}
+      >
         <Text style={styles.summaryInputText}>
           {composeTimeParts({
             hour: startHour,
@@ -543,7 +490,7 @@ export default function JobForm({
         </View>
         <ModernToggle
           value={businessApprovalRequired}
-          onChange={setBusinessApprovalRequired}
+          onChange={readOnly ? () => {} : setBusinessApprovalRequired}
         />
       </View>
 
@@ -567,16 +514,18 @@ export default function JobForm({
       <TextInput
         value={description}
         onChangeText={(v) => {
+          if (readOnly) return;
           setDescription(v);
           if (localError) setLocalError(null);
         }}
-        style={[styles.input, styles.multiline]}
+        style={[styles.input, styles.multiline, readOnly && styles.inputDisabled]}
         placeholder="Optional notes for workers..."
         placeholderTextColor="#716C6C"
         multiline
+        editable={!readOnly}
       />
 
-      <View style={styles.buttonsRow}>
+      {!readOnly ? <View style={styles.buttonsRow}>
         {onCancel ? (
           <Pressable
             onPress={onCancel}
@@ -597,206 +546,36 @@ export default function JobForm({
         >
           <Text style={styles.primaryText}>{loading ? "Saving..." : submitLabel}</Text>
         </Pressable>
-      </View>
+      </View> : null}
 
-      <Modal
+      <DatePickerModal
         visible={dateModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDateModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select shift date</Text>
+        title="Select shift date"
+        initialValue={shiftDate}
+        mode="future"
+        format="iso"
+        onClose={() => setDateModalOpen(false)}
+        onConfirm={(iso) => {
+          setShiftDate(iso);
+          if (localError) setLocalError(null);
+        }}
+      />
 
-            <View style={styles.modalPickerRow}>
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={String(tmpDay)}
-                  onValueChange={(v) => setTmpDay(Number(v))}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {days.map((d) => (
-                    <Picker.Item key={`d-${d}`} label={d} value={d} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={String(tmpMonth)}
-                  onValueChange={(v) => setTmpMonth(Number(v))}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {months.map((m) => (
-                    <Picker.Item key={`m-${m}`} label={m} value={m} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
-                <Picker
-                  selectedValue={String(tmpYear)}
-                  onValueChange={(v) => setTmpYear(Number(v))}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {years.map((y) => (
-                    <Picker.Item key={`y-${y}`} label={y} value={y} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
-            <View style={styles.modalButtonsRow}>
-              <Pressable
-                onPress={() => setDateModalOpen(false)}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  styles.modalBtnGhost,
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={styles.modalBtnGhostText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={applyDateModal}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  styles.modalBtnPrimary,
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={styles.modalBtnPrimaryText}>Done</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
+      <ShiftTimeModal
         visible={timeModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setTimeModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Select shift time</Text>
-
-            <Text style={styles.modalSectionTitle}>Start</Text>
-            <View style={styles.modalPickerRow}>
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={tmpStartHour}
-                  onValueChange={setTmpStartHour}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {hours.map((h) => (
-                    <Picker.Item key={`m-sh-${h}`} label={h} value={h} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={tmpStartMinute}
-                  onValueChange={setTmpStartMinute}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {minutes.map((m) => (
-                    <Picker.Item key={`m-sm-${m}`} label={m} value={m} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
-                <Picker
-                  selectedValue={tmpStartMeridiem}
-                  onValueChange={setTmpStartMeridiem}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {meridiems.map((ap) => (
-                    <Picker.Item key={`m-sap-${ap}`} label={ap} value={ap} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
-            <Text style={[styles.modalSectionTitle, { marginTop: 12 }]}>End</Text>
-            <View style={styles.modalPickerRow}>
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={tmpEndHour}
-                  onValueChange={setTmpEndHour}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {hours.map((h) => (
-                    <Picker.Item key={`m-eh-${h}`} label={h} value={h} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={styles.modalPickerBox}>
-                <Picker
-                  selectedValue={tmpEndMinute}
-                  onValueChange={setTmpEndMinute}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {minutes.map((m) => (
-                    <Picker.Item key={`m-em-${m}`} label={m} value={m} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={[styles.modalPickerBox, styles.modalPickerSmall]}>
-                <Picker
-                  selectedValue={tmpEndMeridiem}
-                  onValueChange={setTmpEndMeridiem}
-                  style={styles.picker}
-                  itemStyle={styles.pickerItem}
-                >
-                  {meridiems.map((ap) => (
-                    <Picker.Item key={`m-eap-${ap}`} label={ap} value={ap} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
-            <View style={styles.modalButtonsRow}>
-              <Pressable
-                onPress={() => setTimeModalOpen(false)}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  styles.modalBtnGhost,
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={styles.modalBtnGhostText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={applyTimeModal}
-                style={({ pressed }) => [
-                  styles.modalBtn,
-                  styles.modalBtnPrimary,
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={styles.modalBtnPrimaryText}>Done</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        initialStart={{ hour: startHour, minute: startMinute, meridiem: startMeridiem }}
+        initialEnd={{ hour: endHour, minute: endMinute, meridiem: endMeridiem }}
+        onClose={() => setTimeModalOpen(false)}
+        onConfirm={({ start, end }) => {
+          setStartHour(start.hour);
+          setStartMinute(start.minute);
+          setStartMeridiem(start.meridiem);
+          setEndHour(end.hour);
+          setEndMinute(end.minute);
+          setEndMeridiem(end.meridiem);
+          if (localError) setLocalError(null);
+        }}
+      />
     </View>
   );
 }
@@ -946,96 +725,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginLeft: 10,
     fontSize: 14,
-  },
-
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    padding: 18,
-  },
-
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 10,
-  },
-
-  modalSectionTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#6B7280",
-    marginBottom: 6,
-  },
-
-  modalPickerRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  modalPickerBox: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#FAFAFA",
-  },
-
-  modalPickerSmall: {
-    flex: 0.9,
-  },
-
-  modalButtonsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 14,
-  },
-
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-
-  modalBtnGhost: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#FFFFFF",
-  },
-
-  modalBtnPrimary: {
-    backgroundColor: "#70A9DF",
-  },
-
-  modalBtnGhostText: {
-    color: "#111827",
-    fontWeight: "800",
-  },
-
-  modalBtnPrimaryText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-  },
-
-  picker: {
-    height: 180,
-  },
-
-  pickerItem: {
-    color: "#111827",
-    fontSize: 18,
-    fontWeight: "700",
   },
 
   hintText: {

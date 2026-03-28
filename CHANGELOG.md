@@ -374,3 +374,48 @@ This release focused on a broad UI adaptation across both worker and employer fl
 - Employer profile adaptation is still partial
 - Some screens still need a final visual review / polish pass
 - Additional refinement is planned in a follow-up pass, but this release represents a major prototype alignment milestone
+
+### New fixes, busimess rules and styles
+refactor(auth): fix Google and Apple Sign In flows
+
+- Fix Google idToken extraction from result.data instead of result
+- Fix duplicate GoogleSignin.signIn() call
+- Implement Apple Sign In with expo-apple-authentication
+- Auto-create Firestore worker profile on first social login
+- Sync Google profile photo and name on login
+- Add OAuthProvider credential flow for Apple/Firebase integration
+
+refactor(profile): extract modals and clean up component
+
+- Extract AddReferenceModal, DatePickerModal, SelectOptionModal as standalone components
+- Replace inline date/select pickers with reusable modal components
+- Fix date of birth picker reset bug
+- Add visa document upload for non-citizen/resident workers
+- Fix photo picker permissions with Settings redirect
+- Fix deprecated MediaTypeOptions usage
+- Remove unused imports, state, and styles
+
+refactor(jobs): add readOnly mode and modal extraction
+
+- Extract ShiftDateModal and ShiftTimeModal from JobForm
+- Replace ShiftDateModal with generic DatePickerModal (supports iso/dmy formats)
+- Add readOnly prop to JobForm — grays out all fields when job has applicants
+- Block job editing from JobsItem when hasPendingApplicants is true
+- Add readOnly banner in EmployerEditJob screen
+
+feat(applicants): show worker profile in review screen
+
+- Add WorkerProfileModal with CV link, references, about, right to work
+- Enrich applicant data with worker profile fields from Firestore
+- Add "View full profile" button per applicant card
+
+fix(scroll): improve keyboard and scroll behavior across screens
+
+- Remove nested ScrollView/KeyboardAvoidingView conflict in Profile
+- Use automaticallyAdjustKeyboardInsets on Profile ScrollView
+- Fix ScreenScrollKeyboard wrapper — remove behavior=height on Android
+- Fix gray strip below keyboard on Android
+
+refactor(utils): extract shared utilities
+
+- Move sanitizePhone and isValidEmailLoose to utils/formatters.js

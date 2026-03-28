@@ -79,3 +79,23 @@ export async function uploadUserIdDocument({ uid, uri, fileName, mimeType }) {
 
   return { url, path };
 }
+
+export async function uploadUserVisaDocument({ uid, uri, fileName, mimeType }) {
+  if (!uid) throw new Error("Missing uid");
+  if (!uri) throw new Error("Missing file uri");
+
+  const blob = await uriToBlob(uri);
+
+  const safeName = (fileName || "visa_document").replace(/[^\w.-]+/g, "_");
+  const path = `users/${uid}/visaDocument/${safeName}`;
+  const r = storageRef(storage, path);
+
+  await uploadBytes(r, blob, { contentType: mimeType || "application/pdf" });
+  const url = await getDownloadURL(r);
+
+  await updateUserProfile(uid, {
+    visaDocument: { url, path, fileName: safeName, uploadedAt: serverTimestamp() },
+  });
+
+  return { url, path };
+}

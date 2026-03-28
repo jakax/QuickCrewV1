@@ -22,6 +22,7 @@ import {
   getDocs,
   doc,
   runTransaction,
+  updateDoc,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
@@ -50,21 +51,52 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
+function isShiftExpired(app) {
+  const endAt = asDateMaybe(app?.shiftEndAt);
+  if (!endAt) return false;
+  return Date.now() > endAt.getTime();
+}
+
 function getVisualStatus(app) {
   const raw = String(app?.status || "").toLowerCase();
 
   if (raw === "cancelled") return "Cancelled";
-  if (raw === "rejected") return "Cancelled";
-  if (raw === "pending") return "Pending approval";
-  if (raw === "accepted") return "Active";
+  if (raw === "rejected") return "Rejected";
+  if (raw === "accepted") {
+    return isShiftExpired(app) ? "Expired" : "Active";
+  }
+  if (raw === "pending") {
+    return isShiftExpired(app) ? "Expired" : "Pending approval";
+  }
+  if (raw === "completed" || raw === "complete" || raw === "finished") {
+    return "Finished";
+  }
 
-  return "Pending approval";
+  return isShiftExpired(app) ? "Expired" : "Pending approval";
+}
+
+function canHideApplication(app) {
+  const raw = String(app?.status || "").toLowerCase();
+
+  if (raw === "cancelled" || raw === "rejected") return true;
+
+  if (raw === "completed" || raw === "complete" || raw === "finished") return true;
+
+  const startAt = asDateMaybe(app?.shiftStartAt);
+  if (startAt && startAt.getTime() < Date.now()) {
+    return true;
+  }
+
+  return false;
 }
 
 function getVisualStatusStyle(label) {
   if (label === "Cancelled") return styles.statusCancelled;
+  if (label === "Rejected") return styles.statusRejected;
+  if (label === "Expired") return styles.statusExpired;
   if (label === "Pending approval") return styles.statusPending;
   if (label === "Active") return styles.statusActive;
+  if (label === "Finished") return styles.statusOngoing;
   if (label === "ON GOING") return styles.statusOngoing;
   return styles.statusPending;
 }
@@ -81,6 +113,7 @@ export default function Applied() {
   const [search, setSearch] = useState("");
 
   const [cancelLoadingId, setCancelLoadingId] = useState(null);
+  const [hideLoadingId, setHideLoadingId] = useState(null);
 
   const canLoad = useMemo(() => !!uid, [uid]);
 
@@ -103,7 +136,10 @@ export default function Applied() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const next = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((item) => item?.hiddenByWorker !== true);
+
         setItems(next);
         setLoading(false);
       },
@@ -130,7 +166,10 @@ export default function Applied() {
       );
 
       const snap = await getDocs(q);
-      const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const next = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((item) => item?.hiddenByWorker !== true);
+
       setItems(next);
     } catch (e) {
       setLoadError(e?.message || "Could not refresh.");
@@ -240,12 +279,51 @@ export default function Applied() {
     }
   };
 
+  const hideApplication = async (app) => {
+    if (!uid || !app?.id) return;
+    if (!canHideApplication(app)) return;
+
+    const ok = await confirm({
+      title: "Remove application?",
+      message:
+        "This will remove the application from your list, but QuickCrew will still keep it for tracking purposes.",
+      confirmText: "Remove",
+      cancelText: "Cancel",
+      destructive: true,
+    });
+
+    if (!ok) return;
+
+    try {
+      setHideLoadingId(app.id);
+
+      const appRef = doc(db, "applications", app.id);
+
+      await updateDoc(appRef, {
+        hiddenByWorker: true,
+        hiddenByWorkerAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      await confirm({
+        title: "Could not remove",
+        message: e?.message || "Something went wrong.",
+        confirmText: "OK",
+        cancelText: "",
+        hideCancel: true,
+      });
+    } finally {
+      setHideLoadingId(null);
+    }
+  };
+
   const renderItem = ({ item }) => {
     const when =
       formatDateTime(item.shiftStartAt) ||
       (item.shiftDate && item.shiftTime ? `${item.shiftDate} - ${item.shiftTime}` : null);
 
     const cancellable = isCancellableUI(item);
+    const hideable = canHideApplication(item);
     const visualStatus = getVisualStatus(item);
 
     return (
@@ -262,23 +340,23 @@ export default function Applied() {
           {visualStatus}
         </Text>
 
-        {cancellable ? (
+        {hideable ? (
           <Pressable
             onPress={(e) => {
               e.stopPropagation();
-              cancelApplication(item);
+              hideApplication(item);
             }}
             style={styles.binButton}
-            disabled={cancelLoadingId === item.id}
+            disabled={hideLoadingId === item.id}
             hitSlop={10}
           >
-            <Ionicons name="trash-outline" size={18} color="#C0C0C0" />
+            <Ionicons
+              name={hideLoadingId === item.id ? "hourglass-outline" : "trash-outline"}
+              size={18}
+              color="#C0C0C0"
+            />
           </Pressable>
-        ) : (
-          <View style={styles.binButton}>
-            <Ionicons name="trash-outline" size={18} color="#C0C0C0" />
-          </View>
-        )}
+        ) : null}
       </Pressable>
     );
   };
@@ -322,12 +400,6 @@ export default function Applied() {
         <FlatList
           data={[]}
           ListHeaderComponent={Header}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No shifts yet</Text>
-              <Text style={styles.emptySubtitle}>Apply to a shift and it will appear here.</Text>
-            </View>
-          }
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           showsVerticalScrollIndicator={false}
@@ -414,7 +486,7 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
-    color: "#FFB800",
+    color: "#898989",
     fontSize: 13,
     fontFamily: "Inter",
     fontStyle: "italic",
@@ -473,6 +545,14 @@ const styles = StyleSheet.create({
 
   statusCancelled: {
     color: "#FF0404",
+  },
+
+  statusRejected: {
+    color: "#B91C1C",
+  },
+
+  statusExpired: {
+    color: "#9CA3AF",
   },
 
   statusPending: {

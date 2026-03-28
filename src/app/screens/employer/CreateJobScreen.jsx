@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingTop: 58,
-    paddingBottom: 110,
+    paddingBottom: 250,
     backgroundColor: "transparent",
   },
 

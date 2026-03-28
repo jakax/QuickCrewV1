@@ -158,11 +158,6 @@ export default function Saved() {
       >
         <View style={styles.emptyWrap}>
           {Header}
-          <View style={styles.emptyCard}>
-            <Text style={styles.subtitle}>
-              No saved jobs yet. Tap the bookmark on a job to save it for later.
-            </Text>
-          </View>
         </View>
       </LinearGradient>
     );
@@ -227,7 +222,7 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
-    color: "#FFB800",
+    color: "#898989",
     fontSize: 13,
     fontFamily: "Inter",
     fontStyle: "italic",

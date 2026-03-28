@@ -34,9 +34,10 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.222676842218-7i5s0fr44db0hsemur0dk2h8eolmlpvj"
+          "iosUrlScheme": "com.googleusercontent.apps.222676842218-t9o4l55u6mrl63qr6ts88dmqo2qdhuhe"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {

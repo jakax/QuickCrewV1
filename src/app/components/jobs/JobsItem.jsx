@@ -151,7 +151,10 @@ const JobsItem = ({
     if (onPressOverride) return onPressOverride(job);
 
     if (isEmployer) {
-      navigation.navigate("EmployerEditJob", { jobId: job.id });
+      navigation.navigate("EmployerEditJob", { 
+        jobId: job.id,
+        readOnly: hasPendingApplicants,
+      });
     } else {
       navigation.navigate("WorkerJobDetails", { jobId: job.id });
     }
@@ -198,16 +201,6 @@ const JobsItem = ({
         <Pressable
           onPress={(e) => {
             e.stopPropagation();
-            console.log("Bookmark pressed", {
-              jobId: job?.id,
-              title: job?.title,
-              saved,
-              canToggleBookmark,
-              status: job?.status,
-              alreadyApplied,
-              orgId: job?.orgId,
-            });
-
             if (!canToggleBookmark) return;
             handleBookmarkPress(e);
           }}

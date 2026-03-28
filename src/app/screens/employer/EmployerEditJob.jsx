@@ -37,6 +37,7 @@ export default function EmployerEditJob() {
   const confirm = useConfirm();
 
   const jobId = route?.params?.jobId;
+  const readOnly = route?.params?.readOnly === true;
 
   const [job, setJob] = useState(null);
   const [loadingJob, setLoadingJob] = useState(true);
@@ -209,6 +210,14 @@ export default function EmployerEditJob() {
               </View>
             </View>
 
+            {readOnly ? (
+              <View style={styles.readOnlyBanner}>
+                <Text style={styles.readOnlyBannerText}>
+                  This shift has applicants and cannot be edited.
+                </Text>
+              </View>
+            ) : null}
+
             {orgLoading ? (
               <View style={styles.infoBanner}>
                 <ActivityIndicator />
@@ -220,6 +229,7 @@ export default function EmployerEditJob() {
 
             <JobForm
               mode="edit"
+              readOnly={readOnly}
               initialValues={{
                 title: job.title || "",
                 location: job.location || "",
@@ -251,11 +261,11 @@ export default function EmployerEditJob() {
             <View style={styles.deleteBlock}>
               <Pressable
                 onPress={onDelete}
-                disabled={deleting || saving || loadingJob}
+                disabled={deleting || saving || loadingJob || readOnly}
                 style={({ pressed }) => [
                   styles.deleteButton,
-                  (deleting || saving || loadingJob) && styles.deleteButtonDisabled,
-                  pressed && !(deleting || saving || loadingJob) && styles.deleteButtonPressed,
+                  (deleting || saving || loadingJob || readOnly) && styles.deleteButtonDisabled,
+                  pressed && !(deleting || saving || loadingJob || readOnly) && styles.deleteButtonPressed,
                 ]}
               >
                 <Text style={styles.deleteButtonText}>
@@ -278,7 +288,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingTop: 58,
-    paddingBottom: 80,
+    paddingBottom: 250,
     backgroundColor: "transparent",
   },
 
@@ -387,5 +397,20 @@ const styles = StyleSheet.create({
     color: "#B91C1C",
     fontWeight: "700",
     fontSize: 15,
+  },
+
+  readOnlyBanner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  readOnlyBannerText: {
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

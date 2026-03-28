@@ -7,11 +7,14 @@ import {
   StyleSheet,
   Pressable,
   Image,
+  Platform,
 } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
 import {
   loginAndLoadProfile,
   loginWithGoogleAndLoadProfile,
+  loginWithAppleAndLoadProfile,
 } from "../../../services/auth.service";
 import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
 import {
@@ -51,6 +54,21 @@ const Login = ({ navigation }) => {
     }
   };
 
+  const onApplePress = async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      const profile = await loginWithAppleAndLoadProfile();
+      routeAfterAuthChange(profile);
+    } catch (e) {
+      if (e?.code !== "CANCELLED") {
+        setError(getFirebaseAuthErrorMessage(e));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <OuterWrapper style={styles.screen}>
       <InnerWrapper contentContainerStyle={styles.container}>
@@ -82,13 +100,17 @@ const Login = ({ navigation }) => {
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.socialButton, styles.appleButton, loading ? styles.buttonDisabled : null]}
-                disabled
-              >
-                <Text style={styles.socialIconApple}></Text>
-                <Text style={styles.socialButtonText}>Continue with Apple</Text>
-              </TouchableOpacity>
+              {/* Apple Sign In — only shown on iOS */}
+              {Platform.OS === "ios" && (
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.appleButton, loading ? styles.buttonDisabled : null]}
+                  onPress={onApplePress}
+                  disabled={loading}
+                >
+                  <Text style={styles.socialIconApple}></Text>
+                  <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.dividerWrap}>
@@ -155,15 +177,12 @@ const Login = ({ navigation }) => {
               <TouchableOpacity disabled>
                 <Text style={styles.legalLink}>security & Privacy</Text>
               </TouchableOpacity>
-
               <TouchableOpacity disabled>
                 <Text style={styles.legalLink}>Terms & Conditions</Text>
               </TouchableOpacity>
-
               <TouchableOpacity disabled>
                 <Text style={styles.legalLink}>Protect yourself online</Text>
               </TouchableOpacity>
-
               <TouchableOpacity disabled>
                 <Text style={styles.legalLink}>Contact</Text>
               </TouchableOpacity>

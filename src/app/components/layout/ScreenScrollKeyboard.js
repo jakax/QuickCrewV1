@@ -9,36 +9,34 @@ import {
 } from "react-native";
 
 export function OuterWrapper({ children, style }) {
-  const isWeb = Platform.OS === "web";
-
-  if (isWeb) {
+  if (Platform.OS === "web") {
     return <View style={style}>{children}</View>;
   }
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <KeyboardAvoidingView
-        style={style}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
-        {children}
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
+    <KeyboardAvoidingView
+      style={[{ flex: 1 }, style]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 30 : 0}
+    >
+      {children}
+    </KeyboardAvoidingView>
   );
 }
 
 export function InnerWrapper({ children, contentContainerStyle, style }) {
   return (
-    <ScrollView
-      style={style}
-      contentContainerStyle={[{ flexGrow: 1 }, contentContainerStyle]}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
-      onScrollBeginDrag={Platform.OS === "web" ? undefined : Keyboard.dismiss}
-      showsVerticalScrollIndicator={false}
-    >
-      {children}
-    </ScrollView>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <ScrollView
+        style={[{ flex: 1 }, style]}
+        contentContainerStyle={[{ flexGrow: 1 }, contentContainerStyle]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={true}
+      >
+        {children}
+      </ScrollView>
+    </TouchableWithoutFeedback>
   );
 }
