@@ -3,6 +3,7 @@ import EmployerEditJob from "../screens/employer/EmployerEditJob";
 import CreateJobScreen from "../screens/employer/CreateJobScreen";
 import EmployerTabs from "./EmployerTabs";
 import EmployerJobApplicants from "../screens/employer/EmployerJobApplicants";
+import AssignedWorkerDetails from "../screens/employer/AssignedWorkerDetails";
 
 const Stack = createNativeStackNavigator();
 
@@ -19,6 +20,11 @@ const EmployerRoot = () => {
       <Stack.Screen 
         name="CreateJob"
         component={CreateJobScreen}
+      />
+      <Stack.Screen
+        name="AssignedWorkerDetails"
+        component={AssignedWorkerDetails}
+        options={{ headerShown: true, title: "Assigned Worker" }}
       />
     </Stack.Navigator>
   );

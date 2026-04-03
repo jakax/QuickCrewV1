@@ -13,6 +13,7 @@ import RoleRatesCatalogScreen from "./features/catalog/RoleRatesCatalogScreen";
 import OrganizationsListScreen from "./features/orgs/OrganizationsListScreen";
 import OrganizationDetailScreen from "./features/orgs/OrganizationDetailScreen";
 import { PromptProvider } from "./providers/PromptProvider";
+import ShiftsScreen from "./features/shifts/ShiftsScreen";
 
 export default function App() {
   return (
@@ -44,6 +45,9 @@ export default function App() {
                 {/* Organizations */}
                 <Route path="organizations" element={<OrganizationsListScreen />} />
                 <Route path="organizations/:orgId" element={<OrganizationDetailScreen />} />
+
+                {/* Shifts */}
+                <Route path="shifts" element={<ShiftsScreen />} />
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>

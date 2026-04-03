@@ -115,9 +115,7 @@ const JobsItem = ({
   
   const canReviewApplicants =
   isEmployer &&
-  hasPendingApplicants &&
-  jobStatusRaw !== "filled" &&
-  jobStatusRaw !== "assigned" && 
+  (hasPendingApplicants || jobStatusRaw === "filled" || jobStatusRaw === "assigned") &&
   jobStatusRaw !== "cancelled" &&
   jobStatusRaw !== "cancel";
 
@@ -162,7 +160,11 @@ const JobsItem = ({
 
   const onReviewApplicantsPress = (e) => {
     e.stopPropagation();
-    navigation.navigate("EmployerJobApplicants", { jobId: job.id });
+    if (jobStatusRaw === "filled" || jobStatusRaw === "assigned") {
+      navigation.navigate("AssignedWorkerDetails", { jobId: job.id });
+    } else {
+      navigation.navigate("EmployerJobApplicants", { jobId: job.id });
+    }
   };
 
   const handleBookmarkPress = (e) => {
@@ -239,7 +241,11 @@ const JobsItem = ({
 
       {canReviewApplicants ? (
         <Pressable onPress={onReviewApplicantsPress} style={styles.reviewBtn}>
-          <StyledText style={styles.reviewBtnText}>Review applicants</StyledText>
+          <StyledText style={styles.reviewBtnText}>
+            {jobStatusRaw === "filled" || jobStatusRaw === "assigned"
+              ? "View assigned worker"
+              : "Review applicants"}
+          </StyledText>
         </Pressable>
       ) : null}
     </Pressable>

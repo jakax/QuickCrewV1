@@ -10,7 +10,8 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useSession } from "../../providers/SessionProvider";
-import { getJobById, updateJob, deleteJobIfAllowed } from "../../../services/jobs.service";
+import { getJobById, updateJob, deleteJobIfAllowed, cancelJob } from "../../../services/jobs.service";
+import { canCancelApplication } from "../../../utils/jobFormatters";
 import JobForm from "../../components/jobs/JobForm";
 import { useConfirm } from "../../providers/ConfirmProvider";
 
@@ -43,6 +44,7 @@ export default function EmployerEditJob() {
   const [loadingJob, setLoadingJob] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
 
   const [roleRates, setRoleRates] = useState({});
@@ -173,6 +175,41 @@ export default function EmployerEditJob() {
     }
   };
 
+  const onCancelShift = async () => {
+    if (isLateCancel) {
+      const ok = await confirm({
+        title: "⚠️ Late cancellation",
+        message:
+          "This shift starts in less than 4 hours. Cancelling now may incur a late cancellation fee as per QuickCrew policy. Do you still want to cancel?",
+        confirmText: "Yes, cancel shift",
+        cancelText: "Keep it",
+        destructive: true,
+      });
+      if (!ok) return;
+    } else {
+      const ok = await confirm({
+        title: "Cancel shift?",
+        message:
+          "This will cancel the shift and notify any assigned workers. The shift record will be kept for tracking purposes.",
+        confirmText: "Cancel shift",
+        cancelText: "Keep it",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+
+    try {
+      setError(null);
+      setCancelling(true);
+      await cancelJob({ jobId, expectedOrgId: orgId });
+      navigation.goBack();
+    } catch (e) {
+      setError(e?.message || "Could not cancel shift.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loadingJob) {
     return (
       <View style={styles.center}>
@@ -190,6 +227,10 @@ export default function EmployerEditJob() {
   }
 
   const legacy = parseShiftTimeLegacy(job.shiftTime || "");
+
+  const isLateCancel = job && readOnly ? !canCancelApplication(job, 4) : false;
+  const jobStatusRaw = String(job?.status || "").toLowerCase();
+  const isCancelled = jobStatusRaw === "cancelled" || jobStatusRaw === "cancel";
 
   return (
     <OuterWrapper style={styles.screen}>
@@ -259,19 +300,39 @@ export default function EmployerEditJob() {
             />
 
             <View style={styles.deleteBlock}>
-              <Pressable
-                onPress={onDelete}
-                disabled={deleting || saving || loadingJob || readOnly}
-                style={({ pressed }) => [
-                  styles.deleteButton,
-                  (deleting || saving || loadingJob || readOnly) && styles.deleteButtonDisabled,
-                  pressed && !(deleting || saving || loadingJob || readOnly) && styles.deleteButtonPressed,
-                ]}
-              >
-                <Text style={styles.deleteButtonText}>
-                  {deleting ? "Deleting..." : "Delete shift"}
-                </Text>
-              </Pressable>
+              {/* Cancel shift — always shown unless already cancelled */}
+              {!isCancelled ? (
+                <Pressable
+                  onPress={onCancelShift}
+                  disabled={cancelling || saving || loadingJob}
+                  style={({ pressed }) => [
+                    styles.cancelButton,
+                    (cancelling || saving || loadingJob) && styles.deleteButtonDisabled,
+                    pressed && !(cancelling || saving || loadingJob) && styles.deleteButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.cancelButtonText}>
+                    {cancelling ? "Cancelling..." : "Cancel shift"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {/* Delete shift — only shown if no applications exist */}
+              {!readOnly ? (
+                <Pressable
+                  onPress={onDelete}
+                  disabled={deleting || saving || loadingJob}
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    (deleting || saving || loadingJob) && styles.deleteButtonDisabled,
+                    pressed && !(deleting || saving || loadingJob) && styles.deleteButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    {deleting ? "Deleting..." : "Delete shift"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           </>
         </InnerWrapper>
@@ -412,5 +473,24 @@ const styles = StyleSheet.create({
     color: "#92400E",
     fontSize: 13,
     fontWeight: "600",
+  },
+
+  cancelButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 10,
+  },
+
+  cancelButtonText: {
+    color: "#C2410C",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });

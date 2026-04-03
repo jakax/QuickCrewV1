@@ -38,6 +38,9 @@ export default function AppLayout() {
         <SideItem to="/catalog/skills" label="Skills" />
         <SideItem to="/catalog/role-rates" label="Role Rates (legacy)" />
 
+        <div className="sideSection">Shifts</div>
+        <SideItem to="/shifts" label="Shifts" />
+
         <div style={{ flex: 1 }} />
 
         <div className="sideFooter">

@@ -427,3 +427,175 @@ export async function cancelJobApplication({
   await batch.commit();
   return { ok: true };
 }
+
+export async function cancelJobApplicationWithPenalty({
+  jobId,
+  workerUid,
+  isLateCancellation = false,
+}) {
+  if (!jobId) throw new Error("Missing jobId");
+  if (!workerUid) throw new Error("Missing workerUid");
+
+  const applicationId = `${jobId}_${workerUid}`;
+
+  const jobRef = doc(db, "jobs", jobId);
+  const appRef = doc(db, "applications", applicationId);
+  const userRef = doc(db, "users", workerUid);
+
+  const [jobSnap, appSnap, userSnap] = await Promise.all([
+    getDoc(jobRef),
+    getDoc(appRef),
+    getDoc(userRef),
+  ]);
+
+  if (!jobSnap.exists()) throw new Error("Job not found");
+  if (!appSnap.exists()) throw new Error("Application not found");
+  if (!userSnap.exists()) throw new Error("User profile not found");
+
+  const job = jobSnap.data();
+  const app = appSnap.data();
+  const user = userSnap.data();
+
+  const appWorker = app?.workerUid || app?.workerId;
+  if (appWorker && appWorker !== workerUid) {
+    throw new Error("You can only cancel your own application.");
+  }
+
+  const status = String(app?.status || "").toLowerCase();
+  const wasAccepted = status === "accepted";
+
+  if (status !== "pending" && status !== "accepted") {
+    throw new Error("Only pending or accepted applications can be cancelled.");
+  }
+
+  const batch = writeBatch(db);
+
+  // Update application
+  batch.update(appRef, {
+    status: "cancelled",
+    cancelledAt: serverTimestamp(),
+    isLateCancellation: isLateCancellation,
+    updatedAt: serverTimestamp(),
+  });
+
+  // If auto-assigned, reopen the job
+  if (wasAccepted) {
+    batch.update(jobRef, {
+      status: "open",
+      assignedWorkerUid: null,
+      assignedAt: null,
+      updatedAt: serverTimestamp(),
+    });
+
+    const assignmentRef = doc(db, "assignments", `${jobId}_${workerUid}`);
+    batch.delete(assignmentRef);
+  }
+
+  // Release day lock
+  const shiftDate = String(job?.shiftDate || "").trim();
+  if (shiftDate) {
+    const lockId = `${workerUid}_${shiftDate}`;
+    const lockRef = doc(db, "workerShiftDayLocks", lockId);
+    batch.delete(lockRef);
+  }
+
+  // Handle late cancellation penalty
+  if (isLateCancellation) {
+    const currentCount = typeof user?.lateCancellationCount === "number"
+      ? user.lateCancellationCount
+      : 0;
+    const newCount = currentCount + 1;
+
+    const userUpdate = {
+      lateCancellationCount: newCount,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (newCount >= 2) {
+      userUpdate.accountStatus = "suspended";
+    }
+
+    batch.update(userRef, userUpdate);
+  }
+
+  await batch.commit();
+
+  // Return suspension status so UI can react
+  const currentCount = typeof user?.lateCancellationCount === "number"
+    ? user.lateCancellationCount
+    : 0;
+  const willBeSuspended = isLateCancellation && (currentCount + 1) >= 2;
+
+  return { ok: true, willBeSuspended };
+}
+
+export async function cancelJob({ jobId, expectedOrgId }) {
+  if (!jobId) throw new Error("Missing jobId");
+
+  const jobRef = doc(db, "jobs", jobId);
+  const jobSnap = await getDoc(jobRef);
+
+  if (!jobSnap.exists()) throw new Error("Job not found.");
+
+  const job = jobSnap.data();
+
+  if (expectedOrgId && job?.orgId !== expectedOrgId) {
+    throw new Error("You don't have permission to cancel this job.");
+  }
+
+  const status = String(job?.status || "").toLowerCase();
+  if (status === "cancelled" || status === "cancel") {
+    throw new Error("This shift is already cancelled.");
+  }
+
+  await updateDoc(jobRef, {
+    status: "cancelled",
+    cancelledAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { ok: true };
+}
+
+export async function workerClockIn({ jobId, workerUid }) {
+  if (!jobId) throw new Error("Missing jobId");
+  if (!workerUid) throw new Error("Missing workerUid");
+
+  const assignmentId = `${jobId}_${workerUid}`;
+  const assignmentRef = doc(db, "assignments", assignmentId);
+  const snap = await getDoc(assignmentRef);
+
+  if (!snap.exists()) throw new Error("Assignment not found.");
+
+  const data = snap.data();
+  if (data?.workerClockIn) throw new Error("You have already clocked in.");
+
+  await updateDoc(assignmentRef, {
+    workerClockIn: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { ok: true };
+}
+
+export async function workerClockOut({ jobId, workerUid }) {
+  if (!jobId) throw new Error("Missing jobId");
+  if (!workerUid) throw new Error("Missing workerUid");
+
+  const assignmentId = `${jobId}_${workerUid}`;
+  const assignmentRef = doc(db, "assignments", assignmentId);
+  const snap = await getDoc(assignmentRef);
+
+  if (!snap.exists()) throw new Error("Assignment not found.");
+
+  const data = snap.data();
+  if (!data?.workerClockIn) throw new Error("You need to clock in first.");
+  if (data?.workerClockOut) throw new Error("You have already clocked out.");
+
+  await updateDoc(assignmentRef, {
+    workerClockOut: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  return { ok: true };
+}

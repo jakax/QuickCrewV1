@@ -14,7 +14,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Checkbox from "expo-checkbox";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { getJobById, cancelJobApplication } from "../../../services/jobs.service";
+import { 
+  getJobById, 
+  cancelJobApplicationWithPenalty, 
+  workerClockIn, 
+  workerClockOut 
+} from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift, canCancelApplication } from "../../../utils/jobFormatters";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { useSession } from "../../providers/SessionProvider";
@@ -28,9 +33,12 @@ import {
   Timestamp,
   runTransaction,
   collection,
+  updateDoc,
+  onSnapshot,
 } from "firebase/firestore";
 
-const HOURS_8_MS = 8 * 60 * 60 * 1000;
+const MINUTES_45_MS = 45 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function asDateMaybe(tsOrDate) {
   if (!tsOrDate) return null;
@@ -56,6 +64,12 @@ function hasAnySkillOverlap(workerSkills = [], requiredSkills = []) {
   return false;
 }
 
+function formatTimestamp(ts) {
+  if (!ts) return null;
+  const date = typeof ts.toDate === "function" ? ts.toDate() : new Date(ts);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 export default function WorkerJobDetails() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -71,7 +85,6 @@ export default function WorkerJobDetails() {
   const [userLoading, setUserLoading] = useState(true);
   const [userError, setUserError] = useState(null);
 
-  const [modalVisible, setModalVisible] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyError, setApplyError] = useState(null);
 
@@ -80,6 +93,11 @@ export default function WorkerJobDetails() {
   const [applicationStatus, setApplicationStatus] = useState(null); // "pending" | "cancelled" | ...
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  const [assignment, setAssignment] = useState(null);
+  const [clockInLoading, setClockInLoading] = useState(false);
+  const [clockOutLoading, setClockOutLoading] = useState(false);
+  const [clockError, setClockError] = useState(null);
 
   const [confirmNoCriminalRecord, setConfirmNoCriminalRecord] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
@@ -174,6 +192,22 @@ export default function WorkerJobDetails() {
     };
   }, [uid, jobId]);
 
+  useEffect(() => {
+    if (!uid || !jobId) return;
+
+    const assignmentRef = doc(db, "assignments", `${jobId}_${uid}`);
+
+    const unsub = onSnapshot(assignmentRef, (snap) => {
+      if (snap.exists()) {
+        setAssignment({ id: snap.id, ...snap.data() });
+      } else {
+        setAssignment(null);
+      }
+    });
+
+    return () => unsub();
+  }, [uid, jobId]);
+
   const hasActiveApplication = useMemo(() => {
     const st = String(applicationStatus || "").toLowerCase();
     return st === "pending" || st === "accepted";
@@ -190,6 +224,12 @@ export default function WorkerJobDetails() {
 
     if (userDoc.role !== "worker") return { canApply: false, reason: "Only workers can apply." };
     if (userDoc.isActive === false) return { canApply: false, reason: "Your account is inactive." };
+    if (userDoc.accountStatus === "suspended") {
+      return {
+        canApply: false,
+        reason: "Your account is suspended. Please contact quickcrewnz@gmail.com to reinstate it.",
+      };
+    }
     if (String(userDoc.approvalStatus || "").toUpperCase() !== "APPROVED") {
       return { canApply: false, reason: "Your profile is not approved yet." };
     }
@@ -210,7 +250,7 @@ export default function WorkerJobDetails() {
 
     const diff = startAt.getTime() - Date.now();
     if (diff <= 0) return { canApply: false, reason: "This shift has already started." };
-    if (diff < HOURS_8_MS) return { canApply: false, reason: "Applications close 8 hours before the shift starts." };
+    if (diff < MINUTES_45_MS) return { canApply: false, reason: "Applications close 45 minutes before the shift starts." };
 
     if (alreadyApplied) return { canApply: false, reason: "Applied ✅" };
 
@@ -220,8 +260,29 @@ export default function WorkerJobDetails() {
   const canCancel = useMemo(() => {
     if (!job) return false;
     if (!hasActiveApplication) return false;
-    return canCancelApplication(job, 4);
+    return canCancelApplication(job, 0);
   }, [job, hasActiveApplication]);
+
+  const isLateCancellation = useMemo(() => {
+    if (!job) return false;
+    return !canCancelApplication(job, 6); // less than 6 hours = late
+  }, [job]);
+
+  const canClockIn = useMemo(() => {
+    if (!assignment) return false;
+    if (assignment?.workerClockIn) return false;
+    const shiftStartAt = asDateMaybe(job?.shiftStartAt);
+    if (!shiftStartAt) return false;
+    const diff = shiftStartAt.getTime() - Date.now();
+    return diff <= ONE_HOUR_MS && diff > -(4 * ONE_HOUR_MS);
+  }, [assignment, job]);
+
+  const canClockOut = useMemo(() => {
+    if (!assignment) return false;
+    if (!assignment?.workerClockIn) return false;
+    if (assignment?.workerClockOut) return false;
+    return true;
+  }, [assignment]);
 
   const onCancelApplication = async () => {
     try {
@@ -229,34 +290,95 @@ export default function WorkerJobDetails() {
 
       if (!uid || !jobId) throw new Error("Missing session/job.");
 
-      if (!canCancel) {
-        setCancelError("You can only cancel 4+ hours before the shift starts.");
-        return;
+      if (isLateCancellation) {
+        // Late cancellation — show penalty warning first
+        const ok = await confirm({
+          title: "⚠️ Late cancellation warning",
+          message:
+            "Cancelling with less than 6 hours before the shift starts counts as a late cancellation. If this happens twice, your account will be suspended and you will need to contact quickcrewnz@gmail.com to reinstate it. Do you still want to cancel?",
+          confirmText: "Yes, cancel",
+          cancelText: "Keep it",
+          destructive: true,
+        });
+
+        if (!ok) return;
+      } else {
+        // Normal cancellation — simple confirm
+        const ok = await confirm({
+          title: "Cancel application?",
+          message:
+            "This will withdraw your application and the shift will be available for other workers.",
+          confirmText: "Cancel application",
+          cancelText: "Keep it",
+          destructive: true,
+        });
+
+        if (!ok) return;
       }
-
-      const ok = await confirm({
-        title: "Cancel application?",
-        message: "This will withdraw your application and the shift will be available for other workers.",
-        confirmText: "Cancel application",
-        cancelText: "Keep it",
-        destructive: true,
-      });
-
-      if (!ok) return;
 
       setCancelLoading(true);
 
-      await cancelJobApplication({
+      const result = await cancelJobApplicationWithPenalty({
         jobId,
         workerUid: uid,
-        minHoursBeforeStart: 4,
+        isLateCancellation,
       });
 
       setApplicationStatus("cancelled");
+
+      if (result.willBeSuspended) {
+        await confirm({
+          title: "Account suspended",
+          message:
+            "Your account has been suspended due to repeated late cancellations. Please contact quickcrewnz@gmail.com to reinstate your account.",
+          confirmText: "OK",
+          cancelText: "Close",
+          destructive: true,
+        });
+      }
+
     } catch (e) {
       setCancelError(e?.message || "Could not cancel application.");
     } finally {
       setCancelLoading(false);
+    }
+  };
+
+  const onClockIn = async () => {
+    try {
+      setClockError(null);
+      const ok = await confirm({
+        title: "Clock in?",
+        message: "This will mark the start of your shift. Make sure you clock out when you finish.",
+        confirmText: "Clock in",
+        cancelText: "Cancel",
+      });
+      if (!ok) return;
+      setClockInLoading(true);
+      await workerClockIn({ jobId, workerUid: uid });
+    } catch (e) {
+      setClockError(e?.message || "Could not clock in.");
+    } finally {
+      setClockInLoading(false);
+    }
+  };
+
+  const onClockOut = async () => {
+    try {
+      setClockError(null);
+      const ok = await confirm({
+        title: "Clock out?",
+        message: "This will mark the end of your shift.",
+        confirmText: "Clock out",
+        cancelText: "Cancel",
+      });
+      if (!ok) return;
+      setClockOutLoading(true);
+      await workerClockOut({ jobId, workerUid: uid });
+    } catch (e) {
+      setClockError(e?.message || "Could not clock out.");
+    } finally {
+      setClockOutLoading(false);
     }
   };
 
@@ -265,7 +387,12 @@ export default function WorkerJobDetails() {
       setApplyError(null);
 
       if (!applyEligibility.canApply) {
-        setModalVisible(true);
+        await confirm({
+          title: "Can't apply",
+          message: applyEligibility.reason || "You can't apply to this shift right now.",
+          confirmText: "OK",
+          cancelText: "Close",
+        });
         return;
       }
 
@@ -322,7 +449,7 @@ export default function WorkerJobDetails() {
 
         const diff = startAt.getTime() - Date.now();
         if (diff <= 0) throw new Error("This shift has already started.");
-        if (diff < HOURS_8_MS) throw new Error("Applications close 8 hours before the shift starts.");
+        if (diff < MINUTES_45_MS) throw new Error("Applications close 45 minutes before the shift starts.");
 
         const existing = await tx.get(appRef);
         if (existing.exists()) {
@@ -383,8 +510,8 @@ export default function WorkerJobDetails() {
         const approvalRequired = jobData?.businessApprovalRequired === true;
 
         if (!approvalRequired) {
-          // Create assignment record
-          const assignmentRef = doc(collection(db, "assignments"));
+          // Create assignment record with deterministic ID
+          const assignmentRef = doc(db, "assignments", `${jobId}_${uid}`);
 
           // Update job to assigned immediately
           tx.update(jobRef, {
@@ -418,8 +545,17 @@ export default function WorkerJobDetails() {
       });
 
       const approvalRequired = job?.businessApprovalRequired === true;
-      setApplicationStatus(approvalRequired ? "pending" : "accepted");
-      setModalVisible(true);
+      const newStatus = approvalRequired ? "pending" : "accepted";
+      setApplicationStatus(newStatus);
+
+      await confirm({
+        title: newStatus === "accepted" ? "Shift assigned ✅" : "Application submitted",
+        message: newStatus === "accepted"
+          ? "You're assigned to this shift. You can view it in your Applied tab."
+          : "Application submitted. Waiting for employer approval. You can view it in your Applied tab.",
+        confirmText: "OK",
+        cancelText: "Close",
+      });
     } catch (e) {
       setApplyError(e?.message || "Could not apply.");
     } finally {
@@ -587,8 +723,10 @@ export default function WorkerJobDetails() {
                   {cancelLoading
                     ? "Cancelling..."
                     : canCancel
-                    ? "Cancel application"
-                    : "Cancel locked (under 4h)"}
+                    ? isLateCancellation
+                      ? "Cancel (late — penalty applies)"
+                      : "Cancel application"
+                    : "Cannot cancel"}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -607,43 +745,60 @@ export default function WorkerJobDetails() {
             >
               <Text style={styles.backToShiftsButtonText}>Back to shifts</Text>
             </TouchableOpacity>
+
+            {assignment ? (
+              <View style={styles.clockSection}>
+                <Text style={styles.clockTitle}>Shift time tracking</Text>
+
+                {assignment.workerClockIn && assignment.workerClockOut ? (
+                  <View style={styles.clockSummary}>
+                    <Text style={styles.clockSummaryText}>
+                      Clock in: {formatTimestamp(assignment.workerClockIn)}
+                    </Text>
+                    <Text style={styles.clockSummaryText}>
+                      Clock out: {formatTimestamp(assignment.workerClockOut)}
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {clockError ? (
+                      <Text style={styles.inlineError}>{clockError}</Text>
+                    ) : null}
+
+                    {canClockIn ? (
+                      <TouchableOpacity
+                        style={[styles.clockInButton, clockInLoading && styles.applyButtonDisabled]}
+                        onPress={onClockIn}
+                        disabled={clockInLoading}
+                      >
+                        <Text style={styles.clockButtonText}>
+                          {clockInLoading ? "Clocking in..." : "Clock in"}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    {canClockOut ? (
+                      <>
+                        <Text style={styles.clockSummaryText}>
+                          Clocked in at: {formatTimestamp(assignment.workerClockIn)}
+                        </Text>
+                        <TouchableOpacity
+                          style={[styles.clockOutButton, clockOutLoading && styles.applyButtonDisabled]}
+                          onPress={onClockOut}
+                          disabled={clockOutLoading}
+                        >
+                          <Text style={styles.clockButtonText}>
+                            {clockOutLoading ? "Clocking out..." : "Clock out"}
+                          </Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            ) : null}
           </View>
         </ScrollView>
-
-        <Modal transparent animationType="fade" visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalMessage}>
-                {alreadyApplied
-                  ? applicationStatus === "accepted"
-                    ? "You’re assigned to this shift ✅ You can view it in your Applied tab."
-                    : "Application submitted. Waiting for employer approval. You can view it in your Applied tab."
-                  : applyEligibility.reason || "You can’t apply to this shift right now."}
-              </Text>
-
-              <View style={styles.modalButtonsRow}>
-                <Pressable
-                  style={[styles.modalButton, styles.okButton]}
-                  onPress={() => {
-                    setModalVisible(false);
-                    const notApproved = String(userDoc?.approvalStatus || "").toUpperCase() !== "APPROVED";
-                    const inactive = userDoc?.isActive === false;
-
-                    if (notApproved || inactive) {
-                      navigation.navigate("Profile");
-                    }
-                  }}
-                >
-                  <Text style={styles.okButtonText}>OK</Text>
-                </Pressable>
-
-                <Pressable style={[styles.modalButton, styles.modalGhost]} onPress={() => setModalVisible(false)}>
-                  <Text style={styles.modalGhostText}>Close</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -919,58 +1074,48 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+  clockSection: {
+    alignSelf: "stretch",
+    backgroundColor: "rgba(255,255,255,0.91)",
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
+    padding: 14,
+    gap: 10,
+  },
+  clockTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#434343",
+    fontFamily: "Inter",
+  },
+  clockSummary: {
+    gap: 6,
+  },
+  clockSummaryText: {
+    fontSize: 13,
+    color: "#434343",
+    fontFamily: "Inter",
+    fontWeight: "500",
+  },
+  clockInButton: {
+    height: 40,
+    backgroundColor: "#45BF79",
+    borderRadius: 63,
     justifyContent: "center",
     alignItems: "center",
   },
-
-  modalBox: {
-    width: "80%",
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
+  clockOutButton: {
+    height: 40,
+    backgroundColor: "#2A5FB3",
+    borderRadius: 63,
+    justifyContent: "center",
     alignItems: "center",
   },
-
-  modalMessage: {
-    fontSize: 16,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-
-  modalButtonsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-
-  modalButton: {
-    flex: 1,
-    paddingVertical: 10,
-    marginHorizontal: 5,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  okButton: {
-    backgroundColor: "#2563EB",
-  },
-
-  okButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  modalGhost: {
-    backgroundColor: "#F3F4F6",
-  },
-
-  modalGhostText: {
-    color: "#111827",
-    fontSize: 16,
-    fontWeight: "700",
+  clockButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
   },
 });

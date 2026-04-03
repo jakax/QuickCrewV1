@@ -56,13 +56,19 @@ export function formatPostedAgo(createdAt) {
 
 export function getShiftStartMs(job) {
   try {
-    const sd = job?.shiftDate;
-    const st = (job?.shiftTime || "").trim();
+    // ✅ Always prefer shiftStartAt — this is the source of truth set by createJob/updateJob
+    const shiftStartAt = job?.shiftStartAt;
 
-    // Firestore Timestamp
-    if (sd && typeof sd.toDate === "function") {
-      return sd.toDate().getTime();
+    if (shiftStartAt && typeof shiftStartAt.toDate === "function") {
+      return shiftStartAt.toDate().getTime();
     }
+    if (shiftStartAt instanceof Date) {
+      return shiftStartAt.getTime();
+    }
+
+    // Fallback to shiftDate + shiftStartTime strings
+    const sd = job?.shiftDate;
+    const st = (job?.shiftStartTime || job?.shiftTime || "").trim();
 
     // JS Date
     if (sd instanceof Date) return sd.getTime();
