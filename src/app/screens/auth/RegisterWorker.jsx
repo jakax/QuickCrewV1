@@ -18,6 +18,7 @@ const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 export default function RegisterWorker({ navigation }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState(null);
@@ -29,12 +30,13 @@ export default function RegisterWorker({ navigation }) {
     return (
       fullName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
+      email.trim() === confirmEmail.trim() &&
       password.length >= 6 &&
       confirmPassword.length >= 6 &&
       password === confirmPassword &&
       !isSubmitting
     );
-  }, [fullName, email, password, confirmPassword, isSubmitting]);
+  }, [fullName, email, confirmEmail, password, confirmPassword, isSubmitting]);
 
   const onRegister = async () => {
     const ok = await confirm({
@@ -66,6 +68,10 @@ export default function RegisterWorker({ navigation }) {
     }
     if (password !== confirmPassword) {
       setError("Passwords don't match. Please confirm your password.");
+      return;
+    }
+    if (mail !== confirmEmail.trim()) {
+      setError("Email addresses don't match. Please confirm your email.");
       return;
     }
 
@@ -137,7 +143,7 @@ export default function RegisterWorker({ navigation }) {
               <TextInput
                 value={fullName}
                 onChangeText={setFullName}
-                placeholder="e.g., Jacob Baron"
+                placeholder="e.g., John Doe"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="words"
                 style={styles.input}
@@ -151,7 +157,22 @@ export default function RegisterWorker({ navigation }) {
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="jacob@baron.com"
+                placeholder="John.doe@example.com"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm email address</Text>
+              <TextInput
+                value={confirmEmail}
+                onChangeText={setConfirmEmail}
+                placeholder="John.doe@example.com"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="none"
                 keyboardType="email-address"

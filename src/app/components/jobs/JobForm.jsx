@@ -126,6 +126,8 @@ export default function JobForm({
   onCancel,
   roleRates,
 }) {
+
+  const SHOW_RATE_BLOCK = false;
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [shiftDate, setShiftDate] = useState(initialValues?.shiftDate ?? "");
@@ -328,6 +330,21 @@ export default function JobForm({
         editable={!readOnly}
       />
 
+      <Text style={styles.label}>Description</Text>
+      <TextInput
+        value={description}
+        onChangeText={(v) => {
+          if (readOnly) return;
+          setDescription(v);
+          if (localError) setLocalError(null);
+        }}
+        style={[styles.input, styles.multiline, readOnly && styles.inputDisabled]}
+        placeholder="Optional notes for workers..."
+        placeholderTextColor="#716C6C"
+        multiline
+        editable={!readOnly}
+      />
+
       <Text style={styles.label}>Location</Text>
       <TextInput
         value={location}
@@ -445,7 +462,7 @@ export default function JobForm({
             If disabled, workers won’t see the rate, but it’s still stored.
           </Text>
         </View>
-        <ModernToggle value={showRate} onChange={readOnly ? () => {} : setShowRate} />
+        <ModernToggle value={showRate} onChange={readOnly ? () => { } : setShowRate} />
       </View>
 
       <Text style={styles.label}>Shift date *</Text>
@@ -490,40 +507,30 @@ export default function JobForm({
         </View>
         <ModernToggle
           value={businessApprovalRequired}
-          onChange={readOnly ? () => {} : setBusinessApprovalRequired}
+          onChange={readOnly ? () => { } : setBusinessApprovalRequired}
         />
       </View>
 
-      <Text style={styles.label}>Rate per hour</Text>
-      <TextInput
-        value={rateText}
-        style={[styles.input, styles.inputDisabled]}
-        placeholder="—"
-        placeholderTextColor="#716C6C"
-        editable={false}
-        selectTextOnFocus={false}
-      />
-      {!rateText ? (
-        <Text style={styles.hintText}>Select a primary role to see the agreed rate.</Text>
-      ) : null}
-      <Text style={styles.hintText}>
-        Rate is set by your company agreement for this role.
-      </Text>
+      {SHOW_RATE_BLOCK && (
+        <View>
+          <Text style={styles.label}>Rate per hour</Text>
+          <TextInput
+            value={rateText}
+            style={[styles.input, styles.inputDisabled]}
+            placeholder="—"
+            placeholderTextColor="#716C6C"
+            editable={false}
+            selectTextOnFocus={false}
+          />
+          {!rateText ? (
+            <Text style={styles.hintText}>Select a primary role to see the agreed rate.</Text>
+          ) : null}
+          <Text style={styles.hintText}>
+            Rate is set by your company agreement for this role.
+          </Text>
+        </View>
+      )}
 
-      <Text style={styles.label}>Description</Text>
-      <TextInput
-        value={description}
-        onChangeText={(v) => {
-          if (readOnly) return;
-          setDescription(v);
-          if (localError) setLocalError(null);
-        }}
-        style={[styles.input, styles.multiline, readOnly && styles.inputDisabled]}
-        placeholder="Optional notes for workers..."
-        placeholderTextColor="#716C6C"
-        multiline
-        editable={!readOnly}
-      />
 
       {!readOnly ? <View style={styles.buttonsRow}>
         {onCancel ? (
@@ -531,7 +538,7 @@ export default function JobForm({
             onPress={onCancel}
             style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.9 }]}
           >
-            <Text style={styles.secondaryText}>Cancel</Text>
+            <Text style={styles.secondaryText}>Discard</Text>
           </Pressable>
         ) : null}
 

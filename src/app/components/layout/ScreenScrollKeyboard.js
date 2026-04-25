@@ -13,15 +13,8 @@ export function OuterWrapper({ children, style }) {
     return <View style={style}>{children}</View>;
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={[{ flex: 1 }, style]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 30 : 0}
-    >
-      {children}
-    </KeyboardAvoidingView>
-  );
+  // Android y iOS: solo un View, automaticallyAdjustKeyboardInsets lo maneja
+  return <View style={[{ flex: 1 }, style]}>{children}</View>;
 }
 
 export function InnerWrapper({ children, contentContainerStyle, style }) {

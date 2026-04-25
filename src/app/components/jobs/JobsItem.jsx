@@ -6,6 +6,7 @@ import { isNewShift, formatShiftDate, formatPostedAgo } from "../../../utils/job
 import { useSession } from "../../providers/SessionProvider";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { Ionicons } from "@expo/vector-icons";
+import { asDateMaybe } from "../../../utils/dateUtils";
 
 import { db } from "../../../services/firebase/config";
 import {
@@ -19,12 +20,12 @@ import {
 } from "firebase/firestore";
 
 const JobsItem = ({
-    job,
-    forceBookmarked,
-    onBookmarkPress,
-    onPressOverride,
-    hasPendingApplicantsOverride,
-  }) => {
+  job,
+  forceBookmarked,
+  onBookmarkPress,
+  onPressOverride,
+  hasPendingApplicantsOverride,
+}) => {
   const navigation = useNavigation();
 
   const { isSaved, toggleSaved } = useSavedJobs();
@@ -35,7 +36,14 @@ const JobsItem = ({
 
   const freshnessTimestamp = job?.updatedAt || job?.createdAt;
 
-  const showNew = useMemo(() => isNewShift(freshnessTimestamp, 3), [freshnessTimestamp]);
+  const showNew = useMemo(() => {
+    const isOpen = String(job?.status || "").toLowerCase() === "open";
+    if (!isOpen) return false;
+    if (!isNewShift(freshnessTimestamp, 3)) return false;
+    const shiftStart = asDateMaybe(job?.shiftStartAt);
+    if (!shiftStart || shiftStart < new Date()) return false;
+    return true;
+  }, [freshnessTimestamp, job?.status, job?.shiftStartAt]);
 
   const dateText = formatShiftDate(job?.shiftDate);
   const timeText = job?.shiftTime || "";
@@ -112,35 +120,50 @@ const JobsItem = ({
   }, [isEmployer, job?.id, hasPendingApplicantsOverride]);
 
   const jobStatusRaw = String(job?.status || "").toLowerCase();
-  
+
   const canReviewApplicants =
-  isEmployer &&
-  (hasPendingApplicants || jobStatusRaw === "filled" || jobStatusRaw === "assigned") &&
-  jobStatusRaw !== "cancelled" &&
-  jobStatusRaw !== "cancel";
+    isEmployer &&
+    (hasPendingApplicants || jobStatusRaw === "filled" || jobStatusRaw === "assigned") &&
+    jobStatusRaw !== "cancelled" &&
+    jobStatusRaw !== "cancel" &&
+    jobStatusRaw !== "finished";
 
   const employerStatusLabel = useMemo(() => {
     if (!isEmployer) return null;
 
     if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
-    if (jobStatusRaw === "filled") return "Filled";
-    if (jobStatusRaw === "assigned") return "Assigned";
+    if (jobStatusRaw === "finished") return "Finished";
 
-    // If there are pending applicants, employer needs to take action
+    // Expired check before any other active state
+    const shiftStart = asDateMaybe(job?.shiftStartAt);
+    if (shiftStart && shiftStart < new Date()) return "Expired";
+
+    if (jobStatusRaw === "filled" || jobStatusRaw === "assigned") {
+      const now = Date.now();
+      const startAt = asDateMaybe(job?.shiftStartAt);
+      const endAt = asDateMaybe(job?.shiftEndAt);
+      if (startAt && endAt && now >= startAt.getTime() && now <= endAt.getTime()) {
+        return "Ongoing";
+      }
+      return "Filled";
+    }
+
     if (hasPendingApplicants) return "Applied (approval needed)";
 
-    // Default
     return "Open";
-  }, [isEmployer, jobStatusRaw, hasPendingApplicants]);
+  }, [isEmployer, jobStatusRaw, hasPendingApplicants, job?.shiftStartAt, job?.shiftEndAt]);
 
   const employerStatusStyle = useMemo(() => {
     if (!isEmployer) return null;
 
     const label = employerStatusLabel;
 
+    if (label === "Expired") return styles.statusExpired;
     if (label === "Applied (approval needed)") return styles.statusApplied;
     if (label === "Assigned") return styles.statusAssigned;
     if (label === "Filled") return styles.statusFilled;
+    if (label === "Ongoing") return styles.statusOngoing;
+    if (label === "Finished") return styles.statusFinished;
     if (label === "Cancelled") return styles.statusCancelled;
     return styles.statusOpen;
   }, [isEmployer, employerStatusLabel]);
@@ -149,7 +172,7 @@ const JobsItem = ({
     if (onPressOverride) return onPressOverride(job);
 
     if (isEmployer) {
-      navigation.navigate("EmployerEditJob", { 
+      navigation.navigate("EmployerEditJob", {
         jobId: job.id,
         readOnly: hasPendingApplicants,
       });
@@ -396,11 +419,30 @@ const styles = StyleSheet.create({
     borderColor: "#A7F3D0",
   },
 
+  statusOngoing: {
+    backgroundColor: "#FFF3CD",
+    color: "#856404",
+    borderWidth: 1,
+    borderColor: "#FFE083",
+  },
+  statusFinished: {
+    backgroundColor: "#FFE5E5",
+    color: "#CC0000",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+
   statusCancelled: {
     backgroundColor: "#FEF2F2",
     color: "#B91C1C",
     borderWidth: 1,
     borderColor: "#FECACA",
+  },
+  statusExpired: {
+    backgroundColor: "#111827",
+    color: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#374151",
   },
 
   reviewBtn: {

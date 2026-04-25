@@ -3,11 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   Linking,
+  TextInput,
 } from "react-native";
+import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -60,6 +61,7 @@ export default function AssignedWorkerDetails() {
   const [worker, setWorker] = useState(null);
   const [assignment, setAssignment] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [employerComment, setEmployerComment] = useState("");
 
   // Employer time modal state
   const [timeModalOpen, setTimeModalOpen] = useState(false);
@@ -98,22 +100,31 @@ export default function AssignedWorkerDetails() {
           const aData = { id: assignmentSnap.id, ...assignmentSnap.data() };
           if (mounted) setAssignment(aData);
 
-          // Pre-fill employer times if already set
-          if (aData.employerClockIn) {
-            const parts = parseTimeParts(formatTimestamp(aData.employerClockIn));
-            if (parts) {
-              setEmpClockInHour(parts.hour);
-              setEmpClockInMinute(parts.minute);
-              setEmpClockInMeridiem(parts.meridiem);
-            }
+          // Priority: employer submitted → worker times → shift times
+          const resolveClockIn = aData.employerClockIn
+            ? formatTimestamp(aData.employerClockIn)
+            : aData.workerClockIn
+              ? formatTimestamp(aData.workerClockIn)
+              : jobData.shiftStartTime || null;
+
+          const resolveClockOut = aData.employerClockOut
+            ? formatTimestamp(aData.employerClockOut)
+            : aData.workerClockOut
+              ? formatTimestamp(aData.workerClockOut)
+              : jobData.shiftEndTime || null;
+
+          const inParts = parseTimeParts(resolveClockIn);
+          if (inParts && mounted) {
+            setEmpClockInHour(inParts.hour);
+            setEmpClockInMinute(inParts.minute);
+            setEmpClockInMeridiem(inParts.meridiem);
           }
-          if (aData.employerClockOut) {
-            const parts = parseTimeParts(formatTimestamp(aData.employerClockOut));
-            if (parts) {
-              setEmpClockOutHour(parts.hour);
-              setEmpClockOutMinute(parts.minute);
-              setEmpClockOutMeridiem(parts.meridiem);
-            }
+
+          const outParts = parseTimeParts(resolveClockOut);
+          if (outParts && mounted) {
+            setEmpClockOutHour(outParts.hour);
+            setEmpClockOutMinute(outParts.minute);
+            setEmpClockOutMeridiem(outParts.meridiem);
           }
         }
 
@@ -169,7 +180,7 @@ export default function AssignedWorkerDetails() {
 
     const ok = await confirm({
       title: "Submit hours?",
-      message: "QuickCrew will review the submitted hours. Once submitted, these times cannot be modified.",
+      message: "Once submitted, these times cannot be modified.",
       confirmText: "Submit",
       cancelText: "Cancel",
     });
@@ -182,6 +193,7 @@ export default function AssignedWorkerDetails() {
       const workerUid = job?.filledByUid || job?.assignedWorkerUid;
       const assignmentId = `${jobId}_${workerUid}`;
       const assignmentRef = doc(db, "assignments", assignmentId);
+      const jobRef = doc(db, "jobs", jobId);
 
       await updateDoc(assignmentRef, {
         employerClockIn: clockIn,
@@ -191,6 +203,12 @@ export default function AssignedWorkerDetails() {
         hoursSubmittedBy: employerUid,
         updatedAt: serverTimestamp(),
         reviewStatus: "pending",
+        employerComment: employerComment.trim() || null,
+      });
+
+      await updateDoc(jobRef, {
+        status: "finished",
+        updatedAt: serverTimestamp(),
       });
 
       setAssignment((prev) => ({
@@ -199,6 +217,8 @@ export default function AssignedWorkerDetails() {
         employerClockOut: clockOut,
         hoursSubmitted: true,
       }));
+
+      setJob((prev) => ({ ...prev, status: "finished" }));
 
       await confirm({
         title: "Hours submitted ✅",
@@ -252,145 +272,167 @@ export default function AssignedWorkerDetails() {
   });
 
   return (
-    <LinearGradient
-      colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
-      locations={[0, 0.45, 1]}
-      style={styles.screen}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
+    <OuterWrapper style={styles.screen}>
+      <LinearGradient
+        colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+        locations={[0, 0.45, 1]}
+        style={styles.screen}
       >
-        {/* Shift info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Shift</Text>
-          <Text style={styles.sectionValue}>{job.title || "—"}</Text>
-          {job.shiftDate ? (
-            <Text style={styles.sectionSub}>{job.shiftDate} · {job.shiftTime || ""}</Text>
-          ) : null}
-        </View>
+        <InnerWrapper contentContainerStyle={styles.container}>
+          {/* Shift info */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Shift</Text>
+            <Text style={styles.sectionValue}>{job.title || "—"}</Text>
+            {job.shiftDate ? (
+              <Text style={styles.sectionSub}>{job.shiftDate} · {job.shiftTime || ""}</Text>
+            ) : null}
+          </View>
 
-        {/* Worker info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Worker</Text>
-          <Text style={styles.sectionValue}>
-            {worker?.fullName || worker?.firstName
-              ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
-              : "Unknown worker"}
-          </Text>
-          {worker?.phone ? (
-            <Text style={styles.sectionSub}>{worker.phone}</Text>
-          ) : null}
-          {worker?.email ? (
-            <Text style={styles.sectionSub}>{worker.email}</Text>
-          ) : null}
-          {worker?.rightToWorkNz ? (
-            <Text style={styles.sectionSub}>Right to work: {worker.rightToWorkNz}</Text>
-          ) : null}
-          {worker?.about ? (
-            <Text style={styles.sectionBody}>{worker.about}</Text>
-          ) : null}
-          {worker?.cv?.url ? (
-            <Pressable onPress={() => openUrl(worker.cv.url)} style={styles.cvButton}>
-              <Text style={styles.cvButtonText}>📄 {worker.cv?.fileName || "View CV"}</Text>
-            </Pressable>
-          ) : null}
-        </View>
+          {/* Worker info */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Worker</Text>
+            <Text style={styles.sectionValue}>
+              {worker?.fullName || worker?.firstName
+                ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
+                : "Unknown worker"}
+            </Text>
+            {worker?.phone ? (
+              <Text style={styles.sectionSub}>{worker.phone}</Text>
+            ) : null}
+            {worker?.email ? (
+              <Text style={styles.sectionSub}>{worker.email}</Text>
+            ) : null}
+            {worker?.rightToWorkNz ? (
+              <Text style={styles.sectionSub}>Right to work: {worker.rightToWorkNz}</Text>
+            ) : null}
+            {worker?.about ? (
+              <Text style={styles.sectionBody}>{worker.about}</Text>
+            ) : null}
+            {worker?.cv?.url ? (
+              <Pressable onPress={() => openUrl(worker.cv.url)} style={styles.cvButton}>
+                <Text style={styles.cvButtonText}>📄 {worker.cv?.fileName || "View CV"}</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
-        {/* Worker clock in/out */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Worker time tracking</Text>
-          {workerDidNotClock ? (
-            <View style={styles.noClockBanner}>
-              <Text style={styles.noClockText}>
-                Worker did not clock in or clock out for this shift.
-              </Text>
-            </View>
-          ) : (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Comments <Text style={styles.optional}>(optional)</Text></Text>
+            <Text style={styles.sectionHint}>
+              Leave a note for QuickCrew about this worker's performance.
+            </Text>
+            {!hoursSubmitted ? (
+              <TextInput
+                style={styles.commentInput}
+                value={employerComment}
+                onChangeText={setEmployerComment}
+                placeholder="Add a comment..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                maxLength={500}
+                scrollEnabled={true}
+              />
+            ) : assignment?.employerComment ? (
+              <Text style={styles.commentDisplay}>{assignment.employerComment}</Text>
+            ) : (
+              <Text style={styles.commentEmpty}>No comment left.</Text>
+            )}
+          </View>
+
+          {/* Worker clock in/out */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Worker time tracking</Text>
+            {workerDidNotClock ? (
+              <View style={styles.noClockBanner}>
+                <Text style={styles.noClockText}>
+                  Worker did not clock in or clock out for this shift.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.timeRow}>
+                <View style={styles.timeBox}>
+                  <Text style={styles.timeLabel}>Clock in</Text>
+                  <Text style={styles.timeValue}>{workerClockInTime || "—"}</Text>
+                </View>
+                <View style={styles.timeBox}>
+                  <Text style={styles.timeLabel}>Clock out</Text>
+                  <Text style={styles.timeValue}>{workerClockOutTime || "—"}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Employer clock in/out */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Your time record</Text>
+            <Text style={styles.sectionHint}>
+              Enter the actual hours worked as confirmed by you.
+            </Text>
+
             <View style={styles.timeRow}>
               <View style={styles.timeBox}>
                 <Text style={styles.timeLabel}>Clock in</Text>
-                <Text style={styles.timeValue}>{workerClockInTime || "—"}</Text>
+                <Text style={styles.timeValue}>
+                  {hoursSubmitted
+                    ? assignment?.employerClockIn || "—"
+                    : employerClockInDisplay || "—"}
+                </Text>
               </View>
               <View style={styles.timeBox}>
                 <Text style={styles.timeLabel}>Clock out</Text>
-                <Text style={styles.timeValue}>{workerClockOutTime || "—"}</Text>
+                <Text style={styles.timeValue}>
+                  {hoursSubmitted
+                    ? assignment?.employerClockOut || "—"
+                    : employerClockOutDisplay || "—"}
+                </Text>
               </View>
             </View>
-          )}
-        </View>
 
-        {/* Employer clock in/out */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Your time record</Text>
-          <Text style={styles.sectionHint}>
-            Enter the actual hours worked as confirmed by you.
-          </Text>
-
-          <View style={styles.timeRow}>
-            <View style={styles.timeBox}>
-              <Text style={styles.timeLabel}>Clock in</Text>
-              <Text style={styles.timeValue}>
-                {hoursSubmitted
-                  ? assignment?.employerClockIn || "—"
-                  : employerClockInDisplay || "—"}
-              </Text>
-            </View>
-            <View style={styles.timeBox}>
-              <Text style={styles.timeLabel}>Clock out</Text>
-              <Text style={styles.timeValue}>
-                {hoursSubmitted
-                  ? assignment?.employerClockOut || "—"
-                  : employerClockOutDisplay || "—"}
-              </Text>
-            </View>
+            {!hoursSubmitted ? (
+              <Pressable
+                onPress={() => setTimeModalOpen(true)}
+                style={styles.editTimesButton}
+              >
+                <Text style={styles.editTimesButtonText}>Edit times</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.submittedBanner}>
+                <Text style={styles.submittedBannerText}>
+                  ✅ Hours submitted. QuickCrew will review this information.
+                </Text>
+              </View>
+            )}
           </View>
 
+          {/* Submit button */}
           {!hoursSubmitted ? (
             <Pressable
-              onPress={() => setTimeModalOpen(true)}
-              style={styles.editTimesButton}
+              onPress={onSubmitHours}
+              disabled={submitting}
+              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
             >
-              <Text style={styles.editTimesButtonText}>Edit times</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.submittedBanner}>
-              <Text style={styles.submittedBannerText}>
-                ✅ Hours submitted. QuickCrew will review this information.
+              <Text style={styles.submitButtonText}>
+                {submitting ? "Submitting..." : "Submit hours to QuickCrew"}
               </Text>
-            </View>
-          )}
-        </View>
+            </Pressable>
+          ) : null}
+        </InnerWrapper>
 
-        {/* Submit button */}
-        {!hoursSubmitted ? (
-          <Pressable
-            onPress={onSubmitHours}
-            disabled={submitting}
-            style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-          >
-            <Text style={styles.submitButtonText}>
-              {submitting ? "Submitting..." : "Submit hours to QuickCrew"}
-            </Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
-
-      <ShiftTimeModal
-        visible={timeModalOpen}
-        initialStart={{ hour: empClockInHour, minute: empClockInMinute, meridiem: empClockInMeridiem }}
-        initialEnd={{ hour: empClockOutHour, minute: empClockOutMinute, meridiem: empClockOutMeridiem }}
-        onClose={() => setTimeModalOpen(false)}
-        onConfirm={({ start, end }) => {
-          setEmpClockInHour(start.hour);
-          setEmpClockInMinute(start.minute);
-          setEmpClockInMeridiem(start.meridiem);
-          setEmpClockOutHour(end.hour);
-          setEmpClockOutMinute(end.minute);
-          setEmpClockOutMeridiem(end.meridiem);
-        }}
-      />
-    </LinearGradient>
+        <ShiftTimeModal
+          visible={timeModalOpen}
+          initialStart={{ hour: empClockInHour, minute: empClockInMinute, meridiem: empClockInMeridiem }}
+          initialEnd={{ hour: empClockOutHour, minute: empClockOutMinute, meridiem: empClockOutMeridiem }}
+          onClose={() => setTimeModalOpen(false)}
+          onConfirm={({ start, end }) => {
+            setEmpClockInHour(start.hour);
+            setEmpClockInMinute(start.minute);
+            setEmpClockInMeridiem(start.meridiem);
+            setEmpClockOutHour(end.hour);
+            setEmpClockOutMinute(end.minute);
+            setEmpClockOutMeridiem(end.meridiem);
+          }}
+        />
+      </LinearGradient>
+    </OuterWrapper>
   );
 }
 
@@ -543,5 +585,35 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "700",
+  },
+  optional: {
+    color: "#9CA3AF",
+    fontWeight: "400",
+    fontSize: 12,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    fontFamily: "Inter",
+    color: "#111827",
+    height: 120,
+    textAlignVertical: "top",
+    marginTop: 8,
+  },
+  commentDisplay: {
+    fontSize: 14,
+    fontFamily: "Inter",
+    color: "#111827",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  commentEmpty: {
+    fontSize: 13,
+    fontFamily: "Inter",
+    color: "#9CA3AF",
+    marginTop: 8,
   },
 });

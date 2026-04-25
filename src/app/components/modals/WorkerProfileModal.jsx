@@ -8,8 +8,11 @@ import {
   Pressable,
   Linking,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function WorkerProfileModal({ visible, onClose, worker }) {
+  const insets = useSafeAreaInsets();
+
   if (!worker) return null;
 
   const openCv = async () => {
@@ -118,7 +121,10 @@ export default function WorkerProfileModal({ visible, onClose, worker }) {
             </View>
           </ScrollView>
 
-          <Pressable onPress={onClose} style={styles.doneBtn}>
+          <Pressable
+            onPress={onClose}
+            style={[styles.doneBtn, { marginBottom: insets.bottom > 0 ? insets.bottom : 12 }]}
+          >
             <Text style={styles.doneBtnText}>Close</Text>
           </Pressable>
         </View>

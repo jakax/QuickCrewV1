@@ -225,10 +225,10 @@ export default function Profile() {
   }, [rightToWorkNz]);
 
   const canSave = useMemo(() => {
-  if (!uid) return false;
-  if (saving || loggingOut) return false;
-  return true;
-}, [uid, saving, loggingOut]);
+    if (!uid) return false;
+    if (saving || loggingOut) return false;
+    return true;
+  }, [uid, saving, loggingOut]);
 
   const onSave = async () => {
     try {
@@ -284,7 +284,7 @@ export default function Profile() {
 
     const ok = await confirm({
       title: "Log out?",
-      message: "You’ll need to log in again to access your account.",
+      message: "Do you want to log out of your account?",
       confirmText: "Log out",
       cancelText: "Cancel",
       destructive: true,
@@ -499,9 +499,9 @@ export default function Profile() {
 
   return (
     <LinearGradient
-        colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
-        locations={[0, 0.45, 1]}
-        style={styles.screen}
+      colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+      locations={[0, 0.45, 1]}
+      style={styles.screen}
     >
       <ScrollView
         style={styles.screen}
@@ -557,6 +557,7 @@ export default function Profile() {
             <Row label="Organization" value={profile?.orgName || "—"} />
             <Row label="Member role" value={profile?.memberRole || "—"} />
             <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+            <Row label="Email address" value={profile?.email || "-"} />
             <Pressable
               onPress={onLogout}
               disabled={loggingOut || saving}

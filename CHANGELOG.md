@@ -419,3 +419,47 @@ fix(scroll): improve keyboard and scroll behavior across screens
 refactor(utils): extract shared utilities
 
 - Move sanitizePhone and isValidEmailLoose to utils/formatters.js
+
+
+## [Unreleased] - 2026-04-25
+
+### Fixed
+
+#### Authentication & Login
+- Redesigned login screen to clearly separate Worker and Employer entry points, reducing confusion about where each role should log in
+- Added option for employers to register directly from the login screen
+- Profile screen now displays the logged-in user's email address
+
+#### Home Screen
+- Removed the "Discover..." subtitle text below the QuickCrew logo on the main screen
+
+#### Logout
+- Simplified logout confirmation dialog to only show "Do you want to log out?" removing the redundant secondary message
+
+#### Business Registration
+- Fixed critical bug where submitting the Create Business form would show a loading state and then return to a blank form with no navigation path forward (affected both iOS and Android)
+- Added company information field to the business profile, which will be used as default content for each shift posted
+- Clarified Special Requirements field behavior — it is now an optional per-shift addition, not the primary company info field
+
+#### Shifts
+- Prevented shifts from being created or published with a past date
+- Workers can no longer view or apply to shifts scheduled in the past
+- Fixed shift status not updating correctly after cancellation — shifts now transition out of NEW status as expected
+- Fixed duplicate "Cancel" option appearing when editing a shift and when cancelling an existing shift — renamed to "Discard" to avoid ambiguity
+- Locked shift editing and cancellation once a worker has been assigned and clocked in (shift is ONGOING)
+- Shifts with a clocked-in worker now display an ONGOING / IN PROGRESS status to distinguish them from upcoming assigned shifts
+- Removed "Show rate on job post" option (hidden from UI)
+- Fixed date and time pickers (DOB and all dropdowns) not rendering on Android
+
+#### Time Records & Hour Review
+- Approved hours and worked hours are now stored separately to preserve audit history — one no longer overwrites the other
+- "Your Time Record" fields in the hour review screen now pre-populate with the values submitted by the worker, eliminating the need to manually copy them
+- Removed redundant popup after business approves hours — only the confirmation message about submitted hours is shown
+- Added a comments field in the hour review screen for businesses to leave notes about worker performance
+
+#### Applicant Review
+- Fixed the CLOSE button on worker profile modal being unreachable on Android due to positioning
+
+#### Worker & Business Status
+- Fixed shift statuses always showing as "Active" on the worker side regardless of actual state
+- Fixed shift statuses displaying incorrectly on the business side

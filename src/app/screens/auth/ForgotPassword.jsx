@@ -1,9 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  Image,
+} from "react-native";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../../services/firebase/config";
 import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
+import { LinearGradient } from "expo-linear-gradient";
 
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
@@ -14,7 +23,10 @@ export default function ForgotPassword({ navigation }) {
   const [error, setError] = useState(null);
   const [cooldown, setCooldown] = useState(0);
 
-  const canSubmit = useMemo(() => isValidEmail(email.trim()) && !loading && cooldown === 0, [email, loading, cooldown]);
+  const canSubmit = useMemo(
+    () => isValidEmail(email.trim()) && !loading && cooldown === 0,
+    [email, loading, cooldown]
+  );
 
   const onSend = async () => {
     try {
@@ -50,120 +62,197 @@ export default function ForgotPassword({ navigation }) {
   }, [cooldown]);
 
   return (
-    <OuterWrapper style={styles.screen}>
-      <InnerWrapper contentContainerStyle={styles.content}>
-        <>
-          <Text style={styles.title}>Reset your password</Text>
-          <Text style={styles.subtitle}>
-            Enter your email and we’ll send you a link to reset your password.
-          </Text>
+    <LinearGradient
+      colors={["#FFFFFF", "#FFFFFF", "#81E6F0"]}
+      locations={[0, 0.45, 1]}
+      style={styles.screen}
+    >
+      <OuterWrapper style={{ flex: 1 }}>
+        <InnerWrapper contentContainerStyle={styles.container}>
+          <View style={styles.content}>
+            <Pressable
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              disabled={loading}
+            >
+              <Text style={styles.backButtonText}>‹</Text>
+            </Pressable>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="you@example.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
-              returnKeyType="send"
-              onSubmitEditing={() => {
-                if (canSubmit) onSend();
-              }}
-            />
-          </View>
+            <Text style={styles.screenTitle}>Reset password</Text>
+            <Text style={styles.subtitle}>
+              Enter your email and we'll send you a link to reset your password.
+            </Text>
 
-          {sent ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successText}>
-                If an account exists for this email, you’ll receive a password reset link shortly.
-              </Text>
-              <Text style={styles.helper}>Check your inbox and spam/junk folder.</Text>
+            <View style={styles.formSection}>
+              <Text style={styles.label}>Email address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor="#A0A0A0"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                returnKeyType="send"
+                onSubmitEditing={() => { if (canSubmit) onSend(); }}
+              />
+
+              {sent ? (
+                <View style={styles.successBox}>
+                  <Text style={styles.successText}>
+                    If an account exists for this email, you'll receive a reset link shortly.
+                  </Text>
+                  <Text style={styles.successHelper}>
+                    Check your inbox and spam/junk folder.
+                  </Text>
+                </View>
+              ) : null}
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                onPress={onSend}
+                disabled={!canSubmit}
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  !canSubmit && styles.buttonDisabled,
+                  pressed && canSubmit && { opacity: 0.9 },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.sendButtonText}>
+                    {cooldown > 0 ? `Resend in ${cooldown}s` : "Send reset link"}
+                  </Text>
+                )}
+              </Pressable>
             </View>
-          ) : null}
-
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-          <Pressable
-            onPress={onSend}
-            disabled={!canSubmit}
-            style={({ pressed }) => [
-              styles.button,
-              !canSubmit && styles.buttonDisabled,
-              pressed && canSubmit && styles.buttonPressed,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={styles.buttonText}>
-                {cooldown > 0 ? `Resend in ${cooldown}s` : "Send reset link"}
-              </Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={() => navigation.goBack()} disabled={loading} style={styles.backBtn}>
-            <Text style={styles.backText}>Back to login</Text>
-          </Pressable>
-        </>
-      </InnerWrapper>
-    </OuterWrapper>
+          </View>
+        </InnerWrapper>
+      </OuterWrapper>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#fff" },
-  content: { flexGrow: 1, padding: 20, paddingTop: 40, paddingBottom: 40 },
-
-  title: { fontSize: 26, fontWeight: "700", marginBottom: 6, color: "#111827" },
-  subtitle: { fontSize: 14, opacity: 0.75, marginBottom: 20, color: "#111827" },
-
-  field: { marginBottom: 14 },
-  label: { fontSize: 13, fontWeight: "600", marginBottom: 6, opacity: 0.85, color: "#111827" },
+  screen: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingTop: 100,
+    paddingBottom: 30,
+    paddingHorizontal: 30,
+    justifyContent: "flex-start",
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    alignSelf: "flex-start",
+    marginBottom: 20,
+  },
+  backButtonText: {
+    color: "#A7A4A4",
+    fontSize: 34,
+    lineHeight: 34,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+  screenTitle: {
+    color: "#716C6C",
+    fontSize: 20,
+    fontFamily: "Inter",
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  subtitle: {
+    color: "#716C6C",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  formSection: {
+    width: "100%",
+    gap: 8,
+  },
+  label: {
+    color: "#434343",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "300",
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
   input: {
+    alignSelf: "stretch",
+    height: 37,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
+    paddingRight: 15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    backgroundColor: "#fff",
+    borderColor: "#CDCDCD",
+    color: "#333333",
+    fontSize: 15,
+    fontFamily: "Inter",
+    marginBottom: 8,
   },
-
-  button: {
-    marginTop: 8,
-    backgroundColor: "#111",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  buttonDisabled: { backgroundColor: "#999" },
-  buttonPressed: { opacity: 0.85 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-
-  backBtn: { marginTop: 16, alignItems: "center", paddingVertical: 10 },
-  backText: { color: "#2563EB", fontWeight: "800" },
-
   successBox: {
     backgroundColor: "#ECFDF5",
     borderWidth: 1,
     borderColor: "#A7F3D0",
     padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  successText: { color: "#065F46", fontWeight: "800", fontSize: 13, lineHeight: 18 },
-  helper: { marginTop: 6, color: "#6B7280", fontSize: 12, lineHeight: 16, fontWeight: "700" },
-
-  errorText: {
-    backgroundColor: "#FEF2F2",
-    color: "#B91C1C",
-    padding: 12,
     borderRadius: 10,
-    marginBottom: 12,
-    fontSize: 13,
+    marginBottom: 8,
+  },
+  successText: {
+    color: "#065F46",
     fontWeight: "700",
+    fontSize: 13,
+    fontFamily: "Inter",
+    lineHeight: 18,
+  },
+  successHelper: {
+    marginTop: 6,
+    color: "#6B7280",
+    fontSize: 12,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+  errorText: {
+    color: "#D65F5F",
+    fontSize: 13,
+    fontFamily: "Inter",
+    textAlign: "left",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  sendButton: {
+    width: "100%",
+    height: 40,
+    paddingHorizontal: 33,
+    paddingVertical: 11,
+    backgroundColor: "#45BF79",
+    borderRadius: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    alignSelf: "stretch",
+    marginTop: 12,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  sendButtonText: {
+    textAlign: "center",
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Inter",
+    fontWeight: "600",
   },
 });

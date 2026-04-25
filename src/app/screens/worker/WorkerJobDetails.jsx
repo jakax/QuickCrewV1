@@ -14,16 +14,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Checkbox from "expo-checkbox";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, useNavigation } from "@react-navigation/native";
-import { 
-  getJobById, 
-  cancelJobApplicationWithPenalty, 
-  workerClockIn, 
-  workerClockOut 
+import {
+  getJobById,
+  cancelJobApplicationWithPenalty,
+  workerClockIn,
+  workerClockOut
 } from "../../../services/jobs.service";
 import { formatShiftDate, formatPostedAgo, isNewShift, canCancelApplication } from "../../../utils/jobFormatters";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { useSession } from "../../providers/SessionProvider";
 import { useConfirm } from "../../providers/ConfirmProvider";
+import { asDateMaybe } from "../../../utils/dateUtils";
 
 import { db } from "../../../services/firebase/config";
 import {
@@ -36,17 +37,10 @@ import {
   updateDoc,
   onSnapshot,
 } from "firebase/firestore";
+import { resetTo } from "../../navigation/navigationRef";
 
 const MINUTES_45_MS = 45 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
-
-function asDateMaybe(tsOrDate) {
-  if (!tsOrDate) return null;
-  if (tsOrDate instanceof Date) return tsOrDate;
-  if (tsOrDate instanceof Timestamp) return tsOrDate.toDate();
-  if (typeof tsOrDate?.seconds === "number") return new Date(tsOrDate.seconds * 1000);
-  return null;
-}
 
 function normalizeSkill(s) {
   return String(s || "")
@@ -556,6 +550,7 @@ export default function WorkerJobDetails() {
         confirmText: "OK",
         cancelText: "Close",
       });
+      resetTo("WorkerRoot"); // go back to jobs list after applying
     } catch (e) {
       setApplyError(e?.message || "Could not apply.");
     } finally {
@@ -649,20 +644,19 @@ export default function WorkerJobDetails() {
 
             <View style={styles.divider} />
 
-            {!!job.description && (
+            {!!job.orgDescription && (
               <View style={styles.sectionBlock}>
                 <Text style={styles.sectionTitle}>Company description.</Text>
-                <Text style={styles.sectionBody}>{job.description}</Text>
+                <Text style={styles.sectionBody}>{job.orgDescription}</Text>
               </View>
             )}
 
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>Special requirements</Text>
-              <Text style={styles.sectionBody}>
-                {job?.specialRequirements ||
-                  "QuickCrew is a staffing company that connects reliable talent with casual job opportunities. We specialize in providing fast, flexible, and professional staffing solutions for businesses that need dependable support."}
-              </Text>
-            </View>
+            {!!job.description && (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>Job description.</Text>
+                <Text style={styles.sectionBody}>{job.description}</Text>
+              </View>
+            )}
 
             {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
           </View>
@@ -723,10 +717,10 @@ export default function WorkerJobDetails() {
                   {cancelLoading
                     ? "Cancelling..."
                     : canCancel
-                    ? isLateCancellation
-                      ? "Cancel (late — penalty applies)"
-                      : "Cancel application"
-                    : "Cannot cancel"}
+                      ? isLateCancellation
+                        ? "Cancel (late — penalty applies)"
+                        : "Cancel application"
+                      : "Cannot cancel"}
                 </Text>
               </TouchableOpacity>
             ) : null}

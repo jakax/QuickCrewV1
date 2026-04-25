@@ -24,7 +24,7 @@ export default function RegisterEmployer({ navigation }) {
   const [orgResults, setOrgResults] = useState([]);
   const [orgLoading, setOrgLoading] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState(null); // {id, name, ...}
-  
+
   const [memberRole, setMemberRole] = useState("owner");
   const ROLE_OPTIONS = [
     { label: "Owner", value: "owner" },
@@ -34,6 +34,7 @@ export default function RegisterEmployer({ navigation }) {
   ];
 
   const [email, setEmail] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -48,6 +49,7 @@ export default function RegisterEmployer({ navigation }) {
       fullName.trim().length >= 2 &&
       legalBusinessName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
+      email.trim() === confirmEmail.trim() &&
       password.length >= 6 &&
       confirmPassword.length >= 6 &&
       password === confirmPassword &&
@@ -65,6 +67,7 @@ export default function RegisterEmployer({ navigation }) {
     fullName,
     legalBusinessName,
     email,
+    confirmEmail,
     password,
     confirmPassword,
     isSubmitting,
@@ -124,6 +127,7 @@ export default function RegisterEmployer({ navigation }) {
     if (name.length < 2) return setError("Please enter your full name.");
     if (legalName.length < 2) return setError("Please enter your legal business name.");
     if (!isValidEmail(mail)) return setError("Please enter a valid email address.");
+    if (mail !== confirmEmail.trim()) return setError("Email addresses do not match.");
     if (password.length < 6) return setError("Password must be at least 6 characters.");
     if (password !== confirmPassword) return setError("Passwords do not match.");
 
@@ -211,7 +215,7 @@ export default function RegisterEmployer({ navigation }) {
               <TextInput
                 value={fullName}
                 onChangeText={setFullName}
-                placeholder="e.g., Maria Gomez"
+                placeholder="e.g., Maria Smith"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="words"
                 style={styles.input}
@@ -311,12 +315,27 @@ export default function RegisterEmployer({ navigation }) {
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="business@email.com"
+                placeholder="maria.smith@business.com"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 style={styles.input}
                 editable={!isSubmitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Confirm email address</Text>
+              <TextInput
+                value={confirmEmail}
+                onChangeText={setConfirmEmail}
+                placeholder="maria.smith@business.com"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
               />
             </View>
 

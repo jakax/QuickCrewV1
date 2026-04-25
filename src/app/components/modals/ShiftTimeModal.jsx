@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Modal,
   Pressable,
+  Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 
@@ -21,7 +22,6 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
   const [tmpEndMinute, setTmpEndMinute] = useState(initialEnd?.minute || "00");
   const [tmpEndMeridiem, setTmpEndMeridiem] = useState(initialEnd?.meridiem || "PM");
 
-  // Reset when modal opens
   useEffect(() => {
     if (visible) {
       setTmpStartHour(initialStart?.hour || "9");
@@ -32,14 +32,14 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
       setTmpEndMeridiem(initialEnd?.meridiem || "PM");
     }
   }, [
-        visible,
-        initialStart?.hour,
-        initialStart?.minute,
-        initialStart?.meridiem,
-        initialEnd?.hour,
-        initialEnd?.minute,
-        initialEnd?.meridiem,
-    ]);
+    visible,
+    initialStart?.hour,
+    initialStart?.minute,
+    initialStart?.meridiem,
+    initialEnd?.hour,
+    initialEnd?.minute,
+    initialEnd?.meridiem,
+  ]);
 
   const handleConfirm = () => {
     onConfirm({
@@ -63,36 +63,21 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
           <Text style={styles.sectionTitle}>Start</Text>
           <View style={styles.pickerRow}>
             <View style={styles.pickerBox}>
-              <Picker
-                selectedValue={tmpStartHour}
-                onValueChange={setTmpStartHour}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpStartHour} onValueChange={setTmpStartHour}>
                 {hours.map((h) => (
                   <Picker.Item key={`sh-${h}`} label={h} value={h} />
                 ))}
               </Picker>
             </View>
             <View style={styles.pickerBox}>
-              <Picker
-                selectedValue={tmpStartMinute}
-                onValueChange={setTmpStartMinute}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpStartMinute} onValueChange={setTmpStartMinute}>
                 {minutes.map((m) => (
                   <Picker.Item key={`sm-${m}`} label={m} value={m} />
                 ))}
               </Picker>
             </View>
             <View style={[styles.pickerBox, styles.pickerBoxSmall]}>
-              <Picker
-                selectedValue={tmpStartMeridiem}
-                onValueChange={setTmpStartMeridiem}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpStartMeridiem} onValueChange={setTmpStartMeridiem}>
                 {meridiems.map((ap) => (
                   <Picker.Item key={`sap-${ap}`} label={ap} value={ap} />
                 ))}
@@ -103,36 +88,21 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
           <Text style={[styles.sectionTitle, { marginTop: 12 }]}>End</Text>
           <View style={styles.pickerRow}>
             <View style={styles.pickerBox}>
-              <Picker
-                selectedValue={tmpEndHour}
-                onValueChange={setTmpEndHour}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpEndHour} onValueChange={setTmpEndHour}>
                 {hours.map((h) => (
                   <Picker.Item key={`eh-${h}`} label={h} value={h} />
                 ))}
               </Picker>
             </View>
             <View style={styles.pickerBox}>
-              <Picker
-                selectedValue={tmpEndMinute}
-                onValueChange={setTmpEndMinute}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpEndMinute} onValueChange={setTmpEndMinute}>
                 {minutes.map((m) => (
                   <Picker.Item key={`em-${m}`} label={m} value={m} />
                 ))}
               </Picker>
             </View>
             <View style={[styles.pickerBox, styles.pickerBoxSmall]}>
-              <Picker
-                selectedValue={tmpEndMeridiem}
-                onValueChange={setTmpEndMeridiem}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
+              <Picker selectedValue={tmpEndMeridiem} onValueChange={setTmpEndMeridiem}>
                 {meridiems.map((ap) => (
                   <Picker.Item key={`eap-${ap}`} label={ap} value={ap} />
                 ))}
@@ -141,16 +111,10 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
           </View>
 
           <View style={styles.buttonsRow}>
-            <Pressable
-              onPress={onClose}
-              style={[styles.btn, styles.btnGhost]}
-            >
+            <Pressable onPress={onClose} style={[styles.btn, styles.btnGhost]}>
               <Text style={styles.btnGhostText}>Cancel</Text>
             </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              style={[styles.btn, styles.btnPrimary]}
-            >
+            <Pressable onPress={handleConfirm} style={[styles.btn, styles.btnPrimary]}>
               <Text style={styles.btnPrimaryText}>Done</Text>
             </Pressable>
           </View>
@@ -195,19 +159,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 12,
-    overflow: "hidden",
     backgroundColor: "#FAFAFA",
+    ...(Platform.OS === "android" && { overflow: "hidden" }),
   },
   pickerBoxSmall: {
     flex: 0.9,
-  },
-  picker: {
-    height: 180,
-  },
-  pickerItem: {
-    color: "#111827",
-    fontSize: 18,
-    fontWeight: "700",
   },
   buttonsRow: {
     flexDirection: "row",

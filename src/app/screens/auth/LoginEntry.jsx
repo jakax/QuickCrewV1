@@ -29,11 +29,6 @@ const LoginEntry = ({ navigation }) => {
                 resizeMode="contain"
                 style={styles.logoImage}
               />
-
-              <Text style={styles.heroText}>
-                Discover flexible jobs that fit your schedule.{"\n"}
-                Sign in to get started.
-              </Text>
             </View>
 
             <View style={styles.bottomSection}>

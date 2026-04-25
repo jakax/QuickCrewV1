@@ -17,6 +17,7 @@ import WorkerProfileModal from "../../components/modals/WorkerProfileModal";
 import { db } from "../../../services/firebase/config";
 import { useSession } from "../../providers/SessionProvider";
 import { useConfirm } from "../../providers/ConfirmProvider";
+import { asDateMaybe } from "../../../utils/dateUtils";
 
 export default function EmployerJobApplicants() {
   const route = useRoute();
@@ -59,23 +60,23 @@ export default function EmployerJobApplicants() {
       // Enrich with worker profile (MVP join)
       const enriched = await Promise.all(
         rows.map(async (a) => {
-            const workerUid = a.workerUid || a.uid || a.userId || a.workerId;
+          const workerUid = a.workerUid || a.uid || a.userId || a.workerId;
 
-            // First try snapshot fields (if you later add them)
-            const snapshotName =
+          // First try snapshot fields (if you later add them)
+          const snapshotName =
             a.workerFullName || a.fullName || a.workerName || a.name || a.displayName;
 
-            const snapshotPhone =
+          const snapshotPhone =
             a.workerPhone || a.phone || a.workerPhoneNumber || a.phoneNumber;
 
-            try {
+          try {
             if (!workerUid) {
-                return {
+              return {
                 ...a,
                 workerUid: workerUid || null,
                 workerFullName: snapshotName || "Unknown name",
                 workerPhone: snapshotPhone || "",
-                };
+              };
             }
 
             // Try both collection names: "users" and "user"
@@ -85,18 +86,18 @@ export default function EmployerJobApplicants() {
             const data = u1.exists() ? u1.data() : u2?.exists() ? u2.data() : null;
 
             const fullName =
-                snapshotName ||
-                data?.fullName ||
-                data?.displayName ||
-                data?.name ||
-                data?.full_name ||
-                "Unknown name";
+              snapshotName ||
+              data?.fullName ||
+              data?.displayName ||
+              data?.name ||
+              data?.full_name ||
+              "Unknown name";
 
             const phone =
-                snapshotPhone ||
-                data?.phone ||
-                data?.phoneNumber ||
-                "";
+              snapshotPhone ||
+              data?.phone ||
+              data?.phoneNumber ||
+              "";
 
             return {
               ...a,
@@ -109,16 +110,16 @@ export default function EmployerJobApplicants() {
               rightToWorkNz: data?.rightToWorkNz || null,
               visaExpiryDate: data?.visaExpiryDate || null,
             };
-            } catch {
+          } catch {
             return {
-                ...a,
-                workerUid: workerUid || null,
-                workerFullName: snapshotName || "Unknown name",
-                workerPhone: snapshotPhone || "",
+              ...a,
+              workerUid: workerUid || null,
+              workerFullName: snapshotName || "Unknown name",
+              workerPhone: snapshotPhone || "",
             };
-            }
+          }
         })
-        );
+      );
 
       setApps(enriched);
     } catch (e) {
@@ -135,6 +136,23 @@ export default function EmployerJobApplicants() {
   const jobStatusRaw = useMemo(() => String(job?.status || "").toLowerCase(), [job?.status]);
   const isFilled = jobStatusRaw === "filled";
   const isCancelled = jobStatusRaw === "cancel" || jobStatusRaw === "cancelled";
+  const isActive = jobStatusRaw === "active";
+
+  const isExpired = useMemo(() => {
+    const shiftStart = asDateMaybe(job?.shiftStartAt);
+    return !!shiftStart && shiftStart < new Date();
+  }, [job?.shiftStartAt]);
+
+  const hoursUntilShift = useMemo(() => {
+    if (!job?.shiftStartAt) return null;
+    const startAt = asDateMaybe(job.shiftStartAt);
+    if (!startAt) return null;
+    return (startAt.getTime() - Date.now()) / (1000 * 60 * 60);
+  }, [job?.shiftStartAt]);
+
+  const shiftExpired = hoursUntilShift !== null && hoursUntilShift < 0;
+  const showExpiryBanner = shiftExpired && !isFilled && !isCancelled && !isActive;
+  const showApprovalWarning = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 4;
 
   const onReject = async (app) => {
     if (!app?.id) return;
@@ -281,11 +299,11 @@ export default function EmployerJobApplicants() {
 
           <Pressable
             onPress={() => onApprove(item)}
-            disabled={busy || isFilled || isCancelled}
-            style={[styles.btn, styles.btnPrimary, (busy || isFilled || isCancelled) && styles.btnDisabled]}
+            disabled={busy || isFilled || isCancelled || isExpired}
+            style={[styles.btn, styles.btnPrimary, (busy || isFilled || isCancelled || isExpired) && styles.btnDisabled]}
           >
             <Text style={styles.btnTextPrimary}>
-              {isFilled ? "Filled" : isCancelled ? "Cancelled" : busy ? "..." : "Approve"}
+              {isFilled ? "Filled" : isCancelled ? "Cancelled" : isExpired ? "Expired" : busy ? "..." : "Approve"}
             </Text>
           </Pressable>
         </View>
@@ -315,6 +333,20 @@ export default function EmployerJobApplicants() {
               {apps.length} pending applicant{apps.length === 1 ? "" : "s"}
             </Text>
           </View>
+
+          {showExpiryBanner ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>
+                ⚠️ This shift has already passed. Please reject any pending applicants and cancel the shift.
+              </Text>
+            </View>
+          ) : showApprovalWarning ? (
+            <View style={styles.warningBanner}>
+              <Text style={styles.warningBannerText}>
+                ⚠️ This shift starts soon. Workers must be approved with enough time to prepare. Pending applications will not be automatically rejected — please review them now.
+              </Text>
+            </View>
+          ) : null}
 
           <FlatList
             data={apps}
@@ -386,5 +418,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#2563EB",
+  },
+
+  warningBanner: {
+    backgroundColor: "#FFF3CD",
+    borderWidth: 1,
+    borderColor: "#FFE083",
+    borderRadius: 8,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  warningBannerText: {
+    color: "#856404",
+    fontSize: 13,
+    fontFamily: "Inter",
+    lineHeight: 18,
+  },
+  errorBanner: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 8,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  errorBannerText: {
+    color: "#B91C1C",
+    fontSize: 13,
+    fontFamily: "Inter",
+    lineHeight: 18,
   },
 });

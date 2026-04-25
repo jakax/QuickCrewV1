@@ -75,6 +75,7 @@ export async function createOrganizationOrJoinExisting({ uid, org, memberRole })
       country: (org.country || "").trim(),
       city: (org.city || "").trim(),
       address: (org.address || "").trim(),
+      description: (org.description || "").trim(),
       createdAt: serverTimestamp(),
       createdBy: uid,
     });
@@ -96,7 +97,7 @@ export async function createOrganizationOrJoinExisting({ uid, org, memberRole })
         orgName: orgName,
         orgIds: [orgRef.id],
         memberRole,
-        approvalStatus: "approved",
+        approvalStatus: "pending",
         employerOnboardingStatus: "completed",
         updatedAt: serverTimestamp(),
       },

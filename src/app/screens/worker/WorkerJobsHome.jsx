@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from "react";
+import React, { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { Animated, FlatList, View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import AnimatedHeader from "../../components/jobs/AnimatedHeader.jsx";
@@ -37,6 +37,8 @@ const JobsList = () => {
   const [userLoading, setUserLoading] = useState(true);
   const [userError, setUserError] = useState(null);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     let mounted = true;
 
@@ -66,6 +68,26 @@ const JobsList = () => {
     };
   }, [uid]);
 
+  const [appliedJobIds, setAppliedJobIds] = useState(new Set());
+
+  useEffect(() => {
+    if (!uid) return;
+
+    const q = query(
+      collection(db, "applications"),
+      where("workerUid", "==", uid),
+      where("status", "in", ["pending", "accepted"])
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const ids = new Set(snap.docs.map((d) => d.data().jobId).filter(Boolean));
+      console.log("appliedJobIds", [...ids]);
+      setAppliedJobIds(ids);
+    });
+
+    return () => unsub();
+  }, [uid]);
+
   useEffect(() => {
     // Only show jobs that are truly available in the pool
     const q = query(
@@ -89,19 +111,40 @@ const JobsList = () => {
     return () => unsub();
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (!uid) return;
+      const ref = doc(db, "users", uid);
+      const snap = await getDoc(ref);
+      if (snap.exists()) setUserDoc({ id: snap.id, ...snap.data() });
+    } catch (e) {
+      setUserError(e?.message || "Could not refresh.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [uid]);
+
   const filteredJobs = useMemo(() => {
     if (!jobs || jobs.length === 0) return [];
-
-    // If we can’t verify the user yet, show jobs (MVP); apply is still gated in WorkerJobDetails.
     if (userLoading || userError || !userDoc) return jobs;
 
+    const now = new Date();
     const workerSkills = Array.isArray(userDoc.skills) ? userDoc.skills : [];
 
     return jobs.filter((job) => {
+      // 1. Already applied
+      if (appliedJobIds.has(job.id)) return false;
+
+      // 2. Shift already started or no date → hide
+      const shiftStart = job.shiftStartAt?.toDate?.();
+      if (!shiftStart || shiftStart < now) return false;
+
+      // 3. Skill overlap
       const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
       return hasAnySkillOverlap(workerSkills, requiredSkills);
     });
-  }, [jobs, userLoading, userError, userDoc]);
+  }, [jobs, userLoading, userError, userDoc, appliedJobIds]);
 
   const showInactiveBanner = userDoc?.isActive === false;
   const showNotApprovedBanner =
@@ -150,6 +193,8 @@ const JobsList = () => {
           { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
       />
     </LinearGradient>
   );

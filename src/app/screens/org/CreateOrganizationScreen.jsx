@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { createOrganizationOrJoinExisting } from "../../../services/organization.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
-import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
+import { routeToEmployerHome } from "../../navigation/routeAfterAuth";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 
@@ -25,75 +25,76 @@ export default function CreateOrganizationScreen({ route, navigation }) {
     country: "",
     city: "",
     address: "",
+    description: "",
   });
 
   const [loading, setLoading] = useState(false);
-    
+
   const confirm = useConfirm();
 
   const canSubmit = useMemo(() => {
-  return !!uid && org.name.trim().length > 1 && !loading;
-}, [uid, org.name, loading]);
+    return !!uid && org.name.trim().length > 1 && !loading;
+  }, [uid, org.name, loading]);
 
   function setField(key, value) {
     setOrg((prev) => ({ ...prev, [key]: value }));
   }
 
-    const onSubmit = async () => {
-        const ok = await confirm({
-            title: "Create organization?",
-            message:
-            "This organization will be linked to your account. You can edit details later.",
-            confirmText: "Create",
-        });
-        if (!ok) return;
-        await handleCreateOrganization();
-    };
+  const onSubmit = async () => {
+    const ok = await confirm({
+      title: "Create organization?",
+      message:
+        "This organization will be linked to your account. You can edit details later.",
+      confirmText: "Create",
+    });
+    if (!ok) return;
+    await handleCreateOrganization();
+  };
 
 
   async function handleCreateOrganization() {
-  if (!uid) {
-    setError("Could not find your user id (uid).");
-    return;
-  }
-  if (!org.name.trim()) {
-    setError("Please enter the organization name.");
-    return;
-  }
-
-  try {
-    setLoading(true);
-    setError(null);
-
-    const result = await createOrganizationOrJoinExisting({
-      uid,
-      org,
-      memberRole: "owner",
-    });
-
-    // Friendly UX: show message if already existed
-    if (!result.created) {
-      await confirm({
-        title: "Organization already exists",
-        message:
-          "This organization already exists in QuickCrew. Your account has been linked and is now pending approval by QuickCrew.",
-        confirmText: "OK",
-      });
+    if (!uid) {
+      setError("Could not find your user id (uid).");
+      return;
+    }
+    if (!org.name.trim()) {
+      setError("Please enter the organization name.");
+      return;
     }
 
-    // Let the auth gate route based on the updated user document.
-    // IMPORTANT: createOrganizationOrJoinExisting must leave the user
-    // in a non-"needs_org_creation" state after success.
-    routeAfterAuthChange();
-  } catch (e) {
-    setError(
-      e?.message ||
+    try {
+      setLoading(true);
+      setError(null);
+
+      const result = await createOrganizationOrJoinExisting({
+        uid,
+        org,
+        memberRole: "owner",
+      });
+
+      // Friendly UX: show message if already existed
+      if (!result.created) {
+        await confirm({
+          title: "Organization already exists",
+          message:
+            "This organization already exists in QuickCrew. Your account has been linked and is now pending approval by QuickCrew.",
+          confirmText: "OK",
+        });
+      }
+
+      // Let the auth gate route based on the updated user document.
+      // IMPORTANT: createOrganizationOrJoinExisting must leave the user
+      // in a non-"needs_org_creation" state after success.
+      routeToEmployerHome();
+    } catch (e) {
+      setError(
+        e?.message ||
         "Could not create organization. Your employer account still exists, and you can continue this setup later."
-    );
-  } finally {
-    setLoading(false);
+      );
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   return (
     <OuterWrapper style={styles.root}>
@@ -161,19 +162,6 @@ export default function CreateOrganizationScreen({ route, navigation }) {
 
               <View style={styles.row}>
                 <View style={[styles.field, styles.col]}>
-                  <Text style={styles.label}>Country (optional)</Text>
-                  <TextInput
-                    value={org.country}
-                    onChangeText={(t) => setField("country", t)}
-                    placeholder="New Zealand"
-                    placeholderTextColor="#9A9A9A"
-                    style={styles.input}
-                    autoCapitalize="words"
-                    editable={!loading}
-                  />
-                </View>
-
-                <View style={[styles.field, styles.col]}>
                   <Text style={styles.label}>City (optional)</Text>
                   <TextInput
                     value={org.city}
@@ -185,14 +173,40 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                     editable={!loading}
                   />
                 </View>
+                <View style={[styles.field, styles.col]}>
+                  <Text style={styles.label}>Country (optional)</Text>
+                  <TextInput
+                    value={org.country}
+                    onChangeText={(t) => setField("country", t)}
+                    placeholder="New Zealand"
+                    placeholderTextColor="#9A9A9A"
+                    style={styles.input}
+                    autoCapitalize="words"
+                    editable={!loading}
+                  />
+                </View>
               </View>
 
-              <View style={styles.field}>
+              <View style={[styles.field, styles.fieldMultiline]}>
                 <Text style={styles.label}>Address (optional)</Text>
                 <TextInput
                   value={org.address}
                   onChangeText={(t) => setField("address", t)}
                   placeholder="Street, number, district..."
+                  placeholderTextColor="#9A9A9A"
+                  style={[styles.input, styles.multiline]}
+                  multiline
+                  numberOfLines={3}
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={[styles.field, styles.fieldMultiline]}>
+                <Text style={styles.label}>Description (optional)</Text>
+                <TextInput
+                  value={org.description}
+                  onChangeText={(t) => setField("description", t)}
+                  placeholder="Brief description of your organization..."
                   placeholderTextColor="#9A9A9A"
                   style={[styles.input, styles.multiline]}
                   multiline
@@ -307,11 +321,16 @@ const styles = StyleSheet.create({
 
   section: {
     marginTop: 4,
+    marginBottom: 40,
   },
 
   field: {
     marginBottom: 16,
     paddingHorizontal: 8,
+  },
+
+  fieldMultiline: {
+    marginBottom: 50,
   },
 
   label: {

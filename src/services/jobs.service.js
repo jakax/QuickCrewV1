@@ -221,7 +221,23 @@ export async function getJobById(jobId) {
   const ref = doc(db, "jobs", jobId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Job not found");
-  return { id: snap.id, ...snap.data() };
+
+  const jobData = { id: snap.id, ...snap.data() };
+
+  // Fetch org description if orgId exists
+  if (jobData.orgId) {
+    try {
+      const orgRef = doc(db, "organizations", jobData.orgId);
+      const orgSnap = await getDoc(orgRef);
+      if (orgSnap.exists()) {
+        jobData.orgDescription = orgSnap.data()?.description || null;
+      }
+    } catch {
+      // non-blocking, worst case orgDescription is undefined
+    }
+  }
+
+  return jobData;
 }
 
 export async function updateJob(jobId, updates) {
@@ -378,8 +394,8 @@ export async function cancelJobApplication({
     shiftStartAt && typeof shiftStartAt.toDate === "function"
       ? shiftStartAt.toDate().getTime()
       : shiftStartAt instanceof Date
-      ? shiftStartAt.getTime()
-      : Number.POSITIVE_INFINITY;
+        ? shiftStartAt.getTime()
+        : Number.POSITIVE_INFINITY;
 
   if (!Number.isFinite(startMs)) {
     throw new Error("Shift start time is missing. Cannot cancel safely.");

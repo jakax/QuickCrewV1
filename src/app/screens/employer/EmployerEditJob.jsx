@@ -14,6 +14,7 @@ import { getJobById, updateJob, deleteJobIfAllowed, cancelJob } from "../../../s
 import { canCancelApplication } from "../../../utils/jobFormatters";
 import JobForm from "../../components/jobs/JobForm";
 import { useConfirm } from "../../providers/ConfirmProvider";
+import { asDateMaybe } from "../../../utils/dateUtils";
 
 import { db } from "../../../services/firebase/config";
 import { collection, getDocs } from "firebase/firestore";
@@ -38,7 +39,6 @@ export default function EmployerEditJob() {
   const confirm = useConfirm();
 
   const jobId = route?.params?.jobId;
-  const readOnly = route?.params?.readOnly === true;
 
   const [job, setJob] = useState(null);
   const [loadingJob, setLoadingJob] = useState(true);
@@ -106,8 +106,8 @@ export default function EmployerEditJob() {
 
           const rawRate =
             data.ratePerHour != null ? data.ratePerHour :
-            data.rate != null ? data.rate :
-            null;
+              data.rate != null ? data.rate :
+                null;
 
           const rate = typeof rawRate === "number"
             ? rawRate
@@ -230,7 +230,18 @@ export default function EmployerEditJob() {
 
   const isLateCancel = job && readOnly ? !canCancelApplication(job, 4) : false;
   const jobStatusRaw = String(job?.status || "").toLowerCase();
+  const shiftStart = asDateMaybe(job?.shiftStartAt);
+  const isExpired = !!shiftStart && shiftStart < new Date();
+
   const isCancelled = jobStatusRaw === "cancelled" || jobStatusRaw === "cancel";
+  const readOnly =
+    route?.params?.readOnly === true ||
+    isCancelled ||
+    isExpired ||
+    jobStatusRaw === "active" ||
+    jobStatusRaw === "filled" ||
+    jobStatusRaw === "assigned" ||
+    jobStatusRaw === "finished";
 
   return (
     <OuterWrapper style={styles.screen}>
@@ -254,7 +265,11 @@ export default function EmployerEditJob() {
             {readOnly ? (
               <View style={styles.readOnlyBanner}>
                 <Text style={styles.readOnlyBannerText}>
-                  This shift has applicants and cannot be edited.
+                  {isCancelled
+                    ? "This shift has been cancelled and cannot be edited."
+                    : jobStatusRaw === "filled" || jobStatusRaw === "assigned"
+                      ? "This shift is already filled and cannot be edited."
+                      : "This shift has applicants and cannot be edited."}
                 </Text>
               </View>
             ) : null}

@@ -21,10 +21,12 @@ import {
   OuterWrapper,
   InnerWrapper,
 } from "../../components/layout/ScreenScrollKeyboard";
+import { Ionicons } from "@expo/vector-icons";
 
 const Login = ({ navigation }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -88,8 +90,6 @@ const Login = ({ navigation }) => {
               <Text style={styles.backButtonText}>‹</Text>
             </TouchableOpacity>
 
-            <Text style={styles.screenTitle}>Sign in worker</Text>
-
             <View style={styles.socialSection}>
               <TouchableOpacity
                 style={[styles.socialButton, loading ? styles.buttonDisabled : null]}
@@ -131,15 +131,28 @@ const Login = ({ navigation }) => {
               />
 
               <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="••••••••"
-                placeholderTextColor="#A0A0A0"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                editable={!loading}
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.inputFlex}
+                  placeholder="••••••••"
+                  placeholderTextColor="#A0A0A0"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(prev => !prev)}
+                  disabled={loading}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#A0A0A0"
+                  />
+                </TouchableOpacity>
+              </View>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -169,6 +182,15 @@ const Login = ({ navigation }) => {
                   onPress={() => navigation.navigate("RegisterWorker")}
                 >
                   <Text style={styles.linkText}>Register</Text>
+                </Pressable>
+              </View>
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Are you an employer?</Text>
+                <Pressable
+                  disabled={loading}
+                  onPress={() => navigation.navigate("RegisterEmployer")}
+                >
+                  <Text style={styles.linkText}>Create an account</Text>
                 </Pressable>
               </View>
             </View>
@@ -422,6 +444,7 @@ const styles = StyleSheet.create({
   legalSection: {
     width: "100%",
     gap: 10,
+    paddingTop: 14,
   },
 
   legalLink: {
@@ -430,11 +453,31 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "600",
     textDecorationLine: "underline",
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
 
   buttonDisabled: {
     opacity: 0.6,
+  },
+
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",   // igualá a tu input actual
+    borderRadius: 8,           // igualá a tu input actual
+    backgroundColor: "#FFF",   // igualá a tu input actual
+  },
+  inputFlex: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    color: "#000",             // igualá a tu input actual
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 
