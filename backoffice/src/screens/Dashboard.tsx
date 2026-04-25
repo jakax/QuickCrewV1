@@ -31,6 +31,18 @@ export default function Dashboard() {
 
         <div className="card">
           <div className="cardBody">
+            <div className="fw900">Employers</div>
+            <div className="muted mt6">
+              Review employers, approve/reject, suspend/enable accounts, assign skills.
+            </div>
+            <button className="btn btnPrimary mt12" onClick={() => nav("/users/employers")}>
+              Open Employers
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="cardBody">
             <div className="fw900">Organizations</div>
             <div className="muted mt6">
               Manage organizations and per-company role rates.

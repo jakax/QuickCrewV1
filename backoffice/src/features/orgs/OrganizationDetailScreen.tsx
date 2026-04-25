@@ -147,29 +147,29 @@ export default function OrganizationDetailScreen() {
     <div className="page">
       <div className="row">
         <div>
-            <button
+          <button
             className="btn"
             style={{ marginBottom: 10 }}
             onClick={() => nav("/organizations")}
-            >
+          >
             ← Back to organizations
-            </button>
+          </button>
 
-            <h1 className="h1">{org?.name || "Organization"}</h1>
-            <div className="muted mt6" style={{ fontWeight: 800 }}>
+          <h1 className="h1">{org?.name || "Organization"}</h1>
+          <div className="muted mt6" style={{ fontWeight: 800 }}>
             {orgId}
-            </div>
+          </div>
         </div>
 
         <div className="row gap10">
-            <button className="btn" onClick={loadOrg} disabled={orgLoading}>
+          <button className="btn" onClick={loadOrg} disabled={orgLoading}>
             {orgLoading ? "Refreshing..." : "Refresh org"}
-            </button>
-            <button className="btn" onClick={loadRates} disabled={ratesLoading}>
+          </button>
+          <button className="btn" onClick={loadRates} disabled={ratesLoading}>
             {ratesLoading ? "Refreshing..." : "Refresh rates"}
-            </button>
+          </button>
         </div>
-        </div>
+      </div>
 
       {orgError ? <div className="error mt12">{orgError}</div> : null}
 
@@ -221,6 +221,9 @@ export default function OrganizationDetailScreen() {
                     <span style={{ color: "#111827" }}>
                       {[org.city, org.country].filter(Boolean).join(", ") || "—"}
                     </span>
+                  </div>
+                  <div className="muted" style={{ fontWeight: 800 }}>
+                    Description: <span style={{ color: "#111827" }}>{org.description || "—"}</span>
                   </div>
                 </div>
 

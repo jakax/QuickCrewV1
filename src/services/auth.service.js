@@ -105,6 +105,7 @@ export const loginWithGoogleAndLoadProfile = async () => {
     console.log("Google user info:", googleUser);
     const newProfile = {
       role: "worker",
+      approvalStatus: "pending",
       isActive: true,
       email: googleUser?.email ?? cred.user.email ?? null,
       firstName: googleUser?.givenName ?? null,
@@ -165,6 +166,7 @@ export const loginWithAppleAndLoadProfile = async () => {
     // New Apple user — Apple only returns email and name on the first sign in ever
     const newProfile = {
       role: "worker",
+      approvalStatus: "pending",
       isActive: true,
       email: email ?? cred.user.email ?? null,
       firstName: fullName?.givenName ?? null,

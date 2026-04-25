@@ -158,3 +158,23 @@ export async function rejectWorker({
     from: null,
   });
 }
+
+export async function listPendingUsers(): Promise<UserRow[]> {
+  const [workers, employers] = await Promise.all([
+    listWorkersByStatus("pending"),
+    listEmployersByStatus("pending"),
+  ]);
+  return [...workers, ...employers];
+}
+
+export async function listEmployersByStatus(status: ApprovalStatus): Promise<UserRow[]> {
+  const q = query(
+    collection(db, "users"),
+    where("role", "==", "employer"),
+    where("approvalStatus", "==", status),
+    orderBy("createdAt", "desc")
+  );
+
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+}

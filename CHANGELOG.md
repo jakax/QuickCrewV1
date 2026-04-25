@@ -463,3 +463,21 @@ refactor(utils): extract shared utilities
 #### Worker & Business Status
 - Fixed shift statuses always showing as "Active" on the worker side regardless of actual state
 - Fixed shift statuses displaying incorrectly on the business side
+
+## [Unreleased] - 2026-04-25
+
+### Added
+
+#### Back Office — Users
+- Employers now appear in the back office alongside workers; added `listEmployersByStatus` to support filtering by role and approval status
+- New Employers screen in the back office mirroring the Workers screen, allowing admins to view, search, approve, reject, and suspend employer accounts
+- Pending Approvals screen now shows both workers and employers (previously only showed workers)
+
+#### Back Office — Organizations
+- Added `description` field to the Organization detail overview tab
+
+### Fixed
+
+#### Authentication
+- Users registering via Google Sign-In are now initialized with `approvalStatus: "pending"` so they appear correctly in the back office approval queue
+- Users registering via Apple Sign-In are now initialized with `approvalStatus: "pending"` so they appear correctly in the back office approval queue

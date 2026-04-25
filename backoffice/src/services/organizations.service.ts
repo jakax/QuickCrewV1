@@ -8,6 +8,7 @@ export type OrgRow = {
   industry?: string;
   city?: string;
   country?: string;
+  description?: string;
   createdAt?: any;
 };
 

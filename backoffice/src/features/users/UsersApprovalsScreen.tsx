@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { listPendingWorkers, approveWorker, rejectWorker, UserRow } from "./users.service";
+import { listPendingUsers, approveWorker, rejectWorker, UserRow } from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 
@@ -92,7 +92,7 @@ export default function UsersApprovalsScreen() {
       setError(null);
       setLoading(true);
 
-      const rows = await listPendingWorkers();
+      const rows = await listPendingUsers();
       setItems(rows);
 
       if (rows.length) {
@@ -181,7 +181,7 @@ export default function UsersApprovalsScreen() {
       {/* LEFT */}
       <div className="card">
         <div className="cardHeader">
-          <div className="fw900">Pending worker approvals</div>
+          <div className="fw900">Pending approvals</div>
           <div className="muted mt6 fs13">
             {loading ? "Loading…" : `${items.length} pending`}
           </div>
@@ -208,7 +208,7 @@ export default function UsersApprovalsScreen() {
           })}
 
           {!loading && items.length === 0 ? (
-            <div className="cardBody muted">No pending workers 🎉</div>
+            <div className="cardBody muted">No pending approvals 🎉</div>
           ) : null}
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function UsersApprovalsScreen() {
       <div className="card">
         <div className="cardBody">
           {!selected ? (
-            <div className="muted">Select a worker from the list.</div>
+            <div className="muted">Select a user from the list.</div>
           ) : (
             <>
               <div className="row">

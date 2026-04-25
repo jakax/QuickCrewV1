@@ -218,7 +218,7 @@ export default function WorkerJobDetails() {
 
     if (userDoc.role !== "worker") return { canApply: false, reason: "Only workers can apply." };
     if (userDoc.isActive === false) return { canApply: false, reason: "Your account is inactive." };
-    if (userDoc.accountStatus === "suspended") {
+    if (userDoc.approvalStatus === "suspended") {
       return {
         canApply: false,
         reason: "Your account is suspended. Please contact quickcrewnz@gmail.com to reinstate it.",

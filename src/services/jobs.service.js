@@ -528,7 +528,7 @@ export async function cancelJobApplicationWithPenalty({
     };
 
     if (newCount >= 2) {
-      userUpdate.accountStatus = "suspended";
+      userUpdate.approvalStatus = "suspended";
     }
 
     batch.update(userRef, userUpdate);

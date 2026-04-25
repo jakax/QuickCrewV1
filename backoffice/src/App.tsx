@@ -8,6 +8,7 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 import UsersApprovalsScreen from "./features/users/UsersApprovalsScreen";
 import AppLayout from "./layout/AppLayout";
 import WorkersScreen from "./features/users/WorkersScreen";
+import EmployersScreen from "./features/users/EmployersScreen";
 import SkillsCatalogScreen from "./features/catalog/SkillsCatalogScreen";
 import RoleRatesCatalogScreen from "./features/catalog/RoleRatesCatalogScreen";
 import OrganizationsListScreen from "./features/orgs/OrganizationsListScreen";
@@ -36,6 +37,7 @@ export default function App() {
 
                 {/* Users */}
                 <Route path="users/workers" element={<WorkersScreen />} />
+                <Route path="users/employers" element={<EmployersScreen />} />
                 <Route path="users/approvals" element={<UsersApprovalsScreen />} />
 
                 {/* Catalog */}
