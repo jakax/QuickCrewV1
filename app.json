@@ -4,11 +4,11 @@
     "slug": "quick-crew-app-2",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/iso-qc.png",
+    "icon": "./assets/icon-new.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/iso-qc.png",
+      "image": "./assets/splash-icon-new.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -23,7 +23,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/iso-qc.png",
+        "foregroundImage": "./assets/adaptive-icon-new.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
