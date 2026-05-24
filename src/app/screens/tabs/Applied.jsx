@@ -53,13 +53,19 @@ function formatDateTime(value) {
 
 function isShiftExpired(app) {
   const endAt = asDateMaybe(app?.shiftEndAt);
-  if (!endAt) return false;
-  return Date.now() > endAt.getTime();
+  if (endAt) return Date.now() > endAt.getTime();
+
+  // fallback si no hay shiftEndAt
+  const startAt = asDateMaybe(app?.shiftStartAt);
+  if (startAt) return Date.now() > startAt.getTime();
+
+  return false;
 }
 
 function getVisualStatus(app) {
   const raw = String(app?.status || "").toLowerCase();
 
+  if (raw === "job_cancelled") return "Cancelled by employer";
   if (raw === "cancelled") return "Cancelled";
   if (raw === "rejected") return "Rejected";
   if (raw === "accepted") {
@@ -82,6 +88,8 @@ function canHideApplication(app) {
 
   if (raw === "completed" || raw === "complete" || raw === "finished") return true;
 
+  if (raw === "job_cancelled") return true;
+
   const startAt = asDateMaybe(app?.shiftStartAt);
   if (startAt && startAt.getTime() < Date.now()) {
     return true;
@@ -98,6 +106,7 @@ function getVisualStatusStyle(label) {
   if (label === "Active") return styles.statusActive;
   if (label === "Finished") return styles.statusOngoing;
   if (label === "ON GOING") return styles.statusOngoing;
+  if (label === "Cancelled by employer") return styles.statusCancelled;
   return styles.statusPending;
 }
 
@@ -552,7 +561,7 @@ const styles = StyleSheet.create({
   },
 
   statusExpired: {
-    color: "#9CA3AF",
+    color: "#111827",
   },
 
   statusPending: {

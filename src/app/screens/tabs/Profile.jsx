@@ -160,6 +160,17 @@ export default function Profile() {
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [selectField, setSelectField] = useState(null);
 
+  const locked = {
+    firstName: !!profile?.fullName, // fullName en BD = firstName+lastName ya guardados
+    lastName: !!profile?.fullName,
+    dateOfBirth: !!profile?.dateOfBirth,
+    email: !!profile?.email,
+    gender: !!profile?.gender,
+    passportNumber: !!profile?.passportNumber,
+    nationality: !!profile?.nationality,
+    passportIssuingCountry: !!profile?.passportIssuingCountry,
+  };
+
   useEffect(() => {
     setFirstName(initial.firstName);
     setLastName(initial.lastName);
@@ -213,7 +224,7 @@ export default function Profile() {
       return {
         label: "Profile not verified",
         color: "#F59E0B",
-        message: "Complete your profile and wait for approval to apply for jobs.",
+        message: "Please complete your profile and wait for approval to start joining shifts",
       };
     }
 
@@ -578,9 +589,10 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>First name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, locked.firstName && styles.inputDisabled]}
                 value={firstName}
                 onChangeText={setFirstName}
+                editable={!locked.firstName}
                 placeholder="Enter your first name"
                 placeholderTextColor="#716C6C"
                 autoCapitalize="words"
@@ -590,9 +602,10 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Last name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, locked.lastName && styles.inputDisabled]}
                 value={lastName}
                 onChangeText={setLastName}
+                editable={!locked.lastName}
                 placeholder="Enter your last name"
                 placeholderTextColor="#716C6C"
                 autoCapitalize="words"
@@ -614,7 +627,7 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email address</Text>
               <TextInput
-                style={[styles.input, styles.inputDisabled]}
+                style={[styles.input, styles.inputDisabled]} // siempre bloqueado
                 value={email}
                 editable={false}
                 selectTextOnFocus={false}
@@ -672,39 +685,50 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Date of birth</Text>
               <Pressable
-                onPress={() => { setDateField("dateOfBirth"); setDateModalOpen(true); }}
-                style={styles.selectInput}
+                onPress={() => {
+                  if (locked.dateOfBirth) return;
+                  setDateField("dateOfBirth");
+                  setDateModalOpen(true);
+                }}
+                style={[styles.selectInput, locked.dateOfBirth && styles.selectInputDisabled]}
               >
-                <Text
-                  style={
-                    dateOfBirth ? styles.selectInputText : styles.selectInputPlaceholder
-                  }
-                >
+                <Text style={[
+                  dateOfBirth ? styles.selectInputText : styles.selectInputPlaceholder,
+                  locked.dateOfBirth && styles.selectInputTextDisabled
+                ]}>
                   {dateOfBirth || "dd/mm/yyyy"}
                 </Text>
-                <Text style={styles.selectChevron}>▼</Text>
+                {!locked.dateOfBirth && <Text style={styles.selectChevron}>▼</Text>}
               </Pressable>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Gender</Text>
               <Pressable
-                onPress={() => { setSelectField("gender"); setSelectModalOpen(true); }}
-                style={styles.selectInput}
+                onPress={() => {
+                  if (locked.gender) return;
+                  setSelectField("gender");
+                  setSelectModalOpen(true);
+                }}
+                style={[styles.selectInput, locked.gender && styles.selectInputDisabled]}
               >
-                <Text style={gender ? styles.selectInputText : styles.selectInputPlaceholder}>
+                <Text style={[
+                  gender ? styles.selectInputText : styles.selectInputPlaceholder,
+                  locked.gender && styles.selectInputTextDisabled
+                ]}>
                   {gender || "Select an option"}
                 </Text>
-                <Text style={styles.selectChevron}>▼</Text>
+                {!locked.gender && <Text style={styles.selectChevron}>▼</Text>}
               </Pressable>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nationality</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, locked.nationality && styles.inputDisabled]}
                 value={nationality}
                 onChangeText={setNationality}
+                editable={!locked.nationality}
                 placeholder="Enter your nationality"
                 placeholderTextColor="#716C6C"
                 autoCapitalize="words"
@@ -714,9 +738,10 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Passport number</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, locked.passportNumber && styles.inputDisabled]}
                 value={passportNumber}
                 onChangeText={setPassportNumber}
+                editable={!locked.passportNumber}
                 placeholder="Enter your passport number"
                 placeholderTextColor="#716C6C"
                 autoCapitalize="characters"
@@ -726,9 +751,10 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Passport issuing country</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, locked.passportIssuingCountry && styles.inputDisabled]}
                 value={passportIssuingCountry}
                 onChangeText={setPassportIssuingCountry}
+                editable={!locked.passportIssuingCountry}
                 placeholder="Enter passport issuing country"
                 placeholderTextColor="#716C6C"
                 autoCapitalize="words"
@@ -1535,5 +1561,13 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     fontSize: 13,
+  },
+
+  selectInputDisabled: {
+    backgroundColor: "#F8F8F8",
+  },
+
+  selectInputTextDisabled: {
+    color: "#6B7280",
   },
 });

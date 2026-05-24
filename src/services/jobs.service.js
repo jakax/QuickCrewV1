@@ -564,11 +564,34 @@ export async function cancelJob({ jobId, expectedOrgId }) {
     throw new Error("This shift is already cancelled.");
   }
 
-  await updateDoc(jobRef, {
+  // Fetch all pending/accepted applications for this job
+  const appsSnap = await getDocs(
+    query(
+      collection(db, "applications"),
+      where("jobId", "==", jobId),
+      where("status", "in", ["pending", "accepted"])
+    )
+  );
+
+  const batch = writeBatch(db);
+
+  // Cancel the job
+  batch.update(jobRef, {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // Mark all affected applications as job_cancelled
+  appsSnap.docs.forEach((appDoc) => {
+    batch.update(appDoc.ref, {
+      status: "job_cancelled",
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
 
   return { ok: true };
 }

@@ -177,7 +177,7 @@ const JobsList = () => {
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Profile not approved yet.</Text>
           <Text style={styles.bannerText}>
-            You can browse shifts, but you’ll be able to apply once approved.
+            Your profile is under review. Once approved, you will be able to join shifts
           </Text>
         </View>
       ) : null}

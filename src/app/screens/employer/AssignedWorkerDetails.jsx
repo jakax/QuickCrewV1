@@ -292,9 +292,11 @@ export default function AssignedWorkerDetails() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Worker</Text>
             <Text style={styles.sectionValue}>
-              {worker?.fullName || worker?.firstName
-                ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
-                : "Unknown worker"}
+              {worker?.fullName
+                ? worker.fullName
+                : worker?.firstName || worker?.lastName
+                  ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
+                  : "Unknown worker"}
             </Text>
             {worker?.phone ? (
               <Text style={styles.sectionSub}>{worker.phone}</Text>
