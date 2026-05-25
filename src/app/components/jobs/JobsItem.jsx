@@ -50,7 +50,7 @@ const JobsItem = ({
   const postedAgo = formatPostedAgo(freshnessTimestamp);
 
   const hasRate = typeof job?.ratePerHour === "number" && !Number.isNaN(job.ratePerHour);
-  const rateText = hasRate ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : "";
+  const rateText = hasRate ? `$${Number(job.ratePerHour).toFixed(2)} per hour` : "";
 
   // ✅ detect if current worker already applied to this job
   const [alreadyApplied, setAlreadyApplied] = useState(false);

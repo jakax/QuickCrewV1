@@ -207,7 +207,7 @@ export default function RegisterEmployer({ navigation }) {
             </View>
 
             <Text style={styles.subtitle}>
-              If your business already exists in QuickCrew, we’ll link you to it.
+              If your business already exists in QuickCrew, it will be linked to your account.
             </Text>
 
             <View style={styles.field}>

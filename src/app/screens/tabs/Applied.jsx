@@ -376,8 +376,7 @@ export default function Applied() {
       <Text style={styles.title}>My shifts</Text>
 
       <Text style={styles.subtitle}>
-        Here you’ll find all the shifts you’ve applied for, including those you need to work
-        (active), ongoing shifts, completed, and any that have been cancelled.
+        Here you can view all the shifts you’ve joined, including pending approval, confirmed, rejected, completed, and cancelled shifts.
       </Text>
 
       {loadError ? <Text style={styles.errorBox}>{loadError}</Text> : null}

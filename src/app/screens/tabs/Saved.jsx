@@ -140,11 +140,10 @@ export default function Saved() {
   const Header = (
     <View style={styles.header}>
 
-      <Text style={styles.title}>Saved Job</Text>
+      <Text style={styles.title}>Saved Jobs</Text>
 
       <Text style={styles.subtitle}>
-        Only saved jobs are shown here. This does not mean you have applied to all of them.
-        Check your active shifts in the Applied tab.
+        Save here your favourites. Favoriting a shift does not confirm you have taken it.
       </Text>
     </View>
   );

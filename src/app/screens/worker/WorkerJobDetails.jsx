@@ -221,7 +221,7 @@ export default function WorkerJobDetails() {
     if (userDoc.approvalStatus === "suspended") {
       return {
         canApply: false,
-        reason: "Your account is suspended. Please contact quickcrewnz@gmail.com to reinstate it.",
+        reason: "Your account has been suspended. Please contact info@quickcrew.co to reinstate it.",
       };
     }
     if (String(userDoc.approvalStatus || "").toUpperCase() !== "APPROVED") {
@@ -289,7 +289,7 @@ export default function WorkerJobDetails() {
         const ok = await confirm({
           title: "⚠️ Late cancellation warning",
           message:
-            "Cancelling with less than 6 hours before the shift starts counts as a late cancellation. If this happens twice, your account will be suspended and you will need to contact quickcrewnz@gmail.com to reinstate it. Do you still want to cancel?",
+            "Cancelling with less than 6 hours before the shift starts counts as a late cancellation. If this happens twice, your account will be suspended and you will need to contact info@quickcrew.co to reinstate it. Do you still want to cancel?",
           confirmText: "Yes, cancel",
           cancelText: "Keep it",
           destructive: true,
@@ -324,7 +324,7 @@ export default function WorkerJobDetails() {
         await confirm({
           title: "Account suspended",
           message:
-            "Your account has been suspended due to repeated late cancellations. Please contact quickcrewnz@gmail.com to reinstate your account.",
+            "Your account has been suspended due to repeated late cancellations. Please contact info@quickcrew.co to reinstate your account.",
           confirmText: "OK",
           cancelText: "Close",
           destructive: true,
@@ -432,7 +432,7 @@ export default function WorkerJobDetails() {
         // If a lock exists, worker already has an active shift that day
         const lockSnap = await tx.get(lockRef);
         if (lockSnap.exists()) {
-          throw new Error("You already have a shift on this date. You can’t apply to another one the same day.");
+          throw new Error("You already have a shift on this day. You can’t apply to another one the same day.");
         }
 
         const status = String(jobData?.status || "").toLowerCase();
@@ -545,8 +545,8 @@ export default function WorkerJobDetails() {
       await confirm({
         title: newStatus === "accepted" ? "Shift assigned ✅" : "Application submitted",
         message: newStatus === "accepted"
-          ? "You're assigned to this shift. You can view it in your Applied tab."
-          : "Application submitted. Waiting for employer approval. You can view it in your Applied tab.",
+          ? "You're assigned to this shift."
+          : "Waiting for employer approval.",
         confirmText: "OK",
         cancelText: "Close",
       });
@@ -583,13 +583,13 @@ export default function WorkerJobDetails() {
   const timeText = job.shiftTime || "";
   const postedAgo = formatPostedAgo(freshnessTimestamp);
   const rateText =
-    typeof job.ratePerHour === "number" ? `$${Number(job.ratePerHour).toFixed(2)} an hour` : null;
+    typeof job.ratePerHour === "number" ? `$${Number(job.ratePerHour).toFixed(2)} per hour` : null;
 
   const confirmationsAccepted =
     confirmNoCriminalRecord && acceptTerms && acceptCancellationPolicies;
 
   const applyDisabled = !applyEligibility.canApply || !confirmationsAccepted || applyLoading;
-  const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Apply for shift";
+  const applyButtonLabel = applyLoading ? "Applying..." : alreadyApplied ? "Applied ✅" : "Join this shift";
 
   return (
     <LinearGradient

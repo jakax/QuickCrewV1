@@ -72,7 +72,7 @@ const Login = ({ navigation }) => {
               Discover flexible jobs that fit your schedule.{"\n"}
               Sign in to get started.
             </Text>
-          
+
 
             <View style={styles.formSection}>
               <View style={styles.divider} />
@@ -128,7 +128,7 @@ const Login = ({ navigation }) => {
               </TouchableOpacity>
 
               <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Don't have an account?</Text>
+                <Text style={styles.footerText}>Don't have an account yet?</Text>
                 <Pressable
                   disabled={loading}
                   onPress={() => navigation.navigate("RegisterWorker")}

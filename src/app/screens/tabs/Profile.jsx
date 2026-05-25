@@ -635,7 +635,7 @@ export default function Profile() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone</Text>
+              <Text style={styles.label}>NZ Phone number</Text>
               <TextInput
                 style={styles.input}
                 value={phone}
@@ -647,7 +647,7 @@ export default function Profile() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Address</Text>
+              <Text style={styles.label}>NZ Address</Text>
               <TextInput
                 style={styles.input}
                 value={streetAddress}
@@ -786,7 +786,7 @@ export default function Profile() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Relation</Text>
+              <Text style={styles.label}>Relationship</Text>
               <Pressable
                 onPress={() => { setSelectField("emergencyContactRelation"); setSelectModalOpen(true); }}
                 style={styles.selectInput}

@@ -170,14 +170,14 @@ const JobsList = () => {
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Your account is inactive.</Text>
           <Text style={styles.bannerText}>
-            You can browse shifts, but you can’t apply right now.
+            You can browse shifts, but you can’t join right now.
           </Text>
         </View>
       ) : showNotApprovedBanner ? (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Profile not approved yet.</Text>
           <Text style={styles.bannerText}>
-            Your profile is under review. Once approved, you will be able to join shifts
+            For joining shifts your profile must to be approved by QuickCrew. Please make sure you have submitted all your documentation.
           </Text>
         </View>
       ) : null}

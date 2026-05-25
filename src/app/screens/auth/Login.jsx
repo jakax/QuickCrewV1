@@ -176,7 +176,7 @@ const Login = ({ navigation }) => {
               </TouchableOpacity>
 
               <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Don't have an account?</Text>
+                <Text style={styles.footerText}>Don't have an account yet?</Text>
                 <Pressable
                   disabled={loading}
                   onPress={() => navigation.navigate("RegisterWorker")}
