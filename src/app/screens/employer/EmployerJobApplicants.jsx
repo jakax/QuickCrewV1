@@ -162,7 +162,16 @@ export default function EmployerJobApplicants() {
       setActingId(app.id);
 
       const batch = writeBatch(db);
+
       batch.update(doc(db, "applications", app.id), { status: "rejected" });
+
+      // Release the worker day lock so they can apply to another shift
+      const workerUid = app.workerUid;
+      const shiftDate = app.shiftDate;
+      if (workerUid && shiftDate) {
+        const lockId = `${workerUid}_${shiftDate}`;
+        batch.delete(doc(db, "workerShiftDayLocks", lockId));
+      }
 
       await batch.commit();
       await load();

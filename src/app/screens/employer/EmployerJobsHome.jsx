@@ -72,23 +72,30 @@ export default function EmployerJobsHome({ navigation }) {
         const aStatus = String(a?.status || "").toLowerCase();
         const bStatus = String(b?.status || "").toLowerCase();
 
-        const aCancelled = aStatus === "cancel" || aStatus === "cancelled";
-        const bCancelled = bStatus === "cancel" || bStatus === "cancelled";
+        const isInactive = (s) =>
+          s === "cancel" || s === "cancelled" || s === "finished" || s === "complete" || s === "completed";
 
-        const aFilled = aStatus === "filled";
-        const bFilled = bStatus === "filled";
+        const isExpired = (job) => {
+          const startMs = getShiftStartMs(job);
+          return Number.isFinite(startMs) && startMs < Date.now();
+        };
 
-        const aNeedsAction = !!a?.hasPendingApplicants && !aFilled && !aCancelled;
-        const bNeedsAction = !!b?.hasPendingApplicants && !bFilled && !bCancelled;
-        if (aNeedsAction !== bNeedsAction) return aNeedsAction ? -1 : 1;
+        const getGroup = (job, status) => {
+          if (isInactive(status)) return 3;
+          if (isExpired(job)) return 2;
+          return 1;
+        };
+
+        const aGroup = getGroup(a, aStatus);
+        const bGroup = getGroup(b, bStatus);
+
+        if (aGroup !== bGroup) return aGroup - bGroup;
 
         const aStart = getShiftStartMs(a);
         const bStart = getShiftStartMs(b);
-        if (aStart !== bStart) return aStart - bStart;
 
-        const aCreated = a?.createdAt?.seconds ? a.createdAt.seconds : 0;
-        const bCreated = b?.createdAt?.seconds ? b.createdAt.seconds : 0;
-        return bCreated - aCreated;
+        if (aGroup === 1) return aStart - bStart;
+        return bStart - aStart;
       });
 
       setJobs(enriched);

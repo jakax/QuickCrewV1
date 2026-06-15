@@ -136,13 +136,16 @@ export const registerEmployer = async ({
  * - Creates Firebase Auth user
  * - Creates users/{uid} profile
  */
-export const registerWorker = async ({ email, password, fullName, phone }) => {
+export const registerWorker = async ({ email, password, firstName, lastName, phone }) => {
   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
   const uid = cred.user.uid;
+  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   await setDoc(doc(db, "users", uid), {
     role: "worker",
-    fullName: fullName?.trim() || "",
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    fullName,
     email: email.trim(),
     phone: phone?.trim?.() || "",
     isActive: true,

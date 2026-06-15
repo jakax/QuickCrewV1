@@ -16,7 +16,8 @@ import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScroll
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
 export default function RegisterEmployer({ navigation }) {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [legalBusinessName, setLegalBusinessName] = useState("");
   const [businessAlreadyRegistered, setBusinessAlreadyRegistered] = useState(false);
 
@@ -46,7 +47,8 @@ export default function RegisterEmployer({ navigation }) {
 
   const canSubmit = useMemo(() => {
     const base =
-      fullName.trim().length >= 2 &&
+      firstName.trim().length >= 2 &&
+      lastName.trim().length >= 2 &&
       legalBusinessName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
       email.trim() === confirmEmail.trim() &&
@@ -64,7 +66,8 @@ export default function RegisterEmployer({ navigation }) {
 
     return true;
   }, [
-    fullName,
+    firstName,
+    lastName,
     legalBusinessName,
     email,
     confirmEmail,
@@ -120,12 +123,12 @@ export default function RegisterEmployer({ navigation }) {
   const onRegister = async () => {
     setError(null);
 
-    const name = fullName.trim();
-    const legalName = legalBusinessName.trim();
+    if (firstName.trim().length < 2) return setError("Please enter your first name.");
+    if (lastName.trim().length < 2) return setError("Please enter your last name.");
+    if (legalBusinessName.trim().length < 2) return setError("Please enter your legal business name.");
+
     const mail = email.trim();
 
-    if (name.length < 2) return setError("Please enter your full name.");
-    if (legalName.length < 2) return setError("Please enter your legal business name.");
     if (!isValidEmail(mail)) return setError("Please enter a valid email address.");
     if (mail !== confirmEmail.trim()) return setError("Email addresses do not match.");
     if (password.length < 6) return setError("Password must be at least 6 characters.");
@@ -141,14 +144,13 @@ export default function RegisterEmployer({ navigation }) {
       const result = await registerEmployer({
         email: mail,
         password,
-        fullName: name,
-        legalBusinessName: legalName,
+        fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        legalBusinessName: legalBusinessName.trim(),
         businessAlreadyRegistered,
         selectedOrgId: selectedOrg?.id || null,
         memberRole,
       });
 
-      // org creation flow
       if (result.needsOrgCreation) {
         navigation.replace("CreateOrganization", {
           uid: result.uid,
@@ -157,8 +159,6 @@ export default function RegisterEmployer({ navigation }) {
         return;
       }
 
-      // ✅ linked to existing org: show pending message then go to EmployerTabs
-      // for now: simple inline navigation; we can replace with ConfirmProvider later
       navigation.replace("EmployerRoot", {
         screen: "EmployerTabs",
         params: { pendingApprovalMessage: true },
@@ -211,11 +211,24 @@ export default function RegisterEmployer({ navigation }) {
             </Text>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Your name</Text>
+              <Text style={styles.label}>First name</Text>
               <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="e.g., Maria Smith"
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="e.g., Maria"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Last name</Text>
+              <TextInput
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="e.g., Smith"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="words"
                 style={styles.input}

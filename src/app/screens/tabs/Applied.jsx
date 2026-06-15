@@ -5,13 +5,10 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  TouchableOpacity,
   RefreshControl,
   Pressable,
-  TextInput,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
   collection,
@@ -22,7 +19,6 @@ import {
   getDocs,
   doc,
   runTransaction,
-  updateDoc,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
@@ -69,7 +65,9 @@ function getVisualStatus(app) {
   if (raw === "cancelled") return "Cancelled";
   if (raw === "rejected") return "Rejected";
   if (raw === "accepted") {
-    return isShiftExpired(app) ? "Expired" : "Active";
+    if (app?.workerClockIn && !app?.workerClockOut) return "Ongoing";
+    if (isShiftExpired(app) && !app?.workerClockIn) return "Expired";
+    return "Active";
   }
   if (raw === "pending") {
     return isShiftExpired(app) ? "Expired" : "Pending approval";
@@ -79,23 +77,6 @@ function getVisualStatus(app) {
   }
 
   return isShiftExpired(app) ? "Expired" : "Pending approval";
-}
-
-function canHideApplication(app) {
-  const raw = String(app?.status || "").toLowerCase();
-
-  if (raw === "cancelled" || raw === "rejected") return true;
-
-  if (raw === "completed" || raw === "complete" || raw === "finished") return true;
-
-  if (raw === "job_cancelled") return true;
-
-  const startAt = asDateMaybe(app?.shiftStartAt);
-  if (startAt && startAt.getTime() < Date.now()) {
-    return true;
-  }
-
-  return false;
 }
 
 function getVisualStatusStyle(label) {
@@ -122,7 +103,6 @@ export default function Applied() {
   const [search, setSearch] = useState("");
 
   const [cancelLoadingId, setCancelLoadingId] = useState(null);
-  const [hideLoadingId, setHideLoadingId] = useState(null);
 
   const canLoad = useMemo(() => !!uid, [uid]);
 
@@ -288,51 +268,12 @@ export default function Applied() {
     }
   };
 
-  const hideApplication = async (app) => {
-    if (!uid || !app?.id) return;
-    if (!canHideApplication(app)) return;
-
-    const ok = await confirm({
-      title: "Remove application?",
-      message:
-        "This will remove the application from your list, but QuickCrew will still keep it for tracking purposes.",
-      confirmText: "Remove",
-      cancelText: "Cancel",
-      destructive: true,
-    });
-
-    if (!ok) return;
-
-    try {
-      setHideLoadingId(app.id);
-
-      const appRef = doc(db, "applications", app.id);
-
-      await updateDoc(appRef, {
-        hiddenByWorker: true,
-        hiddenByWorkerAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } catch (e) {
-      await confirm({
-        title: "Could not remove",
-        message: e?.message || "Something went wrong.",
-        confirmText: "OK",
-        cancelText: "",
-        hideCancel: true,
-      });
-    } finally {
-      setHideLoadingId(null);
-    }
-  };
-
   const renderItem = ({ item }) => {
     const when =
       formatDateTime(item.shiftStartAt) ||
       (item.shiftDate && item.shiftTime ? `${item.shiftDate} - ${item.shiftTime}` : null);
 
     const cancellable = isCancellableUI(item);
-    const hideable = canHideApplication(item);
     const visualStatus = getVisualStatus(item);
 
     return (
@@ -348,24 +289,6 @@ export default function Applied() {
         <Text style={[styles.statusText, getVisualStatusStyle(visualStatus)]}>
           {visualStatus}
         </Text>
-
-        {hideable ? (
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation();
-              hideApplication(item);
-            }}
-            style={styles.binButton}
-            disabled={hideLoadingId === item.id}
-            hitSlop={10}
-          >
-            <Ionicons
-              name={hideLoadingId === item.id ? "hourglass-outline" : "trash-outline"}
-              size={18}
-              color="#C0C0C0"
-            />
-          </Pressable>
-        ) : null}
       </Pressable>
     );
   };

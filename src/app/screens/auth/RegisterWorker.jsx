@@ -16,7 +16,8 @@ import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScroll
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
 export default function RegisterWorker({ navigation }) {
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +29,8 @@ export default function RegisterWorker({ navigation }) {
 
   const canSubmit = useMemo(() => {
     return (
-      fullName.trim().length >= 2 &&
+      firstName.trim().length >= 2 &&
+      lastName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
       email.trim() === confirmEmail.trim() &&
       password.length >= 6 &&
@@ -36,7 +38,7 @@ export default function RegisterWorker({ navigation }) {
       password === confirmPassword &&
       !isSubmitting
     );
-  }, [fullName, email, confirmEmail, password, confirmPassword, isSubmitting]);
+  }, [firstName, lastName, email, confirmEmail, password, confirmPassword, isSubmitting]);
 
   const onRegister = async () => {
     const ok = await confirm({
@@ -50,11 +52,14 @@ export default function RegisterWorker({ navigation }) {
 
   async function handlerRegister() {
     // Client-side validation (fast feedback)
-    const name = fullName.trim();
     const mail = email.trim();
 
-    if (name.length < 2) {
-      setError("Please enter your full name.");
+    if (firstName.trim().length < 2) {
+      setError("Please enter your first name.");
+      return;
+    }
+    if (lastName.trim().length < 2) {
+      setError("Please enter your last name.");
       return;
     }
     if (!isValidEmail(mail)) {
@@ -81,7 +86,8 @@ export default function RegisterWorker({ navigation }) {
       await registerWorker({
         email: mail,
         password,
-        fullName: name,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
       });
 
       // Worker can browse jobs immediately
@@ -139,11 +145,25 @@ export default function RegisterWorker({ navigation }) {
             </Text>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Full name</Text>
+              <Text style={styles.label}>First name</Text>
               <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="e.g., John Doe"
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="e.g., John"
+                placeholderTextColor="#9A9A9A"
+                autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Last name</Text>
+              <TextInput
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="e.g., Doe"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="words"
                 style={styles.input}
