@@ -1,17 +1,54 @@
-import React from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Image,
+  Animated,
+  Dimensions,
 } from "react-native";
 import {
   OuterWrapper,
   InnerWrapper,
 } from "../../components/layout/ScreenScrollKeyboard";
 
+const TOGGLE_WIDTH = 327;
+const TOGGLE_HEIGHT = 56;
+const SLIDER_WIDTH = TOGGLE_WIDTH / 2;
+
 const LoginEntry = ({ navigation }) => {
+  const [userType, setUserType] = useState("worker");
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  const handleToggle = (type) => {
+    if (type === userType) return;
+    setUserType(type);
+    Animated.spring(animatedValue, {
+      toValue: type === "worker" ? 0 : 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 4,
+    }).start();
+  };
+
+  const sliderTranslateX = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, SLIDER_WIDTH],
+  });
+
+  const handleLogin = () => {
+    navigation.navigate("Login", { userType });
+  };
+
+  const handleCreateAccount = () => {
+    if (userType === "worker") {
+      navigation.navigate("RegisterWorker");
+    } else {
+      navigation.navigate("RegisterEmployer");
+    }
+  };
+
   return (
     <OuterWrapper style={styles.screen}>
       <InnerWrapper contentContainerStyle={styles.container}>
@@ -32,25 +69,59 @@ const LoginEntry = ({ navigation }) => {
             </View>
 
             <View style={styles.bottomSection}>
-              <TouchableOpacity
-                style={styles.signInButton}
-                onPress={() => navigation.navigate("Login")}
-              >
-                <Text style={styles.signInButtonText}>Sign in</Text>
-              </TouchableOpacity>
-
-              <View style={styles.employerSection}>
-                <Text style={styles.employerText}>
-                  Looking to hire staff for your company?
-                </Text>
-
+              {/* Toggle */}
+              <View style={styles.toggleContainer}>
+                <Animated.View
+                  style={[
+                    styles.toggleSlider,
+                    { transform: [{ translateX: sliderTranslateX }] },
+                  ]}
+                />
                 <TouchableOpacity
-                  style={styles.employerButton}
-                  onPress={() => navigation.navigate("RegisterEmployer")}
+                  style={styles.toggleOption}
+                  onPress={() => handleToggle("worker")}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.employerButtonText}>Create an account</Text>
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      userType === "worker" && styles.toggleTextActive,
+                    ]}
+                  >
+                    Worker
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.toggleOption}
+                  onPress={() => handleToggle("business")}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      userType === "business" && styles.toggleTextActive,
+                    ]}
+                  >
+                    Business
+                  </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Log in */}
+              <TouchableOpacity
+                style={styles.signInButton}
+                onPress={handleLogin}
+              >
+                <Text style={styles.signInButtonText}>Log in</Text>
+              </TouchableOpacity>
+
+              {/* Create an account */}
+              <TouchableOpacity
+                style={styles.employerButton}
+                onPress={handleCreateAccount}
+              >
+                <Text style={styles.employerButtonText}>Create an account</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -91,7 +162,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 92,
     paddingBottom: 42,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
   },
 
   topSection: {
@@ -105,25 +176,58 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
 
-  heroText: {
-    textAlign: "center",
-    color: "#8E8E8E",
-    fontSize: 17,
-    lineHeight: 28,
-    fontFamily: "Inter",
-    fontWeight: "400",
-    paddingHorizontal: 24,
-  },
-
   bottomSection: {
     alignItems: "center",
     paddingBottom: 18,
+    gap: 16,
+    marginTop: 330,
   },
 
-  signInButton: {
-    width: 327,
+  // Toggle
+  toggleContainer: {
+    width: TOGGLE_WIDTH,
     maxWidth: "100%",
-    height: 56,
+    height: TOGGLE_HEIGHT,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 2.5,
+    borderColor: "#9EDAE3",
+    flexDirection: "row",
+    overflow: "hidden",
+    marginBottom: 24,
+    position: "relative",
+  },
+
+  toggleSlider: {
+    position: "absolute",
+    width: SLIDER_WIDTH,
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+
+  toggleOption: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  toggleText: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 16,
+    fontFamily: "Inter",
+    fontWeight: "600",
+  },
+
+  toggleTextActive: {
+    color: "#FFFFFF",
+  },
+
+  // Log in button
+  signInButton: {
+    width: TOGGLE_WIDTH,
+    maxWidth: "100%",
+    height: TOGGLE_HEIGHT,
     paddingHorizontal: 33,
     justifyContent: "center",
     alignItems: "center",
@@ -131,7 +235,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#7DA2D5",
     borderWidth: 2.5,
     borderColor: "#9EDAE3",
-    marginBottom: 72,
   },
 
   signInButtonText: {
@@ -142,26 +245,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  employerSection: {
-    width: "100%",
-    alignItems: "center",
-  },
-
-  employerText: {
-    textAlign: "center",
-    color: "#FFFFFF",
-    fontSize: 17,
-    lineHeight: 24,
-    fontFamily: "Inter",
-    fontWeight: "700",
-    marginBottom: 18,
-    paddingHorizontal: 12,
-  },
-
+  // Create an account button
   employerButton: {
-    width: 327,
+    width: TOGGLE_WIDTH,
     maxWidth: "100%",
-    height: 56,
+    height: TOGGLE_HEIGHT,
     paddingHorizontal: 33,
     justifyContent: "center",
     alignItems: "center",

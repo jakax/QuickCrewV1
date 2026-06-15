@@ -30,6 +30,7 @@ export default function EmployerJobsHome({ navigation }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const isApproved = approvalStatus === "approved";
 
   const hasPendingForJob = async (jobId) => {
     const q = query(
@@ -150,7 +151,11 @@ export default function EmployerJobsHome({ navigation }) {
         scrollEventThrottle={16}
       />
 
-      <Pressable style={styles.fab} onPress={onCreateJob}>
+      <Pressable
+        style={[styles.fab, !isApproved && styles.fabDisabled]}
+        onPress={isApproved ? onCreateJob : undefined}
+        disabled={!isApproved}
+      >
         <View style={styles.plusH} />
         <View style={styles.plusV} />
       </Pressable>
@@ -240,5 +245,9 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 999,
     backgroundColor: "#FFFFFF",
+  },
+
+  fabDisabled: {
+    backgroundColor: "#B0B0B0",
   },
 });

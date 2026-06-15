@@ -19,6 +19,7 @@ import { asDateMaybe } from "../../../utils/dateUtils";
 import { db } from "../../../services/firebase/config";
 import { collection, getDocs } from "firebase/firestore";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
+import { getOrgById } from "../../../services/organization.service";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
@@ -50,6 +51,7 @@ export default function EmployerEditJob() {
   const [roleRates, setRoleRates] = useState({});
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgError, setOrgError] = useState(null);
+  const [orgDescription, setOrgDescription] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -89,18 +91,20 @@ export default function EmployerEditJob() {
   useEffect(() => {
     let mounted = true;
 
-    const loadRoleRates = async () => {
+    const loadOrgData = async () => {
       try {
         setOrgError(null);
         setOrgLoading(true);
 
         if (!orgId) throw new Error("Missing orgId (session).");
 
-        const ref = collection(db, "organizations", orgId, "roleRates");
-        const snap = await getDocs(ref);
+        const [ratesSnap, orgDoc] = await Promise.all([
+          getDocs(collection(db, "organizations", orgId, "roleRates")),
+          getOrgById(orgId),
+        ]);
 
         const cleaned = {};
-        snap.forEach((docSnap) => {
+        ratesSnap.forEach((docSnap) => {
           const data = docSnap.data() || {};
           const key = normKey(docSnap.id || "");
 
@@ -114,25 +118,23 @@ export default function EmployerEditJob() {
             : Number(String(rawRate ?? "").replace(",", "."));
 
           if (data.isActive === false) return;
-
-          if (key && Number.isFinite(rate)) {
-            cleaned[key] = rate;
-          }
+          if (key && Number.isFinite(rate)) cleaned[key] = rate;
         });
 
-        if (mounted) setRoleRates(cleaned);
+        if (mounted) {
+          setRoleRates(cleaned);
+          setOrgDescription(orgDoc?.description || "");
+        }
       } catch (e) {
-        if (mounted) setOrgError(e?.message || "Could not load company rates.");
+        if (mounted) setOrgError(e?.message || "Could not load company data.");
         if (mounted) setRoleRates({});
       } finally {
         if (mounted) setOrgLoading(false);
       }
     };
 
-    loadRoleRates();
-    return () => {
-      mounted = false;
-    };
+    loadOrgData();
+    return () => { mounted = false; };
   }, [orgId]);
 
   const onSubmit = async (values) => {
@@ -305,6 +307,7 @@ export default function EmployerEditJob() {
                 businessApprovalRequired: job?.businessApprovalRequired !== false,
               }}
               orgName={job.orgName || orgName}
+              orgDescription={orgDescription}
               roleRates={roleRates}
               submitLabel="Save changes"
               loading={saving}

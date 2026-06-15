@@ -5,13 +5,11 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  Switch,
-  Modal,
   TouchableOpacity,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import ShiftTimeModal from "../modals/ShiftTimeModal"
 import DatePickerModal from "../modals/DatePickerModal";
+import { Animated } from "react-native";
 
 function parseShiftTimeLegacy(shiftTimeRaw) {
   if (!shiftTimeRaw || typeof shiftTimeRaw !== "string") return { start: "", end: "" };
@@ -117,6 +115,7 @@ export default function JobForm({
   mode,
   initialValues,
   orgName,
+  orgDescription,
   submitLabel,
   loading,
   disabled = false,
@@ -152,7 +151,6 @@ export default function JobForm({
     return initialRequiredSkills.filter((k) => k && k !== initialPrimary);
   });
 
-  const [showRate, setShowRate] = useState(initialValues?.showRate !== false);
   const [localError, setLocalError] = useState(null);
 
   const ALSO_SKILLS_MAX = 5;
@@ -188,6 +186,8 @@ export default function JobForm({
   const [endMeridiem, setEndMeridiem] = useState(endPartsInit.meridiem);
 
   const [timeModalOpen, setTimeModalOpen] = useState(false);
+
+  const [descExpanded, setDescExpanded] = useState(false);
 
   const [rateText, setRateText] = useState(
     typeof initialValues?.ratePerHour === "number" ? String(initialValues.ratePerHour) : ""
@@ -302,7 +302,6 @@ export default function JobForm({
       description: description.trim(),
       primaryRoleKey,
       requiredSkills: [primaryRoleKey, ...alsoSkills],
-      showRate,
     });
   };
 
@@ -330,7 +329,25 @@ export default function JobForm({
         editable={!readOnly}
       />
 
-      <Text style={styles.label}>Description</Text>
+      {orgDescription ? (
+        <>
+          <Pressable
+            onPress={() => setDescExpanded((prev) => !prev)}
+            style={styles.orgDescHeader}
+          >
+            <Text style={styles.orgDescHeaderText}>Company description</Text>
+            <Text style={styles.orgDescChevron}>{descExpanded ? "▲" : "▼"}</Text>
+          </Pressable>
+
+          {descExpanded ? (
+            <View style={styles.orgDescBody}>
+              <Text style={styles.orgDescText}>{orgDescription}</Text>
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
+      <Text style={styles.label}>Special Requirements</Text>
       <TextInput
         value={description}
         onChangeText={(v) => {
@@ -453,17 +470,6 @@ export default function JobForm({
             })}
         </View>
       ) : null}
-
-      <Text style={styles.label}>Rate visibility</Text>
-      <View style={styles.switchRow}>
-        <View style={styles.switchCopy}>
-          <Text style={styles.switchTitle}>Show rate on job post</Text>
-          <Text style={styles.switchHint}>
-            If disabled, workers won’t see the rate, but it’s still stored.
-          </Text>
-        </View>
-        <ModernToggle value={showRate} onChange={readOnly ? () => { } : setShowRate} />
-      </View>
 
       <Text style={styles.label}>Shift date *</Text>
       <TouchableOpacity
@@ -812,5 +818,48 @@ const styles = StyleSheet.create({
 
   toggleThumbActive: {
     alignSelf: "flex-end",
+  },
+
+  orgDescHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: "#F9FAFB",
+    marginTop: 12,
+  },
+
+  orgDescHeaderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#434343",
+  },
+
+  orgDescChevron: {
+    color: "#FFB800",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  orgDescBody: {
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: "#CDCDCD",
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#FFFFFF",
+  },
+
+  orgDescText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
+    fontWeight: "400",
   },
 });

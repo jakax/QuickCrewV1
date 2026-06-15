@@ -227,6 +227,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     fontWeight: "300",
     lineHeight: 20,
+    paddingHorizontal: 10,
   },
 
   card: {

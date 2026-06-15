@@ -31,6 +31,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import DatePickerModal from "../../components/modals/DatePickerModal";
 import SelectOptionModal from "../../components/modals/SelectOptionModal";
+import { getOrgById, updateOrganization } from "../../../services/organization.service";
 
 const GENDER_OPTIONS = [
   "Male",
@@ -50,10 +51,11 @@ const RELATION_OPTIONS = [
 ];
 
 const RIGHT_TO_WORK_OPTIONS = [
-  "NZ Citizen",
+  "NZ/AU Citizen",
   "NZ Resident",
   "Working Holiday Visa",
   "Work Visa",
+  "Open Work Visa",
   "Partner Visa",
   "Student Visa",
   "Other",
@@ -107,9 +109,11 @@ export default function Profile() {
   const [gender, setGender] = useState(profile?.gender || "");
   const [nationality, setNationality] = useState(profile?.nationality || "");
   const [passportNumber, setPassportNumber] = useState(profile?.passportNumber || "");
+  const [passportExpiryDate, setPassportExpiryDate] = useState(profile?.passportExpiryDate || "");
   const [passportIssuingCountry, setPassportIssuingCountry] = useState(
     profile?.passportIssuingCountry || ""
   );
+
 
   const [emergencyContactName, setEmergencyContactName] = useState(
     profile?.emergencyContact?.name || ""
@@ -160,6 +164,10 @@ export default function Profile() {
   const [selectModalOpen, setSelectModalOpen] = useState(false);
   const [selectField, setSelectField] = useState(null);
 
+  const [orgDescription, setOrgDescription] = useState("");
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [orgError, setOrgError] = useState(null);
+
   const locked = {
     firstName: !!profile?.fullName, // fullName en BD = firstName+lastName ya guardados
     lastName: !!profile?.fullName,
@@ -169,6 +177,8 @@ export default function Profile() {
     passportNumber: !!profile?.passportNumber,
     nationality: !!profile?.nationality,
     passportIssuingCountry: !!profile?.passportIssuingCountry,
+    rightToWorkNz: !!profile?.rightToWorkNz,
+    passportExpiryDate: !!profile?.passportExpiryDate,
   };
 
   useEffect(() => {
@@ -186,6 +196,7 @@ export default function Profile() {
     setGender(profile?.gender || "");
     setNationality(profile?.nationality || "");
     setPassportNumber(profile?.passportNumber || "");
+    setPassportExpiryDate(profile?.passportExpiryDate || "");
     setPassportIssuingCountry(profile?.passportIssuingCountry || "");
     setEmergencyContactName(profile?.emergencyContact?.name || "");
     setEmergencyContactPhone(profile?.emergencyContact?.phone || "");
@@ -198,6 +209,21 @@ export default function Profile() {
 
     setReferences(Array.isArray(profile?.references) ? profile.references : []);
   }, [initial, profile]);
+
+  useEffect(() => {
+    if (!isEmployer || !profile?.orgId) return;
+
+    let mounted = true;
+    getOrgById(profile.orgId)
+      .then((org) => {
+        if (mounted) setOrgDescription(org?.description || "");
+      })
+      .catch(() => {
+        // silent fail — description is optional
+      });
+
+    return () => { mounted = false; };
+  }, [isEmployer, profile?.orgId]);
 
   const displayName = useMemo(() => {
     const name = `${firstName} ${lastName}`.trim();
@@ -232,7 +258,7 @@ export default function Profile() {
   }, [isEmployer, isWorker, profile]);
 
   const requiresVisaExpiry = useMemo(() => {
-    return !["", "NZ Citizen", "NZ Resident"].includes(rightToWorkNz);
+    return !["", "NZ/AU Citizen", "NZ Resident"].includes(rightToWorkNz);
   }, [rightToWorkNz]);
 
   const canSave = useMemo(() => {
@@ -265,6 +291,7 @@ export default function Profile() {
         gender: gender.trim(),
         nationality: nationality.trim(),
         passportNumber: passportNumber.trim(),
+        passportExpiryDate: passportExpiryDate.trim(),
         passportIssuingCountry: passportIssuingCountry.trim(),
         rightToWorkNz: rightToWorkNz.trim(),
         visaExpiryDate: requiresVisaExpiry ? visaExpiryDate.trim() : "",
@@ -311,6 +338,30 @@ export default function Profile() {
       setError(e?.message || "Could not log out.");
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const onSaveOrg = async () => {
+    try {
+      setOrgError(null);
+
+      const ok = await confirm({
+        title: "Save organization?",
+        message: "Your organization information will be updated.",
+        confirmText: "Save",
+        cancelText: "Cancel",
+      });
+
+      if (!ok) return;
+
+      setSavingOrg(true);
+      await updateOrganization(profile.orgId, {
+        description: orgDescription.trim(),
+      });
+    } catch (e) {
+      setOrgError(e?.message || "Could not save organization.");
+    } finally {
+      setSavingOrg(false);
     }
   };
 
@@ -563,24 +614,63 @@ export default function Profile() {
         ) : null}
 
         {isEmployer ? (
-          <View style={styles.accountCard}>
-            <Text style={styles.cardTitle}>Account</Text>
-            <Row label="Organization" value={profile?.orgName || "—"} />
-            <Row label="Member role" value={profile?.memberRole || "—"} />
-            <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
-            <Row label="Email address" value={profile?.email || "-"} />
-            <Pressable
-              onPress={onLogout}
-              disabled={loggingOut || saving}
-              style={({ pressed }) => [
-                styles.secondaryGhostButton,
-                (pressed || loggingOut) && { opacity: 0.9 },
-              ]}
-            >
-              <Text style={styles.secondaryGhostButtonText}>
-                {loggingOut ? "Logging out..." : "Log out"}
+          <View>
+            <View style={styles.accountCard}>
+              <Text style={styles.cardTitle}>Account</Text>
+              <Row label="Organization" value={profile?.orgName || "—"} />
+              <Row label="Member role" value={profile?.memberRole || "—"} />
+              <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+              <Row label="Email address" value={profile?.email || "-"} />
+            </View>
+
+            <View style={[styles.inputGroup, styles.orgDescriptionGroup]}>
+              <Text style={styles.sectionLabel}>Organization description</Text>
+              <Text style={styles.helper}>
+                This description is visible to workers when browsing shifts.
               </Text>
-            </Pressable>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={orgDescription}
+                onChangeText={setOrgDescription}
+                placeholder="Write a short description of your organization..."
+                placeholderTextColor="#716C6C"
+                multiline
+                textAlignVertical="top"
+                editable={!savingOrg}
+              />
+            </View>
+
+            {orgError ? <Text style={styles.error}>{orgError}</Text> : null}
+
+            <View style={styles.actionsBlock}>
+              <Pressable
+                onPress={onSaveOrg}
+                disabled={savingOrg || loggingOut}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  (pressed || savingOrg) && { opacity: 0.9 },
+                  (savingOrg || loggingOut) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {savingOrg ? "Saving..." : "Save"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={onLogout}
+                disabled={loggingOut || savingOrg}
+                style={({ pressed }) => [
+                  styles.secondaryGhostButton,
+                  (pressed || loggingOut) && { opacity: 0.9 },
+                  (loggingOut || savingOrg) && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.secondaryGhostButtonText}>
+                  {loggingOut ? "Logging out..." : "Log out"}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
 
@@ -749,6 +839,26 @@ export default function Profile() {
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>Passport expiry date</Text>
+              <Pressable
+                onPress={() => {
+                  if (locked.passportExpiryDate) return;
+                  setDateField("passportExpiryDate");
+                  setDateModalOpen(true);
+                }}
+                style={[styles.selectInput, locked.passportExpiryDate && styles.selectInputDisabled]}
+              >
+                <Text style={[
+                  passportExpiryDate ? styles.selectInputText : styles.selectInputPlaceholder,
+                  locked.passportExpiryDate && styles.selectInputTextDisabled
+                ]}>
+                  {passportExpiryDate || "dd/mm/yyyy"}
+                </Text>
+                {!locked.passportExpiryDate && <Text style={styles.selectChevron}>▼</Text>}
+              </Pressable>
+            </View>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>Passport issuing country</Text>
               <TextInput
                 style={[styles.input, locked.passportIssuingCountry && styles.inputDisabled]}
@@ -847,17 +957,19 @@ export default function Profile() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Right to work in NZ</Text>
               <Pressable
-                onPress={() => { setSelectField("rightToWorkNz"); setSelectModalOpen(true); }}
-                style={styles.selectInput}
+                onPress={() => {
+                  if (locked.rightToWorkNz) return;
+                  setSelectField("rightToWorkNz"); setSelectModalOpen(true);
+                }}
+                style={[styles.selectInput, locked.rightToWorkNz && styles.selectInputDisabled]}
               >
-                <Text
-                  style={
-                    rightToWorkNz ? styles.selectInputText : styles.selectInputPlaceholder
-                  }
-                >
+                <Text style={[
+                  rightToWorkNz ? styles.selectInputText : styles.selectInputPlaceholder,
+                  locked.rightToWorkNz && styles.selectInputTextDisabled
+                ]}>
                   {rightToWorkNz || "Select an option"}
                 </Text>
-                <Text style={styles.selectChevron}>▼</Text>
+                {!locked.rightToWorkNz && <Text style={styles.selectChevron}>▼</Text>}
               </Pressable>
             </View>
 
@@ -1107,6 +1219,15 @@ export default function Profile() {
           mode="future"
           onClose={() => { setDateModalOpen(false); setDateField(null); }}
           onConfirm={(value) => setVisaExpiryDate(value)}
+        />
+
+        <DatePickerModal
+          visible={dateModalOpen && dateField === "passportExpiryDate"}
+          title="Select passport expiry date"
+          initialValue={passportExpiryDate}
+          mode="future"
+          onClose={() => { setDateModalOpen(false); setDateField(null); }}
+          onConfirm={(value) => setPassportExpiryDate(value)}
         />
 
         <SelectOptionModal
@@ -1569,5 +1690,9 @@ const styles = StyleSheet.create({
 
   selectInputTextDisabled: {
     color: "#6B7280",
+  },
+
+  orgDescriptionGroup: {
+    marginTop: 24,
   },
 });

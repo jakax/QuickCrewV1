@@ -39,7 +39,7 @@ const JobsItem = ({
   const showNew = useMemo(() => {
     const isOpen = String(job?.status || "").toLowerCase() === "open";
     if (!isOpen) return false;
-    if (!isNewShift(freshnessTimestamp, 3)) return false;
+    if (!isNewShift(freshnessTimestamp, 1)) return false;
     const shiftStart = asDateMaybe(job?.shiftStartAt);
     if (!shiftStart || shiftStart < new Date()) return false;
     return true;

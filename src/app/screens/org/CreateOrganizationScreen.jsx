@@ -8,16 +8,15 @@ import {
   Image,
 } from "react-native";
 import { createOrganizationOrJoinExisting } from "../../../services/organization.service";
+import { cancelEmployerRegistration } from "../../../services/signup.service";
 import { useConfirm } from "../../providers/ConfirmProvider";
 import { routeToEmployerHome } from "../../navigation/routeAfterAuth";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
-
 export default function CreateOrganizationScreen({ route, navigation }) {
-  const uid = route?.params?.uid; // pass from register/login success
+  const uid = route?.params?.uid;
 
   const [error, setError] = useState(null);
-
   const [org, setOrg] = useState({
     name: "",
     legalName: "",
@@ -27,14 +26,14 @@ export default function CreateOrganizationScreen({ route, navigation }) {
     address: "",
     description: "",
   });
-
   const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const confirm = useConfirm();
 
   const canSubmit = useMemo(() => {
-    return !!uid && org.name.trim().length > 1 && !loading;
-  }, [uid, org.name, loading]);
+    return !!uid && org.name.trim().length > 1 && !loading && !cancelling;
+  }, [uid, org.name, loading, cancelling]);
 
   function setField(key, value) {
     setOrg((prev) => ({ ...prev, [key]: value }));
@@ -51,6 +50,32 @@ export default function CreateOrganizationScreen({ route, navigation }) {
     await handleCreateOrganization();
   };
 
+  const onCancel = async () => {
+    const ok = await confirm({
+      title: "Cancel registration?",
+      message:
+        "This will permanently delete your account and all data entered so far. You will need to start the registration process from scratch if you want to create an account later.",
+      confirmText: "Yes, cancel",
+    });
+    if (!ok) return;
+
+    try {
+      setCancelling(true);
+      setError(null);
+      await cancelEmployerRegistration(uid);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "LoginEntry" }],
+      });
+    } catch (e) {
+      setError(
+        e?.message ||
+        "Could not cancel registration. Please try again or contact support."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   async function handleCreateOrganization() {
     if (!uid) {
@@ -72,7 +97,6 @@ export default function CreateOrganizationScreen({ route, navigation }) {
         memberRole: "owner",
       });
 
-      // Friendly UX: show message if already existed
       if (!result.created) {
         await confirm({
           title: "Organization already exists",
@@ -82,9 +106,6 @@ export default function CreateOrganizationScreen({ route, navigation }) {
         });
       }
 
-      // Let the auth gate route based on the updated user document.
-      // IMPORTANT: createOrganizationOrJoinExisting must leave the user
-      // in a non-"needs_org_creation" state after success.
       routeToEmployerHome();
     } catch (e) {
       setError(
@@ -95,6 +116,8 @@ export default function CreateOrganizationScreen({ route, navigation }) {
       setLoading(false);
     }
   }
+
+  const isLocked = loading || cancelling;
 
   return (
     <OuterWrapper style={styles.root}>
@@ -130,7 +153,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                   placeholderTextColor="#9A9A9A"
                   style={styles.input}
                   autoCapitalize="words"
-                  editable={!loading}
+                  editable={!isLocked}
                 />
               </View>
 
@@ -143,7 +166,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                   placeholderTextColor="#9A9A9A"
                   style={styles.input}
                   autoCapitalize="words"
-                  editable={!loading}
+                  editable={!isLocked}
                 />
               </View>
 
@@ -156,7 +179,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                   placeholderTextColor="#9A9A9A"
                   style={styles.input}
                   autoCapitalize="words"
-                  editable={!loading}
+                  editable={!isLocked}
                 />
               </View>
 
@@ -170,7 +193,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                     placeholderTextColor="#9A9A9A"
                     style={styles.input}
                     autoCapitalize="words"
-                    editable={!loading}
+                    editable={!isLocked}
                   />
                 </View>
                 <View style={[styles.field, styles.col]}>
@@ -182,7 +205,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                     placeholderTextColor="#9A9A9A"
                     style={styles.input}
                     autoCapitalize="words"
-                    editable={!loading}
+                    editable={!isLocked}
                   />
                 </View>
               </View>
@@ -197,7 +220,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                   style={[styles.input, styles.multiline]}
                   multiline
                   numberOfLines={3}
-                  editable={!loading}
+                  editable={!isLocked}
                 />
               </View>
 
@@ -211,7 +234,7 @@ export default function CreateOrganizationScreen({ route, navigation }) {
                   style={[styles.input, styles.multiline]}
                   multiline
                   numberOfLines={3}
-                  editable={!loading}
+                  editable={!isLocked}
                 />
               </View>
             </View>
@@ -229,6 +252,20 @@ export default function CreateOrganizationScreen({ route, navigation }) {
             >
               <Text style={styles.buttonText}>
                 {loading ? "Creating..." : "Create organization"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onCancel}
+              disabled={isLocked}
+              style={({ pressed }) => [
+                styles.cancelButton,
+                isLocked && styles.cancelButtonDisabled,
+                pressed && !isLocked && styles.cancelButtonPressed,
+              ]}
+            >
+              <Text style={styles.cancelButtonText}>
+                {cancelling ? "Cancelling..." : "Cancel registration"}
               </Text>
             </Pressable>
 
@@ -273,20 +310,6 @@ const styles = StyleSheet.create({
     paddingTop: 100,
     paddingBottom: 30,
     paddingHorizontal: 30,
-  },
-
-  backButton: {
-    padding: 8,
-    alignSelf: "flex-start",
-    marginBottom: 12,
-  },
-
-  backButtonText: {
-    color: "#A7A4A4",
-    fontSize: 34,
-    lineHeight: 34,
-    fontFamily: "Inter",
-    fontWeight: "600",
   },
 
   logoWrap: {
@@ -400,6 +423,30 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "600",
     textAlign: "center",
+  },
+
+  cancelButton: {
+    alignSelf: "center",
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+
+  cancelButtonDisabled: {
+    opacity: 0.4,
+  },
+
+  cancelButtonPressed: {
+    opacity: 0.6,
+  },
+
+  cancelButtonText: {
+    color: "#C94A5A",
+    fontSize: 14,
+    fontFamily: "Inter",
+    fontWeight: "600",
+    textAlign: "center",
+    textDecorationLine: "underline",
   },
 
   helper: {

@@ -5,9 +5,11 @@ import {
   where,
   limit,
   getDocs,
+  getDoc,
   orderBy,
   collection,
   writeBatch,
+  updateDoc,
   serverTimestamp,
   runTransaction,
 } from "firebase/firestore";
@@ -203,4 +205,22 @@ export async function searchOrganizationsByNamePrefix(text, { limitCount = 8 } =
 
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getOrgById(orgId) {
+  if (!orgId) throw new Error("Missing orgId");
+  const snap = await getDoc(doc(db, "organizations", orgId));
+  if (!snap.exists()) throw new Error("Organization not found.");
+  return { id: snap.id, ...snap.data() };
+}
+
+export async function updateOrganization(orgId, fields) {
+  if (!orgId) throw new Error("Missing orgId");
+  if (!fields || typeof fields !== "object") throw new Error("No fields to update");
+
+  const orgRef = doc(db, "organizations", orgId);
+  await updateDoc(orgRef, {
+    ...fields,
+    updatedAt: serverTimestamp(),
+  });
 }

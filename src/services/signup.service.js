@@ -43,13 +43,13 @@ export const registerEmployer = async ({
   // Not registered -> send to create org flow
   if (!businessAlreadyRegistered) {
     await setDoc(doc(db, "users", uid), {
-    ...baseUserDoc,
-    orgIds: [],
-    employerOnboardingStatus: "needs_org_creation",
-    legalBusinessNameDraft: legalBusinessName?.trim() || "",
-    approvalStatus: "pending",
-    updatedAt: serverTimestamp(),
-  });
+      ...baseUserDoc,
+      orgIds: [],
+      employerOnboardingStatus: "needs_org_creation",
+      legalBusinessNameDraft: legalBusinessName?.trim() || "",
+      approvalStatus: "pending",
+      updatedAt: serverTimestamp(),
+    });
 
     return { uid, needsOrgCreation: true };
   }
@@ -152,4 +152,24 @@ export const registerWorker = async ({ email, password, fullName, phone }) => {
   });
 
   return { uid };
+};
+
+/**
+ * Cancels an in-progress employer registration.
+ * Deletes the Firestore user doc and the Firebase Auth user.
+ * Called from CreateOrganizationScreen when the user opts out.
+ */
+export const cancelEmployerRegistration = async (uid) => {
+  if (!uid) throw new Error("Missing uid");
+
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "users", uid));
+  await batch.commit();
+
+  // Auth user must be deleted last (requires recent auth, which is guaranteed
+  // since they just registered seconds/minutes ago)
+  const currentUser = auth.currentUser;
+  if (currentUser && currentUser.uid === uid) {
+    await currentUser.delete();
+  }
 };

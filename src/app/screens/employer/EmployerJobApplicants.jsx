@@ -152,6 +152,7 @@ export default function EmployerJobApplicants() {
 
   const shiftExpired = hoursUntilShift !== null && hoursUntilShift < 0;
   const showExpiryBanner = shiftExpired && !isFilled && !isCancelled && !isActive;
+  const approvalLocked = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 2;
   const showApprovalWarning = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 4;
 
   const onReject = async (app) => {
@@ -299,11 +300,25 @@ export default function EmployerJobApplicants() {
 
           <Pressable
             onPress={() => onApprove(item)}
-            disabled={busy || isFilled || isCancelled || isExpired}
-            style={[styles.btn, styles.btnPrimary, (busy || isFilled || isCancelled || isExpired) && styles.btnDisabled]}
+            disabled={busy || isFilled || isCancelled || isExpired || approvalLocked}
+            style={[
+              styles.btn,
+              styles.btnPrimary,
+              (busy || isFilled || isCancelled || isExpired || approvalLocked) && styles.btnDisabled,
+            ]}
           >
             <Text style={styles.btnTextPrimary}>
-              {isFilled ? "Filled" : isCancelled ? "Cancelled" : isExpired ? "Expired" : busy ? "..." : "Approve"}
+              {isFilled
+                ? "Filled"
+                : isCancelled
+                  ? "Cancelled"
+                  : isExpired
+                    ? "Expired"
+                    : approvalLocked
+                      ? "Locked"
+                      : busy
+                        ? "..."
+                        : "Approve"}
             </Text>
           </Pressable>
         </View>
@@ -340,10 +355,16 @@ export default function EmployerJobApplicants() {
                 ⚠️ This shift has already passed. Please reject any pending applicants and cancel the shift.
               </Text>
             </View>
+          ) : approvalLocked ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>
+                🔒 Approvals are closed. This shift starts in less than 2 hours.
+              </Text>
+            </View>
           ) : showApprovalWarning ? (
             <View style={styles.warningBanner}>
               <Text style={styles.warningBannerText}>
-                ⚠️ This shift starts soon. Workers must be approved with enough time to prepare. Pending applications will not be automatically rejected — please review them now.
+                ⚠️ This shift starts in less than 4 hours. You have until 2 hours before the shift to approve applicants.
               </Text>
             </View>
           ) : null}

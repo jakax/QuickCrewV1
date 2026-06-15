@@ -613,6 +613,11 @@ export async function workerClockIn({ jobId, workerUid }) {
     workerClockIn: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  const applicationRef = doc(db, "applications", assignmentId);
+  await updateDoc(applicationRef, {
+    workerClockIn: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 
   return { ok: true };
 }
@@ -632,6 +637,11 @@ export async function workerClockOut({ jobId, workerUid }) {
   if (data?.workerClockOut) throw new Error("You have already clocked out.");
 
   await updateDoc(assignmentRef, {
+    workerClockOut: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const applicationRef = doc(db, "applications", assignmentId);
+  await updateDoc(applicationRef, {
     workerClockOut: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

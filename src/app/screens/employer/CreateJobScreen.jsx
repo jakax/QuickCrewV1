@@ -14,6 +14,7 @@ import { createJob } from "../../../services/jobs.service";
 import JobForm from "../../components/jobs/JobForm";
 import { db } from "../../../services/firebase/config";
 import { collection, getDocs } from "firebase/firestore";
+import { getOrgById } from "../../../services/organization.service";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
 export default function CreateJobScreen() {
@@ -24,24 +25,27 @@ export default function CreateJobScreen() {
   const [error, setError] = useState(null);
 
   const [roleRates, setRoleRates] = useState({});
+  const [orgDescription, setOrgDescription] = useState("");
   const [orgLoading, setOrgLoading] = useState(true);
   const [orgError, setOrgError] = useState(null);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadRoleRates = async () => {
+    const loadOrgData = async () => {
       try {
         setOrgError(null);
         setOrgLoading(true);
 
         if (!orgId) throw new Error("Missing orgId (session).");
 
-        const ref = collection(db, "organizations", orgId, "roleRates");
-        const snap = await getDocs(ref);
+        const [ratesSnap, orgDoc] = await Promise.all([
+          getDocs(collection(db, "organizations", orgId, "roleRates")),
+          getOrgById(orgId),
+        ]);
 
         const cleaned = {};
-        snap.forEach((docSnap) => {
+        ratesSnap.forEach((docSnap) => {
           const data = docSnap.data() || {};
           const key = String(docSnap.id || "").trim().toLowerCase();
 
@@ -49,8 +53,8 @@ export default function CreateJobScreen() {
             data.ratePerHour != null
               ? data.ratePerHour
               : data.rate != null
-              ? data.rate
-              : null;
+                ? data.rate
+                : null;
 
           const rate =
             typeof rawRate === "number"
@@ -58,39 +62,30 @@ export default function CreateJobScreen() {
               : Number(String(rawRate ?? "").replace(",", "."));
 
           if (data.isActive === false) return;
-
-          if (key && Number.isFinite(rate)) {
-            cleaned[key] = rate;
-          }
+          if (key && Number.isFinite(rate)) cleaned[key] = rate;
         });
 
-        if (mounted) setRoleRates(cleaned);
+        if (mounted) {
+          setRoleRates(cleaned);
+          setOrgDescription(orgDoc?.description || "");
+        }
       } catch (e) {
-        if (mounted) setOrgError(e?.message || "Could not load company rates.");
+        if (mounted) setOrgError(e?.message || "Could not load company data.");
         if (mounted) setRoleRates({});
       } finally {
         if (mounted) setOrgLoading(false);
       }
     };
 
-    loadRoleRates();
-    return () => {
-      mounted = false;
-    };
+    loadOrgData();
+    return () => { mounted = false; };
   }, [orgId]);
 
   const onSubmit = async (values) => {
     try {
       setError(null);
       setLoading(true);
-
-      await createJob({
-        orgId,
-        orgName,
-        uid,
-        job: values,
-      });
-
+      await createJob({ orgId, orgName, uid, job: values });
       navigation.goBack();
     } catch (e) {
       setError(e?.message || "Could not create job.");
@@ -112,7 +107,6 @@ export default function CreateJobScreen() {
               <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
                 <Text style={styles.backArrow}>‹</Text>
               </Pressable>
-
               <View style={styles.headerTitleWrap}>
                 <Text style={styles.h1}>Create shift</Text>
               </View>
@@ -121,7 +115,7 @@ export default function CreateJobScreen() {
             {orgLoading ? (
               <View style={styles.infoBanner}>
                 <ActivityIndicator />
-                <Text style={styles.infoBannerText}>Loading company rates…</Text>
+                <Text style={styles.infoBannerText}>Loading company data…</Text>
               </View>
             ) : orgError ? (
               <Text style={styles.orgErrorText}>{orgError}</Text>
@@ -141,6 +135,7 @@ export default function CreateJobScreen() {
                 description: "",
               }}
               orgName={orgName}
+              orgDescription={orgDescription}
               roleRates={roleRates}
               submitLabel="Create shift"
               loading={loading}

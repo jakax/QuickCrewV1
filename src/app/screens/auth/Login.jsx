@@ -23,12 +23,17 @@ import {
 } from "../../components/layout/ScreenScrollKeyboard";
 import { Ionicons } from "@expo/vector-icons";
 
-const Login = ({ navigation }) => {
+const Login = ({ navigation, route }) => {
+  const userType = route?.params?.userType ?? "worker";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const isWorker = userType === "worker";
+  const screenTitle = isWorker ? "Worker Login" : "Log in as Business";
 
   const onLoginPress = async () => {
     try {
@@ -82,43 +87,49 @@ const Login = ({ navigation }) => {
           />
 
           <View style={styles.content}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.navigate("LoginEntry")}
-              disabled={loading}
-            >
-              <Text style={styles.backButtonText}>‹</Text>
-            </TouchableOpacity>
-
-            <View style={styles.socialSection}>
+            <View style={styles.headerRow}>
               <TouchableOpacity
-                style={[styles.socialButton, loading ? styles.buttonDisabled : null]}
-                onPress={onGooglePress}
+                style={styles.backButton}
+                onPress={() => navigation.navigate("LoginEntry")}
                 disabled={loading}
               >
-                <Text style={styles.socialIcon}>G</Text>
-                <Text style={styles.socialButtonText}>Continue with Google</Text>
+                <Text style={styles.backButtonText}>‹</Text>
               </TouchableOpacity>
-
-              {/* Apple Sign In — only shown on iOS */}
-              {Platform.OS === "ios" && (
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.appleButton, loading ? styles.buttonDisabled : null]}
-                  onPress={onApplePress}
-                  disabled={loading}
-                >
-                  <Text style={styles.socialIconApple}></Text>
-                  <Text style={styles.socialButtonText}>Continue with Apple</Text>
-                </TouchableOpacity>
-              )}
+              <Text style={styles.screenTitle}>{screenTitle}</Text>
             </View>
 
-            <View style={styles.dividerWrap}>
-              <View style={styles.divider} />
-            </View>
+            {isWorker && (
+              <>
+                <View style={styles.socialSection}>
+                  <TouchableOpacity
+                    style={[styles.socialButton, loading && styles.buttonDisabled]}
+                    onPress={onGooglePress}
+                    disabled={loading}
+                  >
+                    <Text style={styles.socialIcon}>G</Text>
+                    <Text style={styles.socialButtonText}>Continue with Google</Text>
+                  </TouchableOpacity>
+
+                  {Platform.OS === "ios" && (
+                    <TouchableOpacity
+                      style={[styles.socialButton, styles.appleButton, loading && styles.buttonDisabled]}
+                      onPress={onApplePress}
+                      disabled={loading}
+                    >
+                      <Text style={styles.socialIconApple}></Text>
+                      <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <View style={styles.dividerWrap}>
+                  <View style={styles.divider} />
+                </View>
+              </>
+            )}
 
             <View style={styles.formSection}>
-              <Text style={styles.label}>Email adress</Text>
+              <Text style={styles.label}>Email address</Text>
               <TextInput
                 style={styles.input}
                 placeholder="you@example.com"
@@ -157,12 +168,12 @@ const Login = ({ navigation }) => {
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <TouchableOpacity
-                style={[styles.loginButton, loading ? styles.buttonDisabled : null]}
+                style={[styles.loginButton, loading && styles.buttonDisabled]}
                 onPress={onLoginPress}
                 disabled={loading}
               >
                 <Text style={styles.loginButtonText}>
-                  {loading ? "Loading..." : "Sign in"}
+                  {loading ? "Loading..." : "Log in"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -174,30 +185,11 @@ const Login = ({ navigation }) => {
               >
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
-
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Don't have an account yet?</Text>
-                <Pressable
-                  disabled={loading}
-                  onPress={() => navigation.navigate("RegisterWorker")}
-                >
-                  <Text style={styles.linkText}>Register</Text>
-                </Pressable>
-              </View>
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>Are you an employer?</Text>
-                <Pressable
-                  disabled={loading}
-                  onPress={() => navigation.navigate("RegisterEmployer")}
-                >
-                  <Text style={styles.linkText}>Create an account</Text>
-                </Pressable>
-              </View>
             </View>
 
             <View style={styles.legalSection}>
               <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>security & Privacy</Text>
+                <Text style={styles.legalLink}>Security & Privacy</Text>
               </TouchableOpacity>
               <TouchableOpacity disabled>
                 <Text style={styles.legalLink}>Terms & Conditions</Text>
@@ -250,11 +242,16 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
 
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
   backButton: {
     paddingVertical: 8,
     paddingHorizontal: 8,
-    alignSelf: "flex-start",
-    marginBottom: 20,
+    alignSelf: "center",
   },
 
   backButtonText: {
@@ -270,7 +267,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Inter",
     fontWeight: "600",
-    marginBottom: 20,
+    marginLeft: 8,
   },
 
   socialSection: {
@@ -419,28 +416,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
 
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 4,
-  },
-
-  footerText: {
-    color: "#434343",
-    fontSize: 16,
-    fontFamily: "Inter",
-    fontWeight: "300",
-    paddingVertical: 8,
-  },
-
-  linkText: {
-    color: "#595959",
-    fontSize: 16,
-    fontFamily: "Inter",
-    fontWeight: "700",
-  },
-
   legalSection: {
     width: "100%",
     gap: 10,
@@ -464,16 +439,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0E0",   // igualá a tu input actual
-    borderRadius: 8,           // igualá a tu input actual
-    backgroundColor: "#FFF",   // igualá a tu input actual
+    borderColor: "#CDCDCD",
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
   },
+
   inputFlex: {
     flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    color: "#000",             // igualá a tu input actual
+    color: "#333333",
+    fontSize: 15,
+    fontFamily: "Inter",
   },
+
   eyeButton: {
     paddingHorizontal: 12,
     justifyContent: "center",
