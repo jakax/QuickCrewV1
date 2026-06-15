@@ -41,12 +41,14 @@
         }
       ],
       "expo-apple-authentication",
-      "expo-build-properties",
-      {
-        "ios": {
-          "useFrameworks": "static"
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
-      }
+      ]
     ],
     "extra": {
       "eas": {
