@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { listPendingUsers, approveWorker, rejectWorker, UserRow } from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
+import { useSearchParams } from "react-router-dom";
 
 type ReferenceItem = {
   name?: string;
@@ -41,6 +42,7 @@ function formatTimestamp(value: TimestampLike) {
 
 export default function UsersApprovalsScreen() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,16 @@ export default function UsersApprovalsScreen() {
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const search = q.trim().toLowerCase();
+    if (!search) return items;
+    return items.filter((u) =>
+      (u.fullName || "").toLowerCase().includes(search) ||
+      (u.email || "").toLowerCase().includes(search)
+    );
+  }, [items, q]);
 
   const [skills, setSkills] = useState<{ id: string; name: string; key: string; isActive: boolean }[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
@@ -96,8 +108,10 @@ export default function UsersApprovalsScreen() {
       setItems(rows);
 
       if (rows.length) {
-        // keep selection if possible
-        if (!selectedId || !rows.some((r) => r.id === selectedId)) {
+        const userIdFromParam = searchParams.get("userId");
+        if (userIdFromParam && rows.some((r) => r.id === userIdFromParam)) {
+          setSelectedId(userIdFromParam);
+        } else if (!selectedId || !rows.some((r) => r.id === selectedId)) {
           setSelectedId(rows[0].id);
         }
       } else {
@@ -183,14 +197,21 @@ export default function UsersApprovalsScreen() {
         <div className="cardHeader">
           <div className="fw900">Pending approvals</div>
           <div className="muted mt6 fs13">
-            {loading ? "Loading…" : `${items.length} pending`}
+            {loading ? "Loading…" : `${filtered.length} shown · ${items.length} total`}
           </div>
+          <input
+            className="input"
+            placeholder="Search name / email..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ marginTop: 10 }}
+          />
         </div>
 
         {error ? <div className="cardBody error">{error}</div> : null}
 
         <div className="list">
-          {items.map((u) => {
+          {filtered.map((u) => {
             const isActive = u.id === selectedId;
             return (
               <button

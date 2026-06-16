@@ -4,6 +4,7 @@ import { useAuth } from "../../providers/AuthProvider";
 import { ApprovalStatus, listWorkersByStatus, setWorkerStatus, UserRow } from "./users.service";
 import { usePrompt } from "../../providers/PromptProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
+import UserInfoModal from "./UserInfoModal";
 
 const TABS: ApprovalStatus[] = ["pending", "approved", "rejected", "suspended"];
 
@@ -16,11 +17,8 @@ function titleFor(tab: ApprovalStatus) {
 
 function asDateMaybe(v: any): Date | null {
   if (!v) return null;
-  // Firestore Timestamp
   if (typeof v?.toDate === "function") return v.toDate();
-  // {seconds}
   if (typeof v?.seconds === "number") return new Date(v.seconds * 1000);
-  // JS Date
   if (v instanceof Date) return v;
   return null;
 }
@@ -37,7 +35,6 @@ function fmtShort(d: Date | null): string {
 function pillClass(st: string) {
   if (st === "approved") return "pill pillOk";
   if (st === "pending") return "pill";
-  // rejected/suspended (and any other future states)
   return "pill pillWarn";
 }
 
@@ -56,6 +53,8 @@ export default function WorkersScreen() {
 
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const [infoUser, setInfoUser] = useState<UserRow | null>(null);
 
   const [skillsMap, setSkillsMap] = useState<Record<string, string>>({});
 
@@ -81,23 +80,23 @@ export default function WorkersScreen() {
     let mounted = true;
 
     const loadSkills = async () => {
-        try {
+      try {
         const data = await listSkillsCatalog();
         const map: Record<string, string> = {};
         data.forEach((s: any) => {
-            if (s?.id) map[s.id] = s.name || s.key || s.id;
+          if (s?.id) map[s.id] = s.name || s.key || s.id;
         });
         if (mounted) setSkillsMap(map);
-        } catch {
-        // silent - table can fall back to ids
-        }
+      } catch {
+        // silent
+      }
     };
 
     loadSkills();
     return () => {
-        mounted = false;
+      mounted = false;
     };
-    }, []);
+  }, []);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -111,11 +110,12 @@ export default function WorkersScreen() {
     });
   }, [items, q]);
 
-  const openReview = (userId: string) => {
-    // MVP: keep it simple.
-    // Later: make approvals screen accept ?userId=... to open exact worker.
-    void userId;
-    nav("/users/approvals");
+  const openReview = (u: UserRow) => {
+    if (u.approvalStatus === "pending") {
+      nav(`/users/approvals?userId=${u.id}`);
+      return;
+    }
+    setInfoUser(u);
   };
 
   const changeStatus = async (u: UserRow, to: ApprovalStatus) => {
@@ -135,7 +135,7 @@ export default function WorkersScreen() {
           required: true,
         });
 
-        if (reason == null) return; // cancelled
+        if (reason == null) return;
       }
 
       setActionLoadingId(u.id);
@@ -195,7 +195,9 @@ export default function WorkersScreen() {
           {error ? <div className="error mt12">{error}</div> : null}
           {actionError ? <div className="error mt12">{actionError}</div> : null}
 
-          {!loading && filtered.length === 0 ? <div className="muted mt16">No workers in this status.</div> : null}
+          {!loading && filtered.length === 0 ? (
+            <div className="muted mt16">No workers in this status.</div>
+          ) : null}
 
           <div className="mt16 tableWrap">
             <table className="table tableThLeft">
@@ -216,7 +218,9 @@ export default function WorkersScreen() {
                   const busy = actionLoadingId === u.id;
                   const st = String(u.approvalStatus || tab).toLowerCase();
                   const updatedAt = fmtShort(asDateMaybe(u.statusUpdatedAt || u.updatedAt));
-                  const reason = st === "rejected" || st === "suspended" ? String(u.statusReason || "—") : "—";
+                  const reason = st === "rejected" || st === "suspended"
+                    ? String(u.statusReason || "—")
+                    : "—";
 
                   return (
                     <tr key={u.id}>
@@ -229,9 +233,7 @@ export default function WorkersScreen() {
 
                       <td className="muted fw800">
                         {Array.isArray(u.skills) && u.skills.length
-                          ? u.skills
-                              .map((id) => skillsMap[id] || id)
-                              .join(", ")
+                          ? u.skills.map((id) => skillsMap[id] || id).join(", ")
                           : "—"}
                       </td>
 
@@ -240,7 +242,7 @@ export default function WorkersScreen() {
 
                       <td>
                         <div className="tableActions">
-                          <button className="btn" onClick={() => openReview(u.id)} disabled={busy}>
+                          <button className="btn" onClick={() => openReview(u)} disabled={busy}>
                             Review
                           </button>
 
@@ -281,6 +283,12 @@ export default function WorkersScreen() {
           </div>
         </div>
       </div>
+
+      <UserInfoModal
+        user={infoUser}
+        skillsMap={skillsMap}
+        onClose={() => setInfoUser(null)}
+      />
     </div>
   );
 }

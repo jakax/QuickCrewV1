@@ -662,7 +662,10 @@ export default function WorkerJobDetails() {
           </View>
 
           <View style={styles.confirmationsWrap}>
-            <View style={styles.confirmationRow}>
+            <Pressable
+              style={styles.confirmationRow}
+              onPress={() => setConfirmNoCriminalRecord(prev => !prev)}
+            >
               <Text style={styles.confirmationText}>
                 I have confirmed I have no criminal records
               </Text>
@@ -672,9 +675,12 @@ export default function WorkerJobDetails() {
                 color={confirmNoCriminalRecord ? "#70A9DF" : undefined}
                 style={styles.checkbox}
               />
-            </View>
+            </Pressable>
 
-            <View style={styles.confirmationRow}>
+            <Pressable
+              style={styles.confirmationRow}
+              onPress={() => setAcceptTerms(prev => !prev)}
+            >
               <Text style={styles.confirmationText}>
                 I have read and agreed terms and conditions
               </Text>
@@ -684,9 +690,12 @@ export default function WorkerJobDetails() {
                 color={acceptTerms ? "#70A9DF" : undefined}
                 style={styles.checkbox}
               />
-            </View>
+            </Pressable>
 
-            <View style={styles.confirmationRow}>
+            <Pressable
+              style={styles.confirmationRow}
+              onPress={() => setAcceptCancellationPolicies(prev => !prev)}
+            >
               <Text style={styles.confirmationText}>
                 I have read and accept the cancellation policies
               </Text>
@@ -696,7 +705,7 @@ export default function WorkerJobDetails() {
                 color={acceptCancellationPolicies ? "#70A9DF" : undefined}
                 style={styles.checkbox}
               />
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.bottomSection}>
@@ -959,16 +968,16 @@ const styles = StyleSheet.create({
   confirmationText: {
     flex: 1,
     color: "#F95050",
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: "Inter",
     fontStyle: "italic",
     fontWeight: "300",
   },
 
   checkbox: {
-    width: 16,
-    height: 16,
-    borderRadius: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 4,
     borderColor: "#70A9DF",
   },
 

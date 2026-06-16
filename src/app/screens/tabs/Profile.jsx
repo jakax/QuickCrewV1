@@ -618,8 +618,8 @@ export default function Profile() {
             <View style={styles.accountCard}>
               <Text style={styles.cardTitle}>Account</Text>
               <Row label="Organization" value={profile?.orgName || "—"} />
-              <Row label="Member role" value={profile?.memberRole || "—"} />
-              <Row label="Approval status" value={profile?.approvalStatus || "pending"} />
+              <Row label="Member role" value={profile?.memberRole ? profile.memberRole.charAt(0).toUpperCase() + profile.memberRole.slice(1) : "—"} />
+              <Row label="Approval status" value={profile?.approvalStatus ? profile.approvalStatus.charAt(0).toUpperCase() + profile.approvalStatus.slice(1) : "Pending"} />
               <Row label="Email address" value={profile?.email || "-"} />
             </View>
 

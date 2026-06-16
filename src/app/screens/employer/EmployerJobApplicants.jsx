@@ -212,8 +212,8 @@ export default function EmployerJobApplicants() {
     }
 
     const ok = await confirm({
-      title: "Approve worker",
-      message: `Approve ${app.workerFullName || "this worker"} for this shift?`,
+      title: "",
+      message: `Would you like to confirm ${app.workerFullName || "this worker"} for this shift?`,
       confirmText: "Approve",
       cancelText: "Cancel",
     });

@@ -126,9 +126,9 @@ export default function EmployerJobsHome({ navigation }) {
 
       {approvalStatus === "pending" ? (
         <View style={styles.banner}>
-          <Text style={styles.bannerTitle}>Pending approval</Text>
+          <Text style={styles.bannerTitle}>Pending Approval</Text>
           <Text style={styles.bannerText}>
-            Your account is pending approval by QuickCrew. You can browse for now.
+            Your account is pending approval by QuickCrew.
           </Text>
         </View>
       ) : null}

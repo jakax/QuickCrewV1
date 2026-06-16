@@ -30,7 +30,7 @@ export default function AppLayout() {
         <div className="sideSection">Users</div>
         <SideItem to="/users/workers" label="Workers" />
         <SideItem to="/users/employers" label="Employers" />
-        <SideItem to="/users/approvals" label="Approvals (legacy)" />
+        <SideItem to="/users/approvals" label="Pending Approvals" />
 
         <div className="sideSection">Organizations</div>
         <SideItem to="/organizations" label="Organizations" />

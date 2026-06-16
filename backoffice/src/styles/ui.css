@@ -121,11 +121,31 @@
   font-weight: 800;
   outline: none;
 }
-.input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35); }
 
-.table { width: 100%; border-collapse: collapse; }
-.table th, .table td { border-top: 1px solid #f1f5f9; padding: 12px 10px; vertical-align: middle; }
-.table thead th { border-top: none; color: #6b7280; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-top: 1px solid #f1f5f9;
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+.table thead th {
+  border-top: none;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
 
 /* ---------- Layout helpers (BackOffice) ---------- */
 .rowBetween {
@@ -260,4 +280,35 @@
   background: white;
 }
 
-.mb8 { margin-bottom: 8px; }
+.mb8 {
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.mt4 {
+  margin-top: 4px;
+}
+
+.mt6 {
+  margin-top: 6px;
+}
+
+.mt10 {
+  margin-top: 10px;
+}
+
+.mt12 {
+  margin-top: 12px;
+}
+
+.mt16 {
+  margin-top: 16px;
+}
+
+.fs16 {
+  font-size: 16px;
+}
