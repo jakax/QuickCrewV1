@@ -79,7 +79,8 @@ function Row({ label, value }) {
 
 export default function Profile() {
   const navigation = useNavigation();
-  const { uid, profile, isEmployer, isWorker } = useSession();
+  const { uid, profile, isEmployer, isWorker, approvalStatus } = useSession();
+  const isApproved = approvalStatus === "approved";
   const confirm = useConfirm();
 
   const initial = useMemo(() => {
@@ -399,7 +400,6 @@ export default function Profile() {
         aspect: [1, 1],
         quality: 0.85,
       });
-      console.log("📸 Image picker result:", JSON.stringify(res));
 
       if (res.canceled) return;
 
@@ -623,22 +623,24 @@ export default function Profile() {
               <Row label="Email address" value={profile?.email || "-"} />
             </View>
 
-            <View style={[styles.inputGroup, styles.orgDescriptionGroup]}>
-              <Text style={styles.sectionLabel}>Organization description</Text>
-              <Text style={styles.helper}>
-                This description is visible to workers when browsing shifts.
-              </Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={orgDescription}
-                onChangeText={setOrgDescription}
-                placeholder="Write a short description of your organization..."
-                placeholderTextColor="#716C6C"
-                multiline
-                textAlignVertical="top"
-                editable={!savingOrg}
-              />
-            </View>
+            {isApproved ? (
+              <View style={[styles.inputGroup, styles.orgDescriptionGroup]}>
+                <Text style={styles.sectionLabel}>Organization description</Text>
+                <Text style={styles.helper}>
+                  This description is visible to workers when browsing shifts.
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={orgDescription}
+                  onChangeText={setOrgDescription}
+                  placeholder="Write a short description of your organization..."
+                  placeholderTextColor="#716C6C"
+                  multiline
+                  textAlignVertical="top"
+                  editable={!savingOrg}
+                />
+              </View>
+            ) : null}
 
             {orgError ? <Text style={styles.error}>{orgError}</Text> : null}
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -24,13 +24,23 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
 export default function EmployerJobsHome({ navigation }) {
   const scrollY = useRef(new Animated.Value(0)).current;
-  const { orgId, approvalStatus } = useSession();
+  const { orgId, approvalStatus, profile } = useSession();
 
   const [jobs, setJobs] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isApproved = approvalStatus === "approved";
+
+  const isBlocked = approvalStatus === "suspended" || approvalStatus === "rejected";
+
+  const lastStatusReason = useMemo(() => {
+    const history = Array.isArray(profile?.statusHistory) ? profile.statusHistory : [];
+    const last = [...history].reverse().find(
+      (h) => h?.to === approvalStatus && h?.reason
+    );
+    return last?.reason || null;
+  }, [profile?.statusHistory, approvalStatus]);
 
   const hasPendingForJob = async (jobId) => {
     const q = query(
@@ -110,8 +120,9 @@ export default function EmployerJobsHome({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (!orgId) return;
+      if (!isApproved) return;
       load();
-    }, [orgId, load])
+    }, [orgId, load, isApproved])
   );
 
   const onCreateJob = () => navigation.navigate("CreateJob");
@@ -133,10 +144,34 @@ export default function EmployerJobsHome({ navigation }) {
         </View>
       ) : null}
 
+      {approvalStatus === "suspended" ? (
+        <View style={styles.bannerDanger}>
+          <Text style={styles.bannerDangerTitle}>Account suspended</Text>
+          <Text style={styles.bannerDangerText}>
+            Your account has been suspended. Please contact QuickCrew to resolve this situation.
+          </Text>
+          {lastStatusReason ? (
+            <Text style={styles.bannerDangerReason}>Reason: {lastStatusReason}</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {approvalStatus === "rejected" ? (
+        <View style={styles.bannerDanger}>
+          <Text style={styles.bannerDangerTitle}>Account rejected</Text>
+          <Text style={styles.bannerDangerText}>
+            Your account has been rejected. Please contact QuickCrew to resolve this situation.
+          </Text>
+          {lastStatusReason ? (
+            <Text style={styles.bannerDangerReason}>Reason: {lastStatusReason}</Text>
+          ) : null}
+        </View>
+      ) : null}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <AnimatedFlatList
-        data={jobs}
+        data={isApproved ? jobs : []}
         extraData={refreshKey}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
@@ -256,5 +291,36 @@ const styles = StyleSheet.create({
 
   fabDisabled: {
     backgroundColor: "#B0B0B0",
+  },
+
+  bannerDanger: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 10,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+
+  bannerDangerTitle: {
+    fontWeight: "900",
+    color: "#B91C1C",
+    marginBottom: 4,
+  },
+
+  bannerDangerText: {
+    color: "#B91C1C",
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+
+  bannerDangerReason: {
+    marginTop: 8,
+    color: "#B91C1C",
+    fontWeight: "800",
+    fontStyle: "italic",
+    fontSize: 13,
   },
 });

@@ -91,7 +91,6 @@ export const loginWithGoogleAndLoadProfile = async () => {
 
       // If photo is missing, sync it from Google
       const googleUser = result?.data?.user;
-      console.log("Google user info:", googleUser);
       if (!profile.photo?.url && googleUser?.photo) {
         await setDoc(ref, { photo: { url: googleUser.photo } }, { merge: true });
         return { ...profile, photo: { url: googleUser.photo } };
@@ -102,7 +101,6 @@ export const loginWithGoogleAndLoadProfile = async () => {
 
     // New Google user — create basic worker profile
     const googleUser = result?.data?.user;
-    console.log("Google user info:", googleUser);
     const newProfile = {
       role: "worker",
       approvalStatus: "pending",

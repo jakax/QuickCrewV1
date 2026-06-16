@@ -9,7 +9,7 @@ import {
   ShiftRow,
 } from "./shifts.service";
 
-const TABS: ShiftReviewStatus[] = ["pending", "reviewed"];
+const TABS: ShiftReviewStatus[] = ["pending", "reviewed", "paid"];
 
 export default function ShiftsScreen() {
   const { user } = useAuth();
@@ -91,7 +91,9 @@ export default function ShiftsScreen() {
           <div className="row rowBetween">
             <div>
               <div className="fw900">
-                {tab === "pending" ? "Pending review" : "Reviewed shifts"}
+                <div className="fw900">
+                  {tab === "pending" ? "Pending review" : tab === "reviewed" ? "Reviewed shifts" : "Paid shifts"}
+                </div>
               </div>
               <div className="muted mt6 fw800 fs13">
                 {loading
@@ -166,13 +168,30 @@ export default function ShiftsScreen() {
                             >
                               {busy ? "Saving..." : "Mark reviewed"}
                             </button>
+                          ) : tab === "reviewed" ? (
+                            <>
+                              <button
+                                className="btn"
+                                onClick={() => changeStatus(row, "pending")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Set pending"}
+                              </button>
+                              <button
+                                className="btn btnPrimary"
+                                onClick={() => changeStatus(row, "paid")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Mark paid"}
+                              </button>
+                            </>
                           ) : (
                             <button
                               className="btn"
-                              onClick={() => changeStatus(row, "pending")}
+                              onClick={() => changeStatus(row, "reviewed")}
                               disabled={busy}
                             >
-                              {busy ? "Saving..." : "Set pending"}
+                              {busy ? "Saving..." : "Set reviewed"}
                             </button>
                           )}
                         </div>

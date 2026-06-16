@@ -37,7 +37,6 @@ export default function AppLayout() {
 
         <div className="sideSection">Catalog</div>
         <SideItem to="/catalog/skills" label="Skills" />
-        <SideItem to="/catalog/role-rates" label="Role Rates (legacy)" />
 
         <div className="sideSection">Shifts</div>
         <SideItem to="/shifts" label="Shifts" />

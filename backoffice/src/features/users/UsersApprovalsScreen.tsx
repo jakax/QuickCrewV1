@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { listPendingUsers, approveWorker, rejectWorker, UserRow } from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
-import { useSearchParams } from "react-router-dom";
+import { href, useSearchParams } from "react-router-dom";
+import { usePrompt } from "../../providers/PromptProvider";
 
 type ReferenceItem = {
   name?: string;
@@ -42,6 +43,7 @@ function formatTimestamp(value: TimestampLike) {
 
 export default function UsersApprovalsScreen() {
   const { user } = useAuth();
+  const { prompt } = usePrompt();
   const [searchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(true);
@@ -168,6 +170,17 @@ export default function UsersApprovalsScreen() {
       if (!selected?.id) return;
       if (!user?.uid) throw new Error("Missing admin session.");
 
+      const reason = await prompt({
+        title: "Reason required (rejected)",
+        message: "Please add a short reason for audit history.",
+        placeholder: "e.g. References could not be verified",
+        confirmText: "Save",
+        cancelText: "Cancel",
+        required: true,
+      });
+
+      if (reason == null) return;
+
       setActionError(null);
       setActionLoading(true);
 
@@ -175,6 +188,7 @@ export default function UsersApprovalsScreen() {
         userId: selected.id,
         adminUid: user.uid,
         skills: selectedSkills,
+        reason,
       });
 
       await load();
@@ -189,7 +203,6 @@ export default function UsersApprovalsScreen() {
   // We read them defensively to avoid TS issues and runtime crashes.
   const selectedAny = selected as any;
   const references: ReferenceItem[] = Array.isArray(selectedAny?.references) ? selectedAny.references : [];
-
   return (
     <div className="page approvalsLayout">
       {/* LEFT */}
@@ -262,34 +275,112 @@ export default function UsersApprovalsScreen() {
               <div className="sectionGrid">
                 <div className="card cardBody">
                   <div className="fw900 mb8">Profile</div>
+                  {selectedAny?.photo?.url ? (
+                    <div style={{ marginBottom: 16, textAlign: "center" }}>
+                      <img
+                        src={selectedAny.photo.url}
+                        alt={selected.fullName || "Worker photo"}
+                        referrerPolicy="no-referrer"
+                        style={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          border: "2px solid #e5e7eb",
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="muted fs13 fw800 mb8">No profile photo uploaded.</div>
+                  )}
 
                   <div className="fs13 fw800">Role: {selected.role || "—"}</div>
                   <div className="mt6 fs13 fw800">Approval status: {selected.approvalStatus || "—"}</div>
 
-                  <div className="mt12">
-                    <div className="fw900 mb8">IRD & Bank</div>
+                  <div className="mt12 fw900 mb8">Personal details</div>
+                  <div className="fs13 fw800">First name: {selectedAny?.firstName || "—"}</div>
+                  <div className="mt6 fs13 fw800">Last name: {selectedAny?.lastName || "—"}</div>
+                  <div className="mt6 fs13 fw800">Preferred name: {selectedAny?.preferredName || "—"}</div>
+                  <div className="mt6 fs13 fw800">Email: {selected.email || "—"}</div>
+                  <div className="mt6 fs13 fw800">Phone: {selectedAny?.phone || "—"}</div>
 
-                    <div className="fs13 fw800">
-                      IRD: {selectedAny?.irdNumber || "—"}
-                    </div>
-                    <div className="muted fs12 fw800 mt6">
-                      Set at: {formatTimestamp(selectedAny?.irdNumberSetAt)}
-                    </div>
+                  <div className="mt12 fw900 mb8">Address</div>
+                  <div className="fs13 fw800">Street: {selectedAny?.address?.street || "—"}</div>
+                  <div className="mt6 fs13 fw800">Suburb: {selectedAny?.address?.suburb || "—"}</div>
+                  <div className="mt6 fs13 fw800">City: {selectedAny?.address?.city || "—"}</div>
+                  <div className="mt6 fs13 fw800">Postcode: {selectedAny?.address?.postcode || "—"}</div>
 
-                    <div className="mt12 fs13 fw800">
-                      Bank account: {selectedAny?.bankAccountNumber || "—"}
-                    </div>
-                    <div className="muted fs12 fw800 mt6">
-                      Set at: {formatTimestamp(selectedAny?.bankAccountNumberSetAt)}
-                    </div>
-                  </div>
+                  <div className="mt12 fw900 mb8">Identity</div>
+                  <div className="fs13 fw800">Date of birth: {selectedAny?.dateOfBirth || "—"}</div>
+                  <div className="mt6 fs13 fw800">Gender: {selectedAny?.gender || "—"}</div>
+                  <div className="mt6 fs13 fw800">Nationality: {selectedAny?.nationality || "—"}</div>
+                  <div className="mt6 fs13 fw800">Passport number: {selectedAny?.passportNumber || "—"}</div>
+                  <div className="mt6 fs13 fw800">Passport expiry: {selectedAny?.passportExpiryDate || "—"}</div>
+                  <div className="mt6 fs13 fw800">Passport issuing country: {selectedAny?.passportIssuingCountry || "—"}</div>
+
+                  <div className="mt12 fw900 mb8">Emergency contact</div>
+                  <div className="fs13 fw800">Name: {selectedAny?.emergencyContact?.name || "—"}</div>
+                  <div className="mt6 fs13 fw800">Phone: {selectedAny?.emergencyContact?.phone || "—"}</div>
+                  <div className="mt6 fs13 fw800">Relationship: {selectedAny?.emergencyContact?.relation || "—"}</div>
+
+                  <div className="mt12 fw900 mb8">Right to work</div>
+                  <div className="fs13 fw800">Status: {selectedAny?.rightToWorkNz || "—"}</div>
+                  {selectedAny?.visaExpiryDate ? (
+                    <div className="mt6 fs13 fw800">Visa expiry: {selectedAny.visaExpiryDate}</div>
+                  ) : null}
+
+                  {selectedAny?.about ? (
+                    <>
+                      <div className="mt12 fw900 mb8">About</div>
+                      <div className="fs13 fw800">{selectedAny.about}</div>
+                    </>
+                  ) : null}
                 </div>
 
                 <div className="card cardBody">
-                  <div className="fw900 mb8">CV</div>
-                  <div className="muted fs13">
-                    Not uploaded yet (C1 will add CV upload in worker profile).
-                  </div>
+                  <div className="fw900 mb8">Documents</div>
+
+                  <div className="fs13 fw900 mb8">CV</div>
+                  {selectedAny?.cv?.url ? (
+                    <a
+                      href={selectedAny.cv.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="docLink"
+                    >
+                      {selectedAny.cv.fileName || "View CV"}
+                    </a>
+                  ) : (
+                    <div className="muted fs13 fw800">No CV uploaded yet.</div>
+                  )}
+
+                  <div className="fs13 fw900 mt12 mb8">ID Document</div>
+                  {selectedAny?.idDocument?.url ? (
+                    <a
+                      href={selectedAny.idDocument.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="docLink"
+                    >
+                      {selectedAny.idDocument.fileName || "View ID document"}
+                    </a>
+                  ) : (
+                    <div className="muted fs13 fw800">No ID document uploaded yet.</div>
+                  )}
+
+                  <div className="fs13 fw900 mt12 mb8">Visa document</div>
+                  {selectedAny?.visaDocument?.url ? (
+                    <a
+                      href={selectedAny.visaDocument.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="docLink"
+                    >
+                      {selectedAny.visaDocument.fileName || "View visa document"}
+                    </a>
+                  ) : (
+                    <div className="muted fs13 fw800">No visa document uploaded yet.</div>
+                  )}
                 </div>
 
                 <div className="card cardBody fullRow">
@@ -384,6 +475,6 @@ export default function UsersApprovalsScreen() {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

@@ -312,3 +312,10 @@
 .fs16 {
   font-size: 16px;
 }
+
+.docLink {
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: underline;
+}

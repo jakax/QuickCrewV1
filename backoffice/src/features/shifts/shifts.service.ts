@@ -10,7 +10,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-export type ShiftReviewStatus = "pending" | "reviewed";
+export type ShiftReviewStatus = "pending" | "reviewed" | "paid";
 
 export interface ShiftRow {
   id: string;
@@ -68,16 +68,15 @@ export async function listShiftsByReviewStatus(
   const q =
     status === "pending"
       ? query(
-          collection(db, "assignments"),
-          where("hoursSubmitted", "==", true),
-          where("reviewStatus", "in", ["pending", null])
-        )
+        collection(db, "assignments"),
+        where("hoursSubmitted", "==", true),
+        where("reviewStatus", "in", ["pending", null])
+      )
       : query(
-          collection(db, "assignments"),
-          where("hoursSubmitted", "==", true),
-          where("reviewStatus", "==", "reviewed")
-        );
-
+        collection(db, "assignments"),
+        where("hoursSubmitted", "==", true),
+        where("reviewStatus", "==", status)
+      );
   const snap = await getDocs(q);
   const rows: ShiftRow[] = [];
 
