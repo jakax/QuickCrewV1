@@ -373,7 +373,7 @@ export default function EmployerJobApplicants() {
           ) : showApprovalWarning ? (
             <View style={styles.warningBanner}>
               <Text style={styles.warningBannerText}>
-                ⚠️ This shift starts in less than 4 hours. You have until 2 hours before the shift to approve applicants.
+                ⚠️ This shift starts in less than 4 hours. You have until 2 hours before the shift starts to approve appliants.
               </Text>
             </View>
           ) : null}

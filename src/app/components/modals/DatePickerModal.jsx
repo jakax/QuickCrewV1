@@ -164,7 +164,7 @@ export default function DatePickerModal({
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpDay} onValueChange={handleDayChange}>
                 {days.map((d) => (
-                  <Picker.Item key={`d-${d}`} label={d} value={d} />
+                  <Picker.Item key={`d-${d}`} label={d} value={d} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
@@ -172,7 +172,7 @@ export default function DatePickerModal({
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpMonth} onValueChange={handleMonthChange}>
                 {months.map((m) => (
-                  <Picker.Item key={`m-${m}`} label={m} value={m} />
+                  <Picker.Item key={`m-${m}`} label={m} value={m} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
@@ -180,7 +180,7 @@ export default function DatePickerModal({
             <View style={[styles.pickerBox, styles.pickerBoxWide]}>
               <Picker selectedValue={String(tmpYear)} onValueChange={(v) => setTmpYear(v)}>
                 {yearRange.map((y) => (
-                  <Picker.Item key={`y-${y}`} label={y} value={y} />
+                  <Picker.Item key={`y-${y}`} label={y} value={y} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>

@@ -65,21 +65,21 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpStartHour} onValueChange={setTmpStartHour}>
                 {hours.map((h) => (
-                  <Picker.Item key={`sh-${h}`} label={h} value={h} />
+                  <Picker.Item key={`sh-${h}`} label={h} value={h} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpStartMinute} onValueChange={setTmpStartMinute}>
                 {minutes.map((m) => (
-                  <Picker.Item key={`sm-${m}`} label={m} value={m} />
+                  <Picker.Item key={`sm-${m}`} label={m} value={m} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
             <View style={[styles.pickerBox, styles.pickerBoxSmall]}>
               <Picker selectedValue={tmpStartMeridiem} onValueChange={setTmpStartMeridiem}>
                 {meridiems.map((ap) => (
-                  <Picker.Item key={`sap-${ap}`} label={ap} value={ap} />
+                  <Picker.Item key={`sap-${ap}`} label={ap} value={ap} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
@@ -90,21 +90,21 @@ export default function ShiftTimeModal({ visible, initialStart, initialEnd, onCl
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpEndHour} onValueChange={setTmpEndHour}>
                 {hours.map((h) => (
-                  <Picker.Item key={`eh-${h}`} label={h} value={h} />
+                  <Picker.Item key={`eh-${h}`} label={h} value={h} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
             <View style={styles.pickerBox}>
               <Picker selectedValue={tmpEndMinute} onValueChange={setTmpEndMinute}>
                 {minutes.map((m) => (
-                  <Picker.Item key={`em-${m}`} label={m} value={m} />
+                  <Picker.Item key={`em-${m}`} label={m} value={m} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
             <View style={[styles.pickerBox, styles.pickerBoxSmall]}>
               <Picker selectedValue={tmpEndMeridiem} onValueChange={setTmpEndMeridiem}>
                 {meridiems.map((ap) => (
-                  <Picker.Item key={`eap-${ap}`} label={ap} value={ap} />
+                  <Picker.Item key={`eap-${ap}`} label={ap} value={ap} color="#111827" style={{ fontSize: 16 }} />
                 ))}
               </Picker>
             </View>
