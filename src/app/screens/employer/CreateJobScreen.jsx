@@ -81,11 +81,13 @@ export default function CreateJobScreen() {
     return () => { mounted = false; };
   }, [orgId]);
 
-  const onSubmit = async (values) => {
+  const onSubmit = async (shifts) => {
     try {
       setError(null);
       setLoading(true);
-      await createJob({ orgId, orgName, uid, job: values });
+      await Promise.all(
+        shifts.map((job) => createJob({ orgId, orgName, uid, job }))
+      );
       navigation.goBack();
     } catch (e) {
       setError(e?.message || "Could not create job.");

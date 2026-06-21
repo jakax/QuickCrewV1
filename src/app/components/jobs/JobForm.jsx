@@ -111,6 +111,14 @@ function ModernToggle({ value, onChange }) {
   );
 }
 
+function addDaysToIso(iso, n) {
+  const p = parseIsoDateParts(iso);
+  if (!p) return iso;
+  const d = new Date(p.year, p.month - 1, p.day);
+  d.setDate(d.getDate() + n);
+  return composeIsoDate({ year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() });
+}
+
 export default function JobForm({
   mode,
   initialValues,
@@ -125,6 +133,9 @@ export default function JobForm({
   onCancel,
   roleRates,
 }) {
+
+  const [workersCount, setWorkersCount] = useState(1);
+  const [daysCount, setDaysCount] = useState(1);
 
   const SHOW_RATE_BLOCK = false;
   const [title, setTitle] = useState(initialValues?.title ?? "");
@@ -264,24 +275,14 @@ export default function JobForm({
       return;
     }
 
-    const rate = agreedRate;
-
     const isoOk = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate.trim());
     if (!isoOk) {
       setLocalError("Shift date is required.");
       return;
     }
 
-    const composedStart = composeTimeParts({
-      hour: startHour,
-      minute: startMinute,
-      meridiem: startMeridiem,
-    });
-    const composedEnd = composeTimeParts({
-      hour: endHour,
-      minute: endMinute,
-      meridiem: endMeridiem,
-    });
+    const composedStart = composeTimeParts({ hour: startHour, minute: startMinute, meridiem: startMeridiem });
+    const composedEnd = composeTimeParts({ hour: endHour, minute: endMinute, meridiem: endMeridiem });
 
     if (!composedStart || !composedEnd) {
       setLocalError("Shift start time and end time are required.");
@@ -289,20 +290,28 @@ export default function JobForm({
     }
 
     const composedShiftTime = `${composedStart} to ${composedEnd}`;
-
-    onSubmit?.({
+    const baseJob = {
       title: title.trim(),
       location: location.trim(),
-      shiftDate: shiftDate.trim(),
       shiftStartTime: composedStart,
       shiftEndTime: composedEnd,
       businessApprovalRequired,
       shiftTime: composedShiftTime,
-      ratePerHour: rate,
+      ratePerHour: agreedRate,
       description: description.trim(),
       primaryRoleKey,
       requiredSkills: [primaryRoleKey, ...alsoSkills],
-    });
+    };
+
+    const shifts = [];
+    for (let d = 0; d < daysCount; d++) {
+      const shiftDateForDay = addDaysToIso(shiftDate, d);
+      for (let w = 0; w < workersCount; w++) {
+        shifts.push({ ...baseJob, shiftDate: shiftDateForDay });
+      }
+    }
+
+    onSubmit?.(shifts);
   };
 
   return (
@@ -504,6 +513,44 @@ export default function JobForm({
         </Text>
         <Text style={styles.summaryChevron}>▼</Text>
       </TouchableOpacity>
+
+      <Text style={styles.label}>Workers needed</Text>
+      <View style={styles.skillGrid}>
+        {[1, 2, 3].map((n) => (
+          <Pressable
+            key={`w-${n}`}
+            onPress={() => !readOnly && setWorkersCount(n)}
+            style={[styles.skillChip, workersCount === n && styles.skillChipSelected]}
+          >
+            <Text style={[styles.skillChipText, workersCount === n && styles.skillChipTextSelected]}>
+              {n}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Days</Text>
+      <View style={styles.skillGrid}>
+        {[1, 2, 3].map((n) => (
+          <Pressable
+            key={`day-${n}`}
+            onPress={() => !readOnly && setDaysCount(n)}
+            style={[styles.skillChip, daysCount === n && styles.skillChipSelected]}
+          >
+            <Text style={[styles.skillChipText, daysCount === n && styles.skillChipTextSelected]}>
+              {n}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {daysCount > 1 && (
+        <View style={styles.consecutiveBanner}>
+          <Text style={styles.consecutiveBannerText}>
+            📅 Shifts will be created on {daysCount} consecutive days starting from the selected date.
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.label}>Approval</Text>
       <View style={styles.switchRow}>
@@ -861,5 +908,20 @@ const styles = StyleSheet.create({
     color: "#4B5563",
     lineHeight: 20,
     fontWeight: "400",
+  },
+
+  consecutiveBanner: {
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  consecutiveBannerText: {
+    color: "#1D4ED8",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
 });
