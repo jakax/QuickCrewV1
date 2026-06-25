@@ -3,6 +3,7 @@ import { Animated, FlatList, View, Text, ActivityIndicator, StyleSheet } from "r
 import { LinearGradient } from "expo-linear-gradient";
 import AnimatedHeader from "../../components/jobs/AnimatedHeader.jsx";
 import JobsItem from "../../components/jobs/JobsItem.jsx";
+import { getShiftStartMs } from "../../../utils/jobFormatters";
 
 import { useSession } from "../../providers/SessionProvider";
 
@@ -143,7 +144,7 @@ const JobsList = () => {
       // 3. Skill overlap
       const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
       return hasAnySkillOverlap(workerSkills, requiredSkills);
-    });
+    }).sort((a, b) => getShiftStartMs(a) - getShiftStartMs(b));
   }, [jobs, userLoading, userError, userDoc, appliedJobIds]);
 
   const showInactiveBanner = userDoc?.isActive === false;

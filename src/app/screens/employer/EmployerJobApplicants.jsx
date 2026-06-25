@@ -152,7 +152,7 @@ export default function EmployerJobApplicants() {
 
   const shiftExpired = hoursUntilShift !== null && hoursUntilShift < 0;
   const showExpiryBanner = shiftExpired && !isFilled && !isCancelled && !isActive;
-  const approvalLocked = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 2;
+  const approvalLocked = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 0;// Modificado para el ejemplo 2;
   const showApprovalWarning = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 4;
 
   const onReject = async (app) => {
@@ -233,6 +233,7 @@ export default function EmployerJobApplicants() {
         workerUid: app.workerUid,
         employerUid: employerUid || null,
         status: "confirmed",
+        hoursSubmitted: false,
         confirmedAt: new Date(),
       });
 
@@ -284,7 +285,6 @@ export default function EmployerJobApplicants() {
 
   const renderItem = ({ item }) => {
     const busy = actingId === item.id;
-    console.log("worker item", item);
 
     return (
       <View style={styles.card}>

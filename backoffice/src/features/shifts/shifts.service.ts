@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDocs,
+  limit,
   query,
   updateDoc,
   where,
@@ -10,7 +11,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-export type ShiftReviewStatus = "pending" | "reviewed" | "paid";
+export type ShiftReviewStatus = "pending" | "reviewed" | "paid" | "rejected";
 
 export interface ShiftRow {
   id: string;
@@ -32,6 +33,9 @@ export interface ShiftRow {
   reviewedBy: string | null;
   workerFullName: string | null;
   workerEmail: string | null;
+  workerNoShow: boolean;
+  employerComment: string | null;
+  quickCrewComment: string | null;
 }
 
 function asDateMaybe(v: any): Date | null {
@@ -142,6 +146,9 @@ export async function listShiftsByReviewStatus(
       reviewedBy: data.reviewedBy || null,
       workerFullName,
       workerEmail,
+      workerNoShow: data.workerNoShow === true,
+      employerComment: data.employerComment || null,
+      quickCrewComment: data.quickCrewComment || null,
     });
   }
 
@@ -152,15 +159,97 @@ export async function setShiftReviewStatus({
   assignmentId,
   adminUid,
   to,
+  quickCrewComment,
 }: {
   assignmentId: string;
   adminUid: string;
   to: ShiftReviewStatus;
+  quickCrewComment?: string;
 }): Promise<void> {
   const ref = doc(db, "assignments", assignmentId);
   await updateDoc(ref, {
     reviewStatus: to,
     reviewedAt: serverTimestamp(),
     reviewedBy: adminUid,
+    ...(quickCrewComment ? { quickCrewComment } : {}),
   });
+}
+
+export async function listUnclosedAssignments(): Promise<ShiftRow[]> {
+  const snap = await getDocs(query(
+    collection(db, "assignments"),
+    where("status", "in", ["assigned", "confirmed"]),
+    limit(50)
+  ));
+
+  const rows: ShiftRow[] = [];
+
+  for (const d of snap.docs.filter(d => d.data().hoursSubmitted !== true)) {
+    const data = d.data();
+    const workerUid = data.workerUid || null;
+
+    let workerFullName: string | null = null;
+    let workerEmail: string | null = null;
+
+    if (workerUid) {
+      try {
+        const userSnap = await getDoc(doc(db, "users", workerUid));
+        if (userSnap.exists()) {
+          const u = userSnap.data();
+          workerFullName =
+            u?.fullName ||
+            `${u?.firstName || ""} ${u?.lastName || ""}`.trim() ||
+            null;
+          workerEmail = u?.email || null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    let jobTitle: string | null = null;
+    let shiftDate: string | null = null;
+    let shiftTime: string | null = null;
+
+    if (data.jobId) {
+      try {
+        const jobSnap = await getDoc(doc(db, "jobs", data.jobId));
+        if (jobSnap.exists()) {
+          const j = jobSnap.data();
+          jobTitle = j?.title || null;
+          shiftDate = j?.shiftDate || null;
+          shiftTime = j?.shiftTime || null;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    rows.push({
+      id: d.id,
+      jobId: data.jobId || null,
+      workerUid,
+      employerUid: data.employerUid || null,
+      orgId: data.orgId || null,
+      orgName: data.orgName || null,
+      jobTitle,
+      shiftDate,
+      shiftTime,
+      workerClockIn: data.workerClockIn || null,
+      workerClockOut: data.workerClockOut || null,
+      employerClockIn: data.employerClockIn || null,
+      employerClockOut: data.employerClockOut || null,
+      hoursSubmitted: false,
+      reviewStatus: data.reviewStatus || null,
+      reviewedAt: data.reviewedAt || null,
+      reviewedBy: data.reviewedBy || null,
+      workerFullName,
+      workerEmail,
+      workerNoShow: data.workerNoShow === true,
+      employerComment: data.employerComment || null,
+      quickCrewComment: data.quickCrewComment || null,
+    });
+  }
+
+  return rows;
 }

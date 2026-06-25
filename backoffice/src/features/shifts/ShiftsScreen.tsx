@@ -7,26 +7,33 @@ import {
   setShiftReviewStatus,
   ShiftReviewStatus,
   ShiftRow,
+  listUnclosedAssignments,
 } from "./shifts.service";
 
-const TABS: ShiftReviewStatus[] = ["pending", "reviewed", "paid"];
+const TABS = ["pending", "reviewed", "paid", "rejected", "unclosed"] as const;
+type Tab = typeof TABS[number];
 
 export default function ShiftsScreen() {
   const { user } = useAuth();
 
-  const [tab, setTab] = useState<ShiftReviewStatus>("pending");
+  const [tab, setTab] = useState<Tab>("pending");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ShiftRow[]>([]);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [detailRow, setDetailRow] = useState<ShiftRow | null>(null);
+  const [rejectRow, setRejectRow] = useState<ShiftRow | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
 
   const load = async () => {
     try {
       setError(null);
       setLoading(true);
-      const data = await listShiftsByReviewStatus(tab);
+      const data = tab === "unclosed"
+        ? await listUnclosedAssignments()
+        : await listShiftsByReviewStatus(tab as ShiftReviewStatus);
       setItems(data);
     } catch (e: any) {
       setError(e?.message || "Could not load shifts.");
@@ -51,12 +58,12 @@ export default function ShiftsScreen() {
     });
   }, [items, q]);
 
-  const changeStatus = async (row: ShiftRow, to: ShiftReviewStatus) => {
+  const changeStatus = async (row: ShiftRow, to: ShiftReviewStatus, quickCrewComment?: string) => {
     try {
       if (!user?.uid) throw new Error("Missing admin session.");
       setActionError(null);
       setActionLoadingId(row.id);
-      await setShiftReviewStatus({ assignmentId: row.id, adminUid: user.uid, to });
+      await setShiftReviewStatus({ assignmentId: row.id, adminUid: user.uid, to, quickCrewComment });
       await load();
     } catch (e: any) {
       setActionError(e?.message || "Could not update status.");
@@ -65,8 +72,105 @@ export default function ShiftsScreen() {
     }
   };
 
+  const onRejectConfirm = async () => {
+    if (!rejectRow) return;
+    await changeStatus(rejectRow, "rejected", rejectComment.trim() || undefined);
+    setRejectRow(null);
+    setRejectComment("");
+  };
+
   return (
     <div className="page">
+
+      {/* ── Detail modal ── */}
+      {detailRow ? (
+        <div className="modalOverlay" onClick={() => setDetailRow(null)}>
+          <div className="modalBox" onClick={(e) => e.stopPropagation()}>
+            <div className="modalHeader">
+              <span className="fw900">Shift details</span>
+              <button className="modalClose" onClick={() => setDetailRow(null)}>✕</button>
+            </div>
+
+            <div className="modalBody">
+              {detailRow.workerNoShow ? (
+                <div className="noShowBanner">⚠️ Worker reported as no-show by employer</div>
+              ) : null}
+
+              <div className="detailGrid">
+                <div className="detailLabel">Worker clock in</div>
+                <div className="detailValue">{fmtTime(detailRow.workerClockIn)}</div>
+
+                <div className="detailLabel">Worker clock out</div>
+                <div className="detailValue">{fmtTime(detailRow.workerClockOut)}</div>
+
+                <div className="detailLabel">Employer clock in</div>
+                <div className="detailValue">{fmtTime(detailRow.employerClockIn)}</div>
+
+                <div className="detailLabel">Employer clock out</div>
+                <div className="detailValue">{fmtTime(detailRow.employerClockOut)}</div>
+              </div>
+
+              {detailRow.employerComment ? (
+                <div className="detailComment">
+                  <div className="detailCommentLabel">Employer comment</div>
+                  <div className="detailCommentBody">{detailRow.employerComment}</div>
+                </div>
+              ) : null}
+
+              {detailRow.quickCrewComment ? (
+                <div className="detailComment detailCommentInternal">
+                  <div className="detailCommentLabel">QuickCrew internal note</div>
+                  <div className="detailCommentBody">{detailRow.quickCrewComment}</div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="modalFooter">
+              <button className="btn" onClick={() => setDetailRow(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Reject modal ── */}
+      {rejectRow ? (
+        <div className="modalOverlay" onClick={() => { setRejectRow(null); setRejectComment(""); }}>
+          <div className="modalBox" onClick={(e) => e.stopPropagation()}>
+            <div className="modalHeader">
+              <span className="fw900">Reject shift</span>
+              <button className="modalClose" onClick={() => { setRejectRow(null); setRejectComment(""); }}>✕</button>
+            </div>
+
+            <div className="modalBody">
+              <div className="muted fs13 mb12">
+                This worker will <strong>not be paid</strong> for this shift. This action can be reverted from the Rejected tab.
+              </div>
+              <div className="fw800 fs13 mb6">Internal note <span className="muted fw400">(optional)</span></div>
+              <textarea
+                className="input textArea"
+                placeholder="e.g. Worker confirmed no-show via phone..."
+                value={rejectComment}
+                onChange={(e) => setRejectComment(e.target.value)}
+                rows={4}
+                maxLength={500}
+              />
+            </div>
+
+            <div className="modalFooter">
+              <button className="btn" onClick={() => { setRejectRow(null); setRejectComment(""); }}>
+                Cancel
+              </button>
+              <button
+                className="btn btnDanger"
+                onClick={onRejectConfirm}
+                disabled={!!actionLoadingId}
+              >
+                {actionLoadingId ? "Rejecting..." : "Confirm reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="row rowBetween">
         <h1 className="h1">Shifts</h1>
         <button className="btn" onClick={load} disabled={loading}>
@@ -92,7 +196,11 @@ export default function ShiftsScreen() {
             <div>
               <div className="fw900">
                 <div className="fw900">
-                  {tab === "pending" ? "Pending review" : tab === "reviewed" ? "Reviewed shifts" : "Paid shifts"}
+                  {tab === "pending" ? "Pending review"
+                    : tab === "reviewed" ? "Reviewed shifts"
+                      : tab === "paid" ? "Paid shifts"
+                        : tab === "rejected" ? "Rejected shifts"
+                          : "Unclosed shifts"}
                 </div>
               </div>
               <div className="muted mt6 fw800 fs13">
@@ -112,6 +220,11 @@ export default function ShiftsScreen() {
 
           {error ? <div className="error mt12">{error}</div> : null}
           {actionError ? <div className="error mt12">{actionError}</div> : null}
+          {tab === "unclosed" ? (
+            <div className="infoBanner mt12">
+              These shifts were assigned to workers but no action was taken by the employer regarding hours. Please review each case and take the appropriate action.
+            </div>
+          ) : null}
 
           {!loading && filtered.length === 0 ? (
             <div className="muted mt16">No shifts in this status.</div>
@@ -125,10 +238,6 @@ export default function ShiftsScreen() {
                   <th>Job</th>
                   <th>Date</th>
                   <th>Worker</th>
-                  <th>Worker clock in</th>
-                  <th>Worker clock out</th>
-                  <th>Employer clock in</th>
-                  <th>Employer clock out</th>
                   <th className="thActions" />
                 </tr>
               </thead>
@@ -153,21 +262,32 @@ export default function ShiftsScreen() {
                           <div className="muted fs12">{row.workerEmail}</div>
                         ) : null}
                       </td>
-                      <td className="fw800">{fmtTime(row.workerClockIn)}</td>
-                      <td className="fw800">{fmtTime(row.workerClockOut)}</td>
-                      <td className="fw800">{fmtTime(row.employerClockIn)}</td>
-                      <td className="fw800">{fmtTime(row.employerClockOut)}</td>
-
                       <td>
                         <div className="tableActions">
+                          <button
+                            className="btn"
+                            onClick={() => setDetailRow(row)}
+                          >
+                            View details
+                          </button>
+
                           {tab === "pending" ? (
-                            <button
-                              className="btn btnPrimary"
-                              onClick={() => changeStatus(row, "reviewed")}
-                              disabled={busy}
-                            >
-                              {busy ? "Saving..." : "Mark reviewed"}
-                            </button>
+                            <>
+                              <button
+                                className="btn btnPrimary"
+                                onClick={() => changeStatus(row, "reviewed")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Mark reviewed"}
+                              </button>
+                              <button
+                                className="btn btnDanger"
+                                onClick={() => setRejectRow(row)}
+                                disabled={busy}
+                              >
+                                Reject
+                              </button>
+                            </>
                           ) : tab === "reviewed" ? (
                             <>
                               <button
@@ -183,6 +303,47 @@ export default function ShiftsScreen() {
                                 disabled={busy}
                               >
                                 {busy ? "Saving..." : "Mark paid"}
+                              </button>
+                              <button
+                                className="btn btnDanger"
+                                onClick={() => setRejectRow(row)}
+                                disabled={busy}
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : tab === "rejected" ? (
+                            <>
+                              <button
+                                className="btn"
+                                onClick={() => changeStatus(row, "pending")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Set pending"}
+                              </button>
+                              <button
+                                className="btn"
+                                onClick={() => changeStatus(row, "reviewed")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Set reviewed"}
+                              </button>
+                            </>
+                          ) : tab === "unclosed" ? (
+                            <>
+                              <button
+                                className="btn btnPrimary"
+                                onClick={() => changeStatus(row, "paid")}
+                                disabled={busy}
+                              >
+                                {busy ? "Saving..." : "Mark paid"}
+                              </button>
+                              <button
+                                className="btn btnDanger"
+                                onClick={() => setRejectRow(row)}
+                                disabled={busy}
+                              >
+                                Reject
                               </button>
                             </>
                           ) : (

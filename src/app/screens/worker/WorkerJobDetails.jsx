@@ -39,7 +39,7 @@ import {
 } from "firebase/firestore";
 import { resetTo } from "../../navigation/navigationRef";
 
-const MINUTES_45_MS = 45 * 60 * 1000;
+const MINUTES_45_MS = 3 * 60 * 1000; //45 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function normalizeSkill(s) {
@@ -254,8 +254,9 @@ export default function WorkerJobDetails() {
   const canCancel = useMemo(() => {
     if (!job) return false;
     if (!hasActiveApplication) return false;
+    if (assignment?.workerClockIn) return false;
     return canCancelApplication(job, 0);
-  }, [job, hasActiveApplication]);
+  }, [job, hasActiveApplication, assignment]);
 
   const isLateCancellation = useMemo(() => {
     if (!job) return false;
@@ -532,6 +533,7 @@ export default function WorkerJobDetails() {
             orgName: jobData.orgName || null,
             workerUid: uid,
             status: "assigned",
+            hoursSubmitted: false,
             createdAt: serverTimestamp(),
             createdBy: uid,
           });
@@ -661,58 +663,60 @@ export default function WorkerJobDetails() {
             {postedAgo ? <Text style={styles.posted}>{postedAgo}</Text> : null}
           </View>
 
-          <View style={styles.confirmationsWrap}>
-            <Pressable
-              style={styles.confirmationRow}
-              onPress={() => setConfirmNoCriminalRecord(prev => !prev)}
-            >
-              <Text style={styles.confirmationText}>
-                I have confirmed I have no criminal records
-              </Text>
-              <Checkbox
-                value={confirmNoCriminalRecord}
-                onValueChange={setConfirmNoCriminalRecord}
-                color={confirmNoCriminalRecord ? "#70A9DF" : undefined}
-                style={styles.checkbox}
-              />
-            </Pressable>
+          {!assignment ? (
+            <View style={styles.confirmationsWrap}>
+              <Pressable
+                style={styles.confirmationRow}
+                onPress={() => setConfirmNoCriminalRecord(prev => !prev)}
+              >
+                <Text style={styles.confirmationText}>
+                  I have confirmed I have no criminal records
+                </Text>
+                <Checkbox
+                  value={confirmNoCriminalRecord}
+                  onValueChange={setConfirmNoCriminalRecord}
+                  color={confirmNoCriminalRecord ? "#70A9DF" : undefined}
+                  style={styles.checkbox}
+                />
+              </Pressable>
 
-            <Pressable
-              style={styles.confirmationRow}
-              onPress={() => setAcceptTerms(prev => !prev)}
-            >
-              <Text style={styles.confirmationText}>
-                I have read and agreed terms and conditions
-              </Text>
-              <Checkbox
-                value={acceptTerms}
-                onValueChange={setAcceptTerms}
-                color={acceptTerms ? "#70A9DF" : undefined}
-                style={styles.checkbox}
-              />
-            </Pressable>
+              <Pressable
+                style={styles.confirmationRow}
+                onPress={() => setAcceptTerms(prev => !prev)}
+              >
+                <Text style={styles.confirmationText}>
+                  I have read and agreed terms and conditions
+                </Text>
+                <Checkbox
+                  value={acceptTerms}
+                  onValueChange={setAcceptTerms}
+                  color={acceptTerms ? "#70A9DF" : undefined}
+                  style={styles.checkbox}
+                />
+              </Pressable>
 
-            <Pressable
-              style={styles.confirmationRow}
-              onPress={() => setAcceptCancellationPolicies(prev => !prev)}
-            >
-              <Text style={styles.confirmationText}>
-                I have read and accept the cancellation policies
-              </Text>
-              <Checkbox
-                value={acceptCancellationPolicies}
-                onValueChange={setAcceptCancellationPolicies}
-                color={acceptCancellationPolicies ? "#70A9DF" : undefined}
-                style={styles.checkbox}
-              />
-            </Pressable>
-          </View>
+              <Pressable
+                style={styles.confirmationRow}
+                onPress={() => setAcceptCancellationPolicies(prev => !prev)}
+              >
+                <Text style={styles.confirmationText}>
+                  I have read and accept the cancellation policies
+                </Text>
+                <Checkbox
+                  value={acceptCancellationPolicies}
+                  onValueChange={setAcceptCancellationPolicies}
+                  color={acceptCancellationPolicies ? "#70A9DF" : undefined}
+                  style={styles.checkbox}
+                />
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.bottomSection}>
 
             {applyError ? <Text style={styles.inlineError}>{applyError}</Text> : null}
             {cancelError ? <Text style={styles.inlineError}>{cancelError}</Text> : null}
-            {!applyEligibility.canApply && applyEligibility.reason ? (
+            {!applyEligibility.canApply && applyEligibility.reason && !assignment ? (
               <Text style={styles.applyHint}>{applyEligibility.reason}</Text>
             ) : null}
 

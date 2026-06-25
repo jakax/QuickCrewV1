@@ -63,6 +63,8 @@ export default function AssignedWorkerDetails() {
   const [submitting, setSubmitting] = useState(false);
   const [employerComment, setEmployerComment] = useState("");
 
+  const [workerNoShow, setWorkerNoShow] = useState(false);
+
   // Employer time modal state
   const [timeModalOpen, setTimeModalOpen] = useState(false);
   const [empClockInHour, setEmpClockInHour] = useState("9");
@@ -99,6 +101,7 @@ export default function AssignedWorkerDetails() {
         if (assignmentSnap.exists()) {
           const aData = { id: assignmentSnap.id, ...assignmentSnap.data() };
           if (mounted) setAssignment(aData);
+          if (aData.workerNoShow === true && mounted) setWorkerNoShow(true);
 
           // Priority: employer submitted → worker times → shift times
           const resolveClockIn = aData.employerClockIn
@@ -168,7 +171,7 @@ export default function AssignedWorkerDetails() {
       meridiem: empClockOutMeridiem,
     });
 
-    if (!clockIn || !clockOut) {
+    if (!workerNoShow && (!clockIn || !clockOut)) {
       await confirm({
         title: "Missing times",
         message: "Please set both clock in and clock out times before submitting.",
@@ -179,9 +182,11 @@ export default function AssignedWorkerDetails() {
     }
 
     const ok = await confirm({
-      title: "Submit hours?",
-      message: "Once submitted, these times cannot be modified.",
-      confirmText: "Submit",
+      title: workerNoShow ? "Report no-show?" : "Submit hours?",
+      message: workerNoShow
+        ? "This will report the worker as a no-show to QuickCrew. This cannot be undone."
+        : "Once submitted, these times cannot be modified.",
+      confirmText: workerNoShow ? "Report" : "Submit",
       cancelText: "Cancel",
     });
 
@@ -196,9 +201,9 @@ export default function AssignedWorkerDetails() {
       const jobRef = doc(db, "jobs", jobId);
 
       await updateDoc(assignmentRef, {
-        employerClockIn: clockIn,
-        employerClockOut: clockOut,
+        ...(workerNoShow ? {} : { employerClockIn: clockIn, employerClockOut: clockOut }),
         hoursSubmitted: true,
+        workerNoShow: workerNoShow,
         hoursSubmittedAt: serverTimestamp(),
         hoursSubmittedBy: employerUid,
         updatedAt: serverTimestamp(),
@@ -213,16 +218,18 @@ export default function AssignedWorkerDetails() {
 
       setAssignment((prev) => ({
         ...prev,
-        employerClockIn: clockIn,
-        employerClockOut: clockOut,
+        ...(workerNoShow ? {} : { employerClockIn: clockIn, employerClockOut: clockOut }),
         hoursSubmitted: true,
+        workerNoShow: workerNoShow,
       }));
 
       setJob((prev) => ({ ...prev, status: "finished" }));
 
       await confirm({
-        title: "Hours submitted ✅",
-        message: "QuickCrew has been notified and will review the submitted hours.",
+        title: workerNoShow ? "No-show reported ⚠️" : "Hours submitted ✅",
+        message: workerNoShow
+          ? "QuickCrew has been notified and will take action accordingly."
+          : "QuickCrew has been notified and will review the submitted hours.",
         confirmText: "OK",
         cancelText: "Close",
       });
@@ -390,16 +397,32 @@ export default function AssignedWorkerDetails() {
             </View>
 
             {!hoursSubmitted ? (
-              <Pressable
-                onPress={() => setTimeModalOpen(true)}
-                style={styles.editTimesButton}
-              >
-                <Text style={styles.editTimesButtonText}>Edit times</Text>
-              </Pressable>
+              <>
+                {!workerNoShow ? (
+                  <Pressable
+                    onPress={() => setTimeModalOpen(true)}
+                    style={styles.editTimesButton}
+                  >
+                    <Text style={styles.editTimesButtonText}>Edit times</Text>
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  style={styles.noShowRow}
+                  onPress={() => setWorkerNoShow(prev => !prev)}
+                >
+                  <Text style={styles.noShowLabel}>Worker did not show up</Text>
+                  <View style={[styles.noShowCheckbox, workerNoShow && styles.noShowCheckboxChecked]}>
+                    {workerNoShow ? <Text style={styles.noShowCheckmark}>✓</Text> : null}
+                  </View>
+                </Pressable>
+              </>
             ) : (
-              <View style={styles.submittedBanner}>
-                <Text style={styles.submittedBannerText}>
-                  ✅ Hours submitted. QuickCrew will review this information.
+              <View style={[styles.submittedBanner, assignment?.workerNoShow && styles.noShowBanner]}>
+                <Text style={[styles.submittedBannerText, assignment?.workerNoShow && styles.noShowBannerText]}>
+                  {assignment?.workerNoShow
+                    ? "⚠️ No-show reported to QuickCrew."
+                    : "✅ Hours submitted. QuickCrew will review this information."}
                 </Text>
               </View>
             )}
@@ -413,7 +436,7 @@ export default function AssignedWorkerDetails() {
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
             >
               <Text style={styles.submitButtonText}>
-                {submitting ? "Submitting..." : "Submit hours to QuickCrew"}
+                {submitting ? "Submitting..." : workerNoShow ? "Report no-show to QuickCrew" : "Submit hours to QuickCrew"}
               </Text>
             </Pressable>
           ) : null}
@@ -617,5 +640,43 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     color: "#9CA3AF",
     marginTop: 8,
+  },
+
+  noShowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  noShowLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#B91C1C",
+  },
+  noShowCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#B91C1C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noShowCheckboxChecked: {
+    backgroundColor: "#B91C1C",
+  },
+  noShowCheckmark: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  noShowBanner: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  noShowBannerText: {
+    color: "#B91C1C",
   },
 });

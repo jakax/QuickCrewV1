@@ -58,6 +58,28 @@ const JobsItem = ({
   const [hasPendingApplicants, setHasPendingApplicants] = useState(
     typeof hasPendingApplicantsOverride === "boolean" ? hasPendingApplicantsOverride : false
   );
+  const [assignmentDoc, setAssignmentDoc] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkAssignment = async () => {
+      try {
+        const assignedWorkerUid = job?.assignedWorkerUid;
+        if (!isEmployer || !job?.id || !assignedWorkerUid) {
+          if (mounted) setAssignmentDoc(null);
+          return;
+        }
+        const snap = await getDoc(doc(db, "assignments", `${job.id}_${assignedWorkerUid}`));
+        if (mounted) setAssignmentDoc(snap.exists() ? snap.data() : null);
+      } catch {
+        if (mounted) setAssignmentDoc(null);
+      }
+    };
+
+    checkAssignment();
+    return () => { mounted = false; };
+  }, [isEmployer, job?.id, job?.assignedWorkerUid]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,24 +156,27 @@ const JobsItem = ({
     if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
     if (jobStatusRaw === "finished") return "Finished";
 
-    // Expired check before any other active state
-    const shiftStart = asDateMaybe(job?.shiftStartAt);
-    if (shiftStart && shiftStart < new Date()) return "Expired";
-
     if (jobStatusRaw === "filled" || jobStatusRaw === "assigned") {
       const now = Date.now();
       const startAt = asDateMaybe(job?.shiftStartAt);
       const endAt = asDateMaybe(job?.shiftEndAt);
-      if (startAt && endAt && now >= startAt.getTime() && now <= endAt.getTime()) {
-        return "Ongoing";
-      }
+
+      const workerClockedIn = !!assignmentDoc?.workerClockIn;
+      const shiftStarted = startAt && now >= startAt.getTime();
+      const shiftEnded = endAt && now > endAt.getTime();
+
+      if ((workerClockedIn || shiftStarted) && !shiftEnded) return "Ongoing";
       return "Filled";
     }
+
+    // Expired only applies to open jobs whose start time passed without being filled
+    const shiftStart = asDateMaybe(job?.shiftStartAt);
+    if (shiftStart && shiftStart < new Date()) return "Expired";
 
     if (hasPendingApplicants) return "Applied (approval needed)";
 
     return "Open";
-  }, [isEmployer, jobStatusRaw, hasPendingApplicants, job?.shiftStartAt, job?.shiftEndAt]);
+  }, [isEmployer, jobStatusRaw, hasPendingApplicants, job?.shiftStartAt, job?.shiftEndAt, assignmentDoc]);
 
   const employerStatusStyle = useMemo(() => {
     if (!isEmployer) return null;
