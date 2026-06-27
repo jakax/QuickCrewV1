@@ -7,6 +7,7 @@ import {
   Image,
   Animated,
   Dimensions,
+  Platform,
 } from "react-native";
 import {
   OuterWrapper,
@@ -178,9 +179,11 @@ const styles = StyleSheet.create({
 
   bottomSection: {
     alignItems: "center",
-    paddingBottom: 18,
+    paddingBottom: Platform.OS === "android" ? 40 : 80,
     gap: 16,
-    marginTop: 330,
+    marginTop: 0,   // ← sacamos el margin fijo
+    flex: 1,        // ← ocupa el espacio disponible
+    justifyContent: "flex-end", // ← empuja los botones hacia abajo pero sin cortarlos
   },
 
   // Toggle

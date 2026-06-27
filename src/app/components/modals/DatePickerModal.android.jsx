@@ -98,9 +98,6 @@ function ScrollPicker({ items, selectedValue, onValueChange }) {
 
   return (
     <View style={pickerStyles.container}>
-      {/* Highlight del item seleccionado */}
-      <View style={pickerStyles.highlight} pointerEvents="none" />
-
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
@@ -114,6 +111,7 @@ function ScrollPicker({ items, selectedValue, onValueChange }) {
         style={{ height: PICKER_HEIGHT }}
       >
         {items.map((item, index) => {
+
           const isSelected = item === selectedValue;
           return (
             <TouchableOpacity
@@ -140,6 +138,9 @@ function ScrollPicker({ items, selectedValue, onValueChange }) {
           );
         })}
       </ScrollView>
+
+      {/* Highlight renderizado DESPUÉS del ScrollView para quedar encima en Android */}
+      <View style={pickerStyles.highlight} pointerEvents="none" />
     </View>
   );
 }
@@ -156,7 +157,7 @@ const pickerStyles = StyleSheet.create({
     left: 0,
     right: 0,
     height: ITEM_HEIGHT,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "rgba(239, 246, 255, 0.5)",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#BFDBFE",
