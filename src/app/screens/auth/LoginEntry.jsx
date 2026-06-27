@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
 
   bottomSection: {
     alignItems: "center",
-    paddingBottom: Platform.OS === "android" ? 40 : 80,
+    paddingBottom: Platform.OS === "android" ? 80 : 80,
     gap: 16,
     marginTop: 0,   // ← sacamos el margin fijo
     flex: 1,        // ← ocupa el espacio disponible
