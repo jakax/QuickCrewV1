@@ -39,7 +39,7 @@ import {
 } from "firebase/firestore";
 import { resetTo } from "../../navigation/navigationRef";
 
-const MINUTES_45_MS = 3 * 60 * 1000; //45 * 60 * 1000;
+const MINUTES_45_MS = 45 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function normalizeSkill(s) {

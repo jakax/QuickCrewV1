@@ -5,10 +5,12 @@ import { Ionicons } from "@expo/vector-icons";
 
 import Profile from "../screens/tabs/Profile";
 import EmployerJobsHome from "../screens/employer/EmployerJobsHome";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Tab = createBottomTabNavigator();
 
 export default function EmployerTabs() {
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -16,7 +18,10 @@ export default function EmployerTabs() {
         tabBarShowLabel: false,
         tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: "#81E6F0",
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          bottom: insets.bottom + 16,
+        },
         tabBarIcon: ({ color, focused }) => {
           let iconName;
 
@@ -45,7 +50,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     right: 20,
-    bottom: 32,
+    bottom: 0,
     height: 58,
     paddingBottom: 8,
     paddingTop: 8,
