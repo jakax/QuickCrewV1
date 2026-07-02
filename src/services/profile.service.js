@@ -2,13 +2,26 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase/config";
 
-// Keep your existing updateUserProfile if you have it.
-// If you already export updateUserProfile, just ensure it sets updatedAt.
 export async function updateUserProfile(uid, updates) {
   if (!uid) throw new Error("Missing uid");
   const userRef = doc(db, "users", uid);
   await updateDoc(userRef, {
     ...(updates || {}),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Worker submits their profile for review.
+ * Sets profileStatus to "ready_for_review" so Backoffice knows it's ready to check.
+ * Does NOT touch approvalStatus — that's QuickCrew's field.
+ */
+export async function submitProfileForReview(uid) {
+  if (!uid) throw new Error("Missing uid");
+  const userRef = doc(db, "users", uid);
+  await updateDoc(userRef, {
+    profileStatus: "ready_for_review",
+    profileSubmittedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
@@ -25,8 +38,6 @@ export async function uploadUserPhoto({ uid, uri }) {
   if (!uri) throw new Error("Missing file uri");
 
   const blob = await uriToBlob(uri);
-
-  // Store under users/{uid}/photo
   const path = `users/${uid}/photo.jpg`;
   const r = storageRef(storage, path);
 
@@ -45,7 +56,6 @@ export async function uploadUserCv({ uid, uri, fileName, mimeType }) {
   if (!uri) throw new Error("Missing file uri");
 
   const blob = await uriToBlob(uri);
-
   const safeName = (fileName || "cv").replace(/[^\w.-]+/g, "_");
   const path = `users/${uid}/cv/${safeName}`;
   const r = storageRef(storage, path);
@@ -65,7 +75,6 @@ export async function uploadUserIdDocument({ uid, uri, fileName, mimeType }) {
   if (!uri) throw new Error("Missing file uri");
 
   const blob = await uriToBlob(uri);
-
   const safeName = (fileName || "id_document").replace(/[^\w.-]+/g, "_");
   const path = `users/${uid}/idDocument/${safeName}`;
   const r = storageRef(storage, path);
@@ -85,7 +94,6 @@ export async function uploadUserVisaDocument({ uid, uri, fileName, mimeType }) {
   if (!uri) throw new Error("Missing file uri");
 
   const blob = await uriToBlob(uri);
-
   const safeName = (fileName || "visa_document").replace(/[^\w.-]+/g, "_");
   const path = `users/${uid}/visaDocument/${safeName}`;
   const r = storageRef(storage, path);

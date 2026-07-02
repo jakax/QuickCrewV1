@@ -7,7 +7,6 @@ import { useSession } from "../../providers/SessionProvider";
 import { useSavedJobs } from "../../hooks/useSavedJobs";
 import { Ionicons } from "@expo/vector-icons";
 import { asDateMaybe } from "../../../utils/dateUtils";
-import { deriveEmployerStatus, deriveWorkerStatus, STATUS_STYLE_MAP } from "./deriveJobStatus";
 
 import { db } from "../../../services/firebase/config";
 import {
@@ -17,19 +16,8 @@ import {
   getDocs,
   query,
   where,
-  limit,
+  limit
 } from "firebase/firestore";
-
-// Ticks every 60 s so time-based status transitions fire automatically.
-// Replaces the broken Date.now() inside useMemo that never updated on its own.
-function useNow(intervalMs = 60_000) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
 
 const JobsItem = ({
   job,
@@ -39,12 +27,10 @@ const JobsItem = ({
   hasPendingApplicantsOverride,
 }) => {
   const navigation = useNavigation();
-  const now = useNow();
 
   const { isSaved, toggleSaved } = useSavedJobs();
   const savedFromStore = isSaved(job.id);
-  const saved =
-    typeof forceBookmarked === "boolean" ? forceBookmarked : savedFromStore;
+  const saved = typeof forceBookmarked === "boolean" ? forceBookmarked : savedFromStore;
 
   const { isEmployer, isWorker, uid } = useSession();
 
@@ -63,68 +49,64 @@ const JobsItem = ({
   const timeText = job?.shiftTime || "";
   const postedAgo = formatPostedAgo(freshnessTimestamp);
 
-  const hasRate =
-    typeof job?.ratePerHour === "number" && !Number.isNaN(job.ratePerHour);
+  const hasRate = typeof job?.ratePerHour === "number" && !Number.isNaN(job.ratePerHour);
   const rateText = hasRate ? `$${Number(job.ratePerHour).toFixed(2)} per hour` : "";
 
-  // ── Firestore side-data ───────────────────────────────────────────────────
-
+  // ✅ detect if current worker already applied to this job
   const [alreadyApplied, setAlreadyApplied] = useState(false);
+  // ✅ detect if this job has pending applications (employer view)
   const [hasPendingApplicants, setHasPendingApplicants] = useState(
-    typeof hasPendingApplicantsOverride === "boolean"
-      ? hasPendingApplicantsOverride
-      : false
+    typeof hasPendingApplicantsOverride === "boolean" ? hasPendingApplicantsOverride : false
   );
   const [assignmentDoc, setAssignmentDoc] = useState(null);
 
-  // Fetch assignment document — needed by both employer and worker for clock in/out times.
-  // Employer uses job.assignedWorkerUid; worker uses their own uid.
   useEffect(() => {
     let mounted = true;
+
     const checkAssignment = async () => {
       try {
-        // Determine which uid to use to build the assignment document id
-        const workerUid = isEmployer ? job?.assignedWorkerUid : uid;
-        if (!job?.id || !workerUid) {
+        const assignedWorkerUid = job?.assignedWorkerUid;
+        if (!isEmployer || !job?.id || !assignedWorkerUid) {
           if (mounted) setAssignmentDoc(null);
           return;
         }
-        const snap = await getDoc(
-          doc(db, "assignments", `${job.id}_${workerUid}`)
-        );
+        const snap = await getDoc(doc(db, "assignments", `${job.id}_${assignedWorkerUid}`));
         if (mounted) setAssignmentDoc(snap.exists() ? snap.data() : null);
       } catch {
         if (mounted) setAssignmentDoc(null);
       }
     };
+
     checkAssignment();
     return () => { mounted = false; };
-  }, [isEmployer, uid, job?.id, job?.assignedWorkerUid]);
+  }, [isEmployer, job?.id, job?.assignedWorkerUid]);
 
-  // Worker: check if already applied to this job
   useEffect(() => {
     let mounted = true;
+
     const check = async () => {
       try {
         if (!isWorker || !uid || !job?.id) {
           if (mounted) setAlreadyApplied(false);
           return;
         }
-        const snap = await getDoc(
-          doc(db, "applications", `${job.id}_${uid}`)
-        );
+        const applicationId = `${job.id}_${uid}`;
+        const snap = await getDoc(doc(db, "applications", applicationId));
         if (mounted) setAlreadyApplied(snap.exists());
       } catch {
         if (mounted) setAlreadyApplied(false);
       }
     };
+
     check();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [isWorker, uid, job?.id]);
 
-  // Employer: check if there are pending applicants
   useEffect(() => {
     let mounted = true;
+
     const checkPendingApplicants = async () => {
       try {
         if (typeof hasPendingApplicantsOverride === "boolean") {
@@ -135,12 +117,15 @@ const JobsItem = ({
           if (mounted) setHasPendingApplicants(false);
           return;
         }
+
+        // Check if there is at least 1 pending application for this job
         const q = query(
           collection(db, "applications"),
           where("jobId", "==", job.id),
           where("status", "==", "pending"),
           limit(1)
         );
+
         const snap = await getDocs(q);
         if (mounted) setHasPendingApplicants(!snap.empty);
       } catch (e) {
@@ -148,40 +133,69 @@ const JobsItem = ({
         if (mounted) setHasPendingApplicants(false);
       }
     };
+
     checkPendingApplicants();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [isEmployer, job?.id, hasPendingApplicantsOverride]);
-
-  // ── Derived status ────────────────────────────────────────────────────────
-  // One label per session type. now ticks every 60s so transitions are automatic.
-
-  const statusLabel = useMemo(() => {
-    if (isEmployer) return deriveEmployerStatus(job, assignmentDoc, now);
-    if (isWorker) return deriveWorkerStatus(job, assignmentDoc, now);
-    return null;
-  }, [isEmployer, isWorker, job, assignmentDoc, now]);
-
-  const statusStyle = useMemo(() => {
-    if (!statusLabel) return null;
-    const key = STATUS_STYLE_MAP[statusLabel];
-    return key ? styles[key] : styles.statusOpen;
-  }, [statusLabel]);
-
-  // ── Navigation helpers ────────────────────────────────────────────────────
 
   const jobStatusRaw = String(job?.status || "").toLowerCase();
 
   const canReviewApplicants =
     isEmployer &&
-    (hasPendingApplicants ||
-      jobStatusRaw === "filled" ||
-      jobStatusRaw === "assigned") &&
+    (hasPendingApplicants || jobStatusRaw === "filled" || jobStatusRaw === "assigned") &&
     jobStatusRaw !== "cancelled" &&
     jobStatusRaw !== "cancel" &&
     jobStatusRaw !== "finished";
 
+  const employerStatusLabel = useMemo(() => {
+    if (!isEmployer) return null;
+
+    if (jobStatusRaw === "cancel" || jobStatusRaw === "cancelled") return "Cancelled";
+    if (jobStatusRaw === "finished") return "Finished";
+
+    if (jobStatusRaw === "filled" || jobStatusRaw === "assigned") {
+      const now = Date.now();
+      const startAt = asDateMaybe(job?.shiftStartAt);
+      const endAt = asDateMaybe(job?.shiftEndAt);
+
+      const workerClockedIn = !!assignmentDoc?.workerClockIn;
+      const shiftStarted = startAt && now >= startAt.getTime();
+      const shiftEnded = endAt && now > endAt.getTime();
+
+      if ((workerClockedIn || shiftStarted) && !shiftEnded) return "Ongoing";
+      return "Filled";
+    }
+
+    // Expired only applies to open jobs whose start time passed without being filled
+    const shiftStart = asDateMaybe(job?.shiftStartAt);
+    if (shiftStart && shiftStart < new Date()) return "Expired";
+
+    if (hasPendingApplicants) return "Applied (approval needed)";
+
+    return "Open";
+  }, [isEmployer, jobStatusRaw, hasPendingApplicants, job?.shiftStartAt, job?.shiftEndAt, assignmentDoc]);
+
+  const employerStatusStyle = useMemo(() => {
+    if (!isEmployer) return null;
+
+    const label = employerStatusLabel;
+
+    if (label === "Expired") return styles.statusExpired;
+    if (label === "Applied (approval needed)") return styles.statusApplied;
+    if (label === "Assigned") return styles.statusAssigned;
+    if (label === "Filled") return styles.statusFilled;
+    if (label === "Ongoing") return styles.statusOngoing;
+    if (label === "Finished") return styles.statusFinished;
+    if (label === "Cancelled") return styles.statusCancelled;
+    return styles.statusOpen;
+  }, [isEmployer, employerStatusLabel]);
+
   const onPress = () => {
     if (onPressOverride) return onPressOverride(job);
+
     if (isEmployer) {
       navigation.navigate("EmployerEditJob", {
         jobId: job.id,
@@ -203,27 +217,31 @@ const JobsItem = ({
 
   const handleBookmarkPress = (e) => {
     e.stopPropagation();
-    if (onBookmarkPress) return onBookmarkPress(job);
+
+    if (onBookmarkPress) {
+      return onBookmarkPress(job);
+    }
+
     toggleSaved({ jobId: job.id, orgId: job.orgId });
   };
 
+  // ✅ Only allow bookmark when:
+  // - worker
+  // - NOT already applied
+  // - job still open (defensive)
   const canShowBookmark = isWorker;
   const canToggleBookmark =
-    isWorker && !alreadyApplied && jobStatusRaw === "open";
-
-  // ── Render ────────────────────────────────────────────────────────────────
+    isWorker && !alreadyApplied && String(job?.status || "").toLowerCase() === "open";
 
   return (
     <Pressable onPress={onPress} style={styles.container}>
       <View style={styles.topRow}>
         <View style={styles.badgesRow}>
-          {showNew ? (
-            <StyledText style={styles.tag}>New shift</StyledText>
-          ) : null}
+          {showNew ? <StyledText style={styles.tag}>New shift</StyledText> : null}
 
-          {statusLabel ? (
-            <StyledText style={[styles.statusBadge, statusStyle]}>
-              {statusLabel}
+          {isEmployer && employerStatusLabel ? (
+            <StyledText style={[styles.statusBadge, employerStatusStyle]}>
+              {employerStatusLabel}
             </StyledText>
           ) : null}
         </View>
@@ -242,7 +260,7 @@ const JobsItem = ({
           <Ionicons
             name={saved ? "bookmark" : "bookmark-outline"}
             size={20}
-            color="#FFD66D"
+            color={saved ? "#FFD66D" : "#FFD66D"}
           />
         </Pressable>
       ) : null}
@@ -255,9 +273,7 @@ const JobsItem = ({
         {job?.orgName || "Company"}
       </StyledText>
 
-      {job?.location ? (
-        <StyledText style={styles.location}>{job.location}</StyledText>
-      ) : null}
+      {job?.location ? <StyledText style={styles.location}>{job.location}</StyledText> : null}
 
       {dateText || timeText ? (
         <StyledText style={styles.shiftLine}>
@@ -267,13 +283,9 @@ const JobsItem = ({
         </StyledText>
       ) : null}
 
-      {rateText ? (
-        <StyledText style={styles.rate}>{rateText}</StyledText>
-      ) : null}
+      {rateText ? <StyledText style={styles.rate}>{rateText}</StyledText> : null}
 
-      {postedAgo ? (
-        <StyledText style={styles.posted}>{postedAgo}</StyledText>
-      ) : null}
+      {postedAgo ? <StyledText style={styles.posted}>{postedAgo}</StyledText> : null}
 
       {canReviewApplicants ? (
         <Pressable onPress={onReviewApplicantsPress} style={styles.reviewBtn}>
@@ -301,18 +313,21 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
   },
+
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 6,
   },
+
   badgesRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
   },
+
   tag: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -325,6 +340,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "500",
   },
+
   posted: {
     color: "#000000",
     fontSize: 14,
@@ -332,6 +348,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     paddingRight: 30,
   },
+
   title: {
     color: "#000000",
     fontSize: 15,
@@ -339,6 +356,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 6,
   },
+
   company: {
     marginTop: 12,
     color: "#000000",
@@ -346,6 +364,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "500",
   },
+
   location: {
     marginTop: 12,
     color: "#000000",
@@ -354,6 +373,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     fontStyle: "italic",
   },
+
   shiftLine: {
     marginTop: 12,
     color: "#000000",
@@ -362,6 +382,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     fontStyle: "italic",
   },
+
   rate: {
     marginTop: 12,
     marginBottom: 12,
@@ -371,6 +392,7 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     fontStyle: "italic",
   },
+
   saveBtn: {
     position: "absolute",
     top: 15,
@@ -382,6 +404,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     zIndex: 5,
   },
+
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -392,24 +415,35 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "500",
   },
+
   statusOpen: {
     backgroundColor: "#F3F4F6",
     color: "#111827",
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  statusPending: {
+
+  statusApplied: {
     backgroundColor: "#FFF4CC",
     color: "#8A5A00",
     borderWidth: 1,
     borderColor: "#F5D36A",
   },
+
+  statusAssigned: {
+    backgroundColor: "#EEF2FF",
+    color: "#3730A3",
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+
   statusFilled: {
     backgroundColor: "#ECFDF5",
     color: "#065F46",
     borderWidth: 1,
     borderColor: "#A7F3D0",
   },
+
   statusOngoing: {
     backgroundColor: "#FFF3CD",
     color: "#856404",
@@ -417,11 +451,12 @@ const styles = StyleSheet.create({
     borderColor: "#FFE083",
   },
   statusFinished: {
-    backgroundColor: "#E6FAFB",
-    color: "#0BCAD5",
+    backgroundColor: "#FFE5E5",
+    color: "#CC0000",
     borderWidth: 1,
-    borderColor: "#0BCAD5",
+    borderColor: "#FECACA",
   },
+
   statusCancelled: {
     backgroundColor: "#FEF2F2",
     color: "#B91C1C",
@@ -434,6 +469,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#374151",
   },
+
   reviewBtn: {
     marginTop: 14,
     paddingVertical: 10,
@@ -445,6 +481,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   reviewBtnText: {
     color: "#111827",
     fontFamily: "Inter",

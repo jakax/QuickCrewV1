@@ -8,10 +8,12 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  or,
 } from "firebase/firestore";
 import { db } from "../../firebase/client";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "suspended";
+export type ProfileStatus = "incomplete" | "ready_for_review";
 
 export type UserRow = {
   id: string;
@@ -19,19 +21,19 @@ export type UserRow = {
   email?: string;
   role?: string;
   approvalStatus?: ApprovalStatus | string;
+  profileStatus?: ProfileStatus | string; // NEW — set by worker when profile is complete
+  profileSubmittedAt?: any;               // NEW — timestamp when worker submitted for review
   createdAt?: any;
   updatedAt?: any;
   skills?: string[];
 
-  // lightweight moderation metadata (optional)
   statusReason?: string;
   statusUpdatedAt?: any;
   statusUpdatedBy?: string;
 
-  // ✅ status change audit trail (optional)
   statusHistory?: Array<{
-    at?: any;                 // Date or Firestore Timestamp
-    by?: string;              // admin uid
+    at?: any;
+    by?: string;
     from?: string | null;
     to?: string;
     reason?: string | null;
@@ -50,9 +52,71 @@ export async function listWorkersByStatus(status: ApprovalStatus): Promise<UserR
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 }
 
-// Backward compatible: approvals screen currently calls this
+export async function listEmployersByStatus(status: ApprovalStatus): Promise<UserRow[]> {
+  const q = query(
+    collection(db, "users"),
+    where("role", "==", "employer"),
+    where("approvalStatus", "==", status),
+    orderBy("createdAt", "desc")
+  );
+
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+}
+
+// Backward compatible
 export async function listPendingWorkers(): Promise<UserRow[]> {
   return listWorkersByStatus("pending");
+}
+
+/**
+ * Lists all users that need attention in Backoffice:
+ * - Workers/employers with approvalStatus "pending" (regardless of profileStatus)
+ * - Workers with profileStatus "ready_for_review" (profile complete, waiting for approval)
+ *
+ * Workers with incomplete profiles (no profileStatus or "incomplete") are NOT shown
+ * until they explicitly submit for review.
+ */
+export async function listPendingUsers(): Promise<UserRow[]> {
+  // Fetch pending employers (no profileStatus concept for employers)
+  const pendingEmployers = await listEmployersByStatus("pending");
+
+  // Fetch workers with profileStatus = "ready_for_review"
+  // These are the ones that actually need attention from Backoffice
+  const readyWorkersQ = query(
+    collection(db, "users"),
+    where("role", "==", "worker"),
+    where("profileStatus", "==", "ready_for_review"),
+    orderBy("profileSubmittedAt", "desc")
+  );
+
+  const readyWorkersSnap = await getDocs(readyWorkersQ);
+  const readyWorkers = readyWorkersSnap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  }));
+
+  // Also keep pending workers that haven't submitted yet
+  // (existing workers in DB before this feature was added)
+  const pendingWorkers = await listWorkersByStatus("pending");
+
+  // Merge: ready_for_review first (they took action), then pending without profileStatus
+  const pendingWithoutSubmit = pendingWorkers.filter(
+    (w) => !w.profileStatus || w.profileStatus === "incomplete"
+  );
+
+  // Deduplicate by id (a worker could appear in both queries)
+  const seen = new Set<string>();
+  const merged: UserRow[] = [];
+
+  for (const u of [...readyWorkers, ...pendingWithoutSubmit, ...pendingEmployers]) {
+    if (!seen.has(u.id)) {
+      seen.add(u.id);
+      merged.push(u);
+    }
+  }
+
+  return merged;
 }
 
 type SetWorkerStatusArgs = {
@@ -64,8 +128,6 @@ type SetWorkerStatusArgs = {
   from?: string | null;
 };
 
-// Single “source of truth” for status changes.
-// Keeps MVP simple but auditable.
 export async function setWorkerStatus({
   userId,
   adminUid,
@@ -80,7 +142,6 @@ export async function setWorkerStatus({
 
   const cleanReason = typeof reason === "string" ? reason.trim() : "";
 
-  // Require reason only for reject/suspend
   if ((to === "rejected" || to === "suspended") && !cleanReason) {
     throw new Error("Reason is required for rejected/suspended.");
   }
@@ -91,20 +152,16 @@ export async function setWorkerStatus({
     approvalStatus: to,
     skills: Array.isArray(skills) ? skills : [],
 
-    // generic moderation metadata
     statusReason: cleanReason || null,
     statusUpdatedAt: serverTimestamp(),
     statusUpdatedBy: adminUid,
 
-    // keep per-status fields (useful for debugging / analytics later)
     ...(to === "approved" ? { approvedAt: serverTimestamp(), approvedBy: adminUid } : {}),
     ...(to === "rejected" ? { rejectedAt: serverTimestamp(), rejectedBy: adminUid } : {}),
     ...(to === "suspended" ? { suspendedAt: serverTimestamp(), suspendedBy: adminUid } : {}),
     ...(to === "pending" ? { movedToPendingAt: serverTimestamp(), movedToPendingBy: adminUid } : {}),
 
-    // lightweight history
     statusHistory: arrayUnion({
-      // NOTE: Date() uses client time — acceptable for MVP audit trail
       at: new Date(),
       by: adminUid,
       from: from || null,
@@ -118,7 +175,6 @@ export async function setWorkerStatus({
   return { ok: true };
 }
 
-// Existing API used by UsersApprovalsScreen
 export async function approveWorker({
   userId,
   adminUid,
@@ -157,24 +213,4 @@ export async function rejectWorker({
     reason: reason || "",
     from: null,
   });
-}
-
-export async function listPendingUsers(): Promise<UserRow[]> {
-  const [workers, employers] = await Promise.all([
-    listWorkersByStatus("pending"),
-    listEmployersByStatus("pending"),
-  ]);
-  return [...workers, ...employers];
-}
-
-export async function listEmployersByStatus(status: ApprovalStatus): Promise<UserRow[]> {
-  const q = query(
-    collection(db, "users"),
-    where("role", "==", "employer"),
-    where("approvalStatus", "==", status),
-    orderBy("createdAt", "desc")
-  );
-
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 }

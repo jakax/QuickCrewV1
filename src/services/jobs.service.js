@@ -304,6 +304,27 @@ export async function updateJob(jobId, updates) {
     ...next,
     updatedAt: serverTimestamp(),
   });
+
+  // Si cambiaron los timestamps del shift, propagar a las applications activas
+  if (next.shiftStartAt || next.shiftEndAt) {
+    const appsSnap = await getDocs(
+      query(
+        collection(db, "applications"),
+        where("jobId", "==", jobId),
+        where("status", "in", ["pending", "accepted"])
+      )
+    );
+
+    const updatePromises = appsSnap.docs.map((appDoc) =>
+      updateDoc(appDoc.ref, {
+        ...(next.shiftStartAt && { shiftStartAt: next.shiftStartAt }),
+        ...(next.shiftEndAt && { shiftEndAt: next.shiftEndAt }),
+        updatedAt: serverTimestamp(),
+      })
+    );
+
+    await Promise.all(updatePromises);
+  }
 }
 
 export async function deleteJobIfAllowed({ jobId, expectedOrgId }) {

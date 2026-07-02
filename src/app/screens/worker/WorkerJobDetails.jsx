@@ -39,7 +39,7 @@ import {
 } from "firebase/firestore";
 import { resetTo } from "../../navigation/navigationRef";
 
-const MINUTES_45_MS = 45 * 60 * 1000;
+const MINUTES_45_MS = 45 * 60 * 1000; // volver como estaba45 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function normalizeSkill(s) {
@@ -486,6 +486,7 @@ export default function WorkerJobDetails() {
           shiftDate: jobData.shiftDate || null,
           shiftTime: jobData.shiftTime || null,
           shiftStartAt: jobData.shiftStartAt || null,
+          shiftEndAt: jobData.shiftEndAt || null,
           updatedAt: serverTimestamp(),
         });
 
@@ -534,6 +535,8 @@ export default function WorkerJobDetails() {
             workerUid: uid,
             status: "assigned",
             hoursSubmitted: false,
+            shiftStartAt: jobData.shiftStartAt || null,
+            shiftEndAt: jobData.shiftEndAt || null,
             createdAt: serverTimestamp(),
             createdBy: uid,
           });

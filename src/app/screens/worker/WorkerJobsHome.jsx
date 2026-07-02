@@ -82,7 +82,6 @@ const JobsList = () => {
 
     const unsub = onSnapshot(q, (snap) => {
       const ids = new Set(snap.docs.map((d) => d.data().jobId).filter(Boolean));
-      console.log("appliedJobIds", [...ids]);
       setAppliedJobIds(ids);
     });
 

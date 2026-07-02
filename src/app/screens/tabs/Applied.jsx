@@ -27,6 +27,20 @@ import { useSession } from "../../providers/SessionProvider";
 import { useConfirm } from "../../providers/ConfirmProvider";
 
 const HOURS_8_MS = 8 * 60 * 60 * 1000;
+const MINUTES_45 = 45 * 60 * 1000;
+
+const STATUS_PRIORITY = {
+  "Upcoming": 0,
+  "Ongoing": 1,
+  "Pending approval": 2,
+  "Completed": 3,
+  "Cancelled": 3,
+  "Cancelled by employer": 3,
+  "Rejected": 3,
+  "Expired": 4,
+};
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
 
 function asDateMaybe(tsOrDate) {
   if (!tsOrDate) return null;
@@ -47,60 +61,113 @@ function formatDateTime(value) {
   return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
 }
 
-function isShiftExpired(app) {
-  const endAt = asDateMaybe(app?.shiftEndAt);
-  if (endAt) return Date.now() > endAt.getTime();
+// ── Status derivation ─────────────────────────────────────────────────────────
 
-  // fallback si no hay shiftEndAt
-  const startAt = asDateMaybe(app?.shiftStartAt);
-  if (startAt) return Date.now() > startAt.getTime();
-
-  return false;
-}
-
-function getVisualStatus(app) {
+/**
+ * Derives the display label for an application from the worker's perspective.
+ *
+ * Status values that come from the BD (applications collection):
+ *   pending      → waiting for employer approval
+ *   accepted     → employer approved — time-based transitions apply
+ *   rejected     → employer rejected
+ *   cancelled    → worker cancelled
+ *   job_cancelled→ employer cancelled the shift
+ *   completed / finished → shift done
+ *
+ * Transitions for "accepted":
+ *   before shiftStartAt - 45min  → Upcoming
+ *   at shiftStartAt OR clockIn   → Ongoing
+ *   at shiftEndAt   OR clockOut  → Completed
+ *
+ * @param {object} app - Application document data from Firestore
+ * @param {number} now - Date.now()
+ * @returns {string}
+ */
+function deriveApplicationStatus(app, now) {
   const raw = String(app?.status || "").toLowerCase();
 
+  // ── Backend-authoritative ─────────────────────────────────────────────────
   if (raw === "job_cancelled") return "Cancelled by employer";
   if (raw === "cancelled") return "Cancelled";
   if (raw === "rejected") return "Rejected";
-  if (raw === "accepted") {
-    if (app?.workerClockIn && !app?.workerClockOut) return "Ongoing";
-    if (isShiftExpired(app) && !app?.workerClockIn) return "Expired";
-    return "Active";
-  }
-  if (raw === "pending") {
-    return isShiftExpired(app) ? "Expired" : "Pending approval";
-  }
   if (raw === "completed" || raw === "complete" || raw === "finished") {
-    return "Finished";
+    return "Completed";
   }
 
-  return isShiftExpired(app) ? "Expired" : "Pending approval";
+  const shiftStart = asDateMaybe(app?.shiftStartAt);
+  const shiftEnd = asDateMaybe(app?.shiftEndAt);
+  const shiftStartMs = shiftStart ? shiftStart.getTime() : null;
+  const shiftEndMs = shiftEnd ? shiftEnd.getTime() : null;
+
+  // clockIn / clockOut are Firestore Timestamps in the application doc
+  const clockInTs = app?.workerClockIn;
+  const clockOutTs = app?.workerClockOut;
+  const clockInMs = clockInTs?.toDate ? clockInTs.toDate().getTime() : null;
+  const clockOutMs = clockOutTs?.toDate ? clockOutTs.toDate().getTime() : null;
+
+  // ── Pending ───────────────────────────────────────────────────────────────
+  if (raw === "pending") {
+    // Window to approve closes at shift start
+    if (shiftStartMs && now >= shiftStartMs) return "Expired";
+    return "Pending approval";
+  }
+
+  // ── Accepted ──────────────────────────────────────────────────────────────
+  if (raw === "accepted") {
+    // Completed: clockOut event OR shift end time passed
+    const completedByClockOut = clockOutMs !== null && now >= clockOutMs;
+    const completedByTime = shiftEndMs !== null && now >= shiftEndMs;
+    if (completedByClockOut || completedByTime) return "Completed";
+
+    // Ongoing: clockIn event OR shift start time passed
+    const ongoingByClockIn = clockInMs !== null && now >= clockInMs;
+    const ongoingByTime = shiftStartMs !== null && now >= shiftStartMs;
+    if (ongoingByClockIn || ongoingByTime) return "Ongoing";
+
+    // Upcoming: shift hasn't started yet
+    return "Upcoming";
+  }
+
+  // Fallback
+  return "Pending approval";
 }
 
-function getVisualStatusStyle(label) {
+function getStatusStyle(label) {
+  if (label === "Cancelled by employer") return styles.statusCancelled;
   if (label === "Cancelled") return styles.statusCancelled;
   if (label === "Rejected") return styles.statusRejected;
   if (label === "Expired") return styles.statusExpired;
   if (label === "Pending approval") return styles.statusPending;
-  if (label === "Active") return styles.statusActive;
-  if (label === "Finished") return styles.statusOngoing;
-  if (label === "ON GOING") return styles.statusOngoing;
-  if (label === "Cancelled by employer") return styles.statusCancelled;
+  if (label === "Upcoming") return styles.statusUpcoming;
+  if (label === "Ongoing") return styles.statusOngoing;
+  if (label === "Completed") return styles.statusCompleted;
   return styles.statusPending;
 }
+
+// ── useNow ────────────────────────────────────────────────────────────────────
+
+// Ticks every 60s so time-based status transitions fire automatically
+function useNow(intervalMs = 60_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Applied() {
   const navigation = useNavigation();
   const { uid } = useSession();
   const confirm = useConfirm();
+  const now = useNow();
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState("");
 
   const [cancelLoadingId, setCancelLoadingId] = useState(null);
 
@@ -128,7 +195,6 @@ export default function Applied() {
         const next = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((item) => item?.hiddenByWorker !== true);
-
         setItems(next);
         setLoading(false);
       },
@@ -143,22 +209,18 @@ export default function Applied() {
 
   const onRefresh = async () => {
     if (!uid) return;
-
     try {
       setRefreshing(true);
       setLoadError(null);
-
       const q = query(
         collection(db, "applications"),
         where("workerId", "==", uid),
         orderBy("createdAt", "desc")
       );
-
       const snap = await getDocs(q);
       const next = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((item) => item?.hiddenByWorker !== true);
-
       setItems(next);
     } catch (e) {
       setLoadError(e?.message || "Could not refresh.");
@@ -167,32 +229,17 @@ export default function Applied() {
     }
   };
 
-  const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-
-    return items.filter((item) => {
-      const title = String(item?.jobTitle || "").toLowerCase();
-      const org = String(item?.orgName || "").toLowerCase();
-      const location = String(item?.location || "").toLowerCase();
-      return title.includes(q) || org.includes(q) || location.includes(q);
-    });
-  }, [items, search]);
-
   const openJob = (jobId) => {
     if (!jobId) return;
     navigation.navigate("WorkerJobDetails", { jobId });
   };
 
   const isCancellableUI = (app) => {
-    const appStatus = String(app?.status || "").toUpperCase();
+    const appStatus = String(app?.status || "").toLowerCase();
     if (appStatus !== "pending") return false;
-
     const startAt = asDateMaybe(app?.shiftStartAt);
     if (!startAt) return false;
-
-    const diff = startAt.getTime() - Date.now();
-    return diff >= HOURS_8_MS;
+    return startAt.getTime() - Date.now() >= HOURS_8_MS;
   };
 
   const cancelApplication = async (app) => {
@@ -224,35 +271,34 @@ export default function Applied() {
         const appData = appSnap.data();
         if (appData.workerId !== uid) throw new Error("Not allowed.");
 
-        const appStatus = String(appData.status || "").toUpperCase();
-        if (appStatus !== "pending") throw new Error("You can only cancel an active application.");
+        const appStatus = String(appData.status || "").toLowerCase();
+        if (appStatus !== "pending")
+          throw new Error("You can only cancel an active application.");
 
         const jobSnap = await tx.get(jobRef);
         if (!jobSnap.exists()) throw new Error("Job not found.");
 
         const jobData = jobSnap.data();
-
-        const approvalRequired = jobData?.businessApprovalRequired === true;
-        if (approvalRequired) {
-          throw new Error("This shift requires business approval and can’t be cancelled in this flow.");
+        if (jobData?.businessApprovalRequired === true) {
+          throw new Error(
+            "This shift requires business approval and can't be cancelled in this flow."
+          );
         }
 
         const startAt = asDateMaybe(jobData?.shiftStartAt);
         if (!startAt) throw new Error("Shift start time missing.");
 
-        const diff = startAt.getTime() - Date.now();
-        if (diff < HOURS_8_MS) {
-          throw new Error("You can only cancel at least 8 hours before the shift starts.");
+        if (startAt.getTime() - Date.now() < HOURS_8_MS) {
+          throw new Error(
+            "You can only cancel at least 8 hours before the shift starts."
+          );
         }
 
         tx.delete(appRef);
 
         const jobStatus = String(jobData?.status || "").toLowerCase();
         if (jobStatus === "pending") {
-          tx.update(jobRef, {
-            status: "open",
-            updatedAt: serverTimestamp(),
-          });
+          tx.update(jobRef, { status: "open", updatedAt: serverTimestamp() });
         }
       });
     } catch (e) {
@@ -268,25 +314,45 @@ export default function Applied() {
     }
   };
 
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const statusA = deriveApplicationStatus(a, now);
+      const statusB = deriveApplicationStatus(b, now);
+
+      const priorityA = STATUS_PRIORITY[statusA] ?? 3;
+      const priorityB = STATUS_PRIORITY[statusB] ?? 3;
+
+      // Ordenar por prioridad de estado primero
+      if (priorityA !== priorityB) return priorityA - priorityB;
+
+      // Dentro del mismo grupo, ordenar por shiftStartAt más próximo primero
+      const dateA = asDateMaybe(a?.shiftStartAt)?.getTime() ?? 0;
+      const dateB = asDateMaybe(b?.shiftStartAt)?.getTime() ?? 0;
+      return dateA - dateB;
+    });
+  }, [items, now]);
+  // Search filtering can be added here later if needed
+
   const renderItem = ({ item }) => {
     const when =
       formatDateTime(item.shiftStartAt) ||
-      (item.shiftDate && item.shiftTime ? `${item.shiftDate} - ${item.shiftTime}` : null);
+      (item.shiftDate && item.shiftTime
+        ? `${item.shiftDate} - ${item.shiftTime}`
+        : null);
 
     const cancellable = isCancellableUI(item);
-    const visualStatus = getVisualStatus(item);
+    const visualStatus = deriveApplicationStatus(item, now);
 
     return (
-      <Pressable
-        onPress={() => openJob(item.jobId)}
-        style={styles.card}
-      >
+      <Pressable onPress={() => openJob(item.jobId)} style={styles.card}>
         <Text style={styles.cardTitle}>{item.jobTitle || "Shift"}</Text>
         <Text style={styles.cardCompany}>{item.orgName || "Company name"}</Text>
-        {item.location ? <Text style={styles.cardMeta}>{item.location}</Text> : null}
+        {item.location ? (
+          <Text style={styles.cardMeta}>{item.location}</Text>
+        ) : null}
         {when ? <Text style={styles.cardMeta}>{when}</Text> : null}
 
-        <Text style={[styles.statusText, getVisualStatusStyle(visualStatus)]}>
+        <Text style={[styles.statusText, getStatusStyle(visualStatus)]}>
           {visualStatus}
         </Text>
       </Pressable>
@@ -295,13 +361,11 @@ export default function Applied() {
 
   const Header = (
     <View style={styles.header}>
-
       <Text style={styles.title}>My shifts</Text>
-
       <Text style={styles.subtitle}>
-        Here you can view all the shifts you’ve joined, including pending approval, confirmed, rejected, completed, and cancelled shifts.
+        Here you can view all the shifts you've joined, including pending
+        approval, confirmed, rejected, completed, and cancelled shifts.
       </Text>
-
       {loadError ? <Text style={styles.errorBox}>{loadError}</Text> : null}
     </View>
   );
@@ -327,58 +391,25 @@ export default function Applied() {
       locations={[0, 0.52, 1]}
       style={styles.screen}
     >
-      {filteredItems.length === 0 ? (
-        <FlatList
-          data={[]}
-          ListHeaderComponent={Header}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-        />
-      ) : (
-        <FlatList
-          data={filteredItems}
-          keyExtractor={(it) => it.id}
-          renderItem={renderItem}
-          ListHeaderComponent={Header}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      <FlatList
+        data={sortedItems.length === 0 ? [] : sortedItems}
+        keyExtractor={(it) => it.id}
+        renderItem={renderItem}
+        ListHeaderComponent={Header}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      />
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-
-  listContent: {
-    paddingTop: 75,
-    paddingBottom: 110,
-    paddingHorizontal: 20,
-  },
-
-  header: {
-    marginBottom: 28,
-  },
-
-  backButton: {
-    alignSelf: "flex-start",
-    padding: 8,
-    marginBottom: 20,
-  },
-
-  backButtonText: {
-    color: "#A7A4A4",
-    fontSize: 34,
-    lineHeight: 34,
-    fontFamily: "Inter",
-    fontWeight: "600",
-  },
-
+  screen: { flex: 1 },
+  listContent: { paddingTop: 75, paddingBottom: 110, paddingHorizontal: 20 },
+  header: { marginBottom: 28 },
   title: {
     color: "#2A5FB3",
     fontSize: 24,
@@ -387,35 +418,6 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     paddingHorizontal: 10,
   },
-
-  searchWrap: {
-    paddingHorizontal: 10,
-    marginBottom: 22,
-  },
-
-  searchInner: {
-    minHeight: 38,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#828282",
-    paddingLeft: 17,
-    paddingRight: 17,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  searchInput: {
-    flex: 1,
-    color: "#716C6C",
-    fontSize: 15,
-    fontFamily: "Inter",
-    fontWeight: "300",
-    paddingRight: 10,
-  },
-
   subtitle: {
     color: "#898989",
     fontSize: 13,
@@ -426,7 +428,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 16,
   },
-
   card: {
     width: "100%",
     paddingHorizontal: 12,
@@ -439,7 +440,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 15,
   },
-
   cardTitle: {
     color: "#434343",
     fontSize: 15,
@@ -447,7 +447,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 8,
   },
-
   cardCompany: {
     color: "#434343",
     fontSize: 14,
@@ -455,7 +454,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 12,
   },
-
   cardMeta: {
     color: "#434343",
     fontSize: 14,
@@ -464,7 +462,6 @@ const styles = StyleSheet.create({
     fontWeight: "300",
     marginTop: 12,
   },
-
   statusText: {
     position: "absolute",
     top: 16,
@@ -473,41 +470,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "300",
   },
-
-  statusCancelled: {
-    color: "#FF0404",
-  },
-
-  statusRejected: {
-    color: "#B91C1C",
-  },
-
-  statusExpired: {
-    color: "#111827",
-  },
-
-  statusPending: {
-    color: "#6568AC",
-  },
-
-  statusActive: {
-    color: "#FFB800",
-  },
-
-  statusOngoing: {
-    color: "#5BB70B",
-  },
-
-  binButton: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
+  statusCancelled: { color: "#FF0404" },
+  statusRejected: { color: "#B91C1C" },
+  statusExpired: { color: "#111827" },
+  statusPending: { color: "#6568AC" },
+  statusUpcoming: { color: "#2A5FB3" },
+  statusOngoing: { color: "#FFB800" },
+  statusCompleted: { color: "#0BCAD5" },
   errorBox: {
     marginHorizontal: 12,
     marginTop: 4,
@@ -519,36 +488,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-
-  empty: {
-    paddingHorizontal: 12,
-    paddingTop: 16,
-  },
-
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  emptySubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#6B7280",
-    lineHeight: 20,
-  },
-
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
-
-  loadingText: {
-    marginTop: 10,
-    color: "#6B7280",
-    fontWeight: "700",
-  },
+  loadingText: { marginTop: 10, color: "#6B7280", fontWeight: "700" },
 });

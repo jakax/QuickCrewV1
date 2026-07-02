@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { listPendingUsers, approveWorker, rejectWorker, UserRow } from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
-import { href, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { usePrompt } from "../../providers/PromptProvider";
 
 type ReferenceItem = {
@@ -31,7 +31,6 @@ function formatTimestamp(value: TimestampLike) {
     if (value instanceof Date) return value.toLocaleString();
     if (typeof value === "number") return new Date(value).toLocaleString();
     if (typeof value === "string") {
-      // If it's already a readable date string, keep it; otherwise try parsing.
       const parsed = new Date(value);
       return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
     }
@@ -76,17 +75,12 @@ export default function UsersApprovalsScreen() {
 
   useEffect(() => {
     let mounted = true;
-
     const loadSkills = async () => {
       try {
         setSkillsError(null);
         setSkillsLoading(true);
-
         const data = await listSkillsCatalog();
-
-        // Only active skills by default
         const active = data.filter((s) => s.isActive !== false);
-
         if (mounted) setSkills(active);
       } catch (e: any) {
         if (mounted) setSkillsError(e?.message || "Could not load skills catalog.");
@@ -94,21 +88,16 @@ export default function UsersApprovalsScreen() {
         if (mounted) setSkillsLoading(false);
       }
     };
-
     loadSkills();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   const load = async () => {
     try {
       setError(null);
       setLoading(true);
-
       const rows = await listPendingUsers();
       setItems(rows);
-
       if (rows.length) {
         const userIdFromParam = searchParams.get("userId");
         if (userIdFromParam && rows.some((r) => r.id === userIdFromParam)) {
@@ -147,16 +136,9 @@ export default function UsersApprovalsScreen() {
     try {
       if (!selected?.id) return;
       if (!user?.uid) throw new Error("Missing admin session.");
-
       setActionError(null);
       setActionLoading(true);
-
-      await approveWorker({
-        userId: selected.id,
-        adminUid: user.uid,
-        skills: selectedSkills,
-      });
-
+      await approveWorker({ userId: selected.id, adminUid: user.uid, skills: selectedSkills });
       await load();
     } catch (e: any) {
       setActionError(e?.message || "Could not approve user.");
@@ -169,7 +151,6 @@ export default function UsersApprovalsScreen() {
     try {
       if (!selected?.id) return;
       if (!user?.uid) throw new Error("Missing admin session.");
-
       const reason = await prompt({
         title: "Reason required (rejected)",
         message: "Please add a short reason for audit history.",
@@ -178,19 +159,10 @@ export default function UsersApprovalsScreen() {
         cancelText: "Cancel",
         required: true,
       });
-
       if (reason == null) return;
-
       setActionError(null);
       setActionLoading(true);
-
-      await rejectWorker({
-        userId: selected.id,
-        adminUid: user.uid,
-        skills: selectedSkills,
-        reason,
-      });
-
+      await rejectWorker({ userId: selected.id, adminUid: user.uid, skills: selectedSkills, reason });
       await load();
     } catch (e: any) {
       setActionError(e?.message || "Could not reject user.");
@@ -199,10 +171,9 @@ export default function UsersApprovalsScreen() {
     }
   };
 
-  // These fields may not exist on UserRow yet depending on listPendingWorkers().
-  // We read them defensively to avoid TS issues and runtime crashes.
   const selectedAny = selected as any;
   const references: ReferenceItem[] = Array.isArray(selectedAny?.references) ? selectedAny.references : [];
+
   return (
     <div className="page approvalsLayout">
       {/* LEFT */}
@@ -226,16 +197,34 @@ export default function UsersApprovalsScreen() {
         <div className="list">
           {filtered.map((u) => {
             const isActive = u.id === selectedId;
+            const isReadyToReview = u.profileStatus === "ready_for_review";
             return (
               <button
                 key={u.id}
                 className={`listItem ${isActive ? "listItemActive" : ""}`}
                 onClick={() => setSelectedId(u.id)}
               >
-                <div className="fw900">{u.fullName || "Unnamed worker"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div className="fw900">{u.fullName || "Unnamed worker"}</div>
+                  {/* Yellow dot — profile complete, submitted for review */}
+                  {isReadyToReview && (
+                    <span
+                      title="Profile complete — ready to review"
+                      style={{
+                        display: "inline-block",
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: "#F59E0B",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
+                </div>
                 <div className="muted mt6 fs13">{u.email || u.id}</div>
                 <div className="mt6 fs12 fw800">
                   role: {u.role || "—"} · status: {u.approvalStatus || "—"}
+                  {isReadyToReview ? " · ready to review" : ""}
                 </div>
               </button>
             );
@@ -259,7 +248,6 @@ export default function UsersApprovalsScreen() {
                   <div className="fw900">{selected.fullName || "Unnamed worker"}</div>
                   <div className="muted mt6">{selected.email || selected.id}</div>
                 </div>
-
                 <div className="row gap10">
                   <button className="btn btnDanger" disabled={actionLoading} onClick={onReject}>
                     Reject
@@ -281,13 +269,7 @@ export default function UsersApprovalsScreen() {
                         src={selectedAny.photo.url}
                         alt={selected.fullName || "Worker photo"}
                         referrerPolicy="no-referrer"
-                        style={{
-                          width: 80,
-                          height: 80,
-                          borderRadius: "50%",
-                          objectFit: "cover",
-                          border: "2px solid #e5e7eb",
-                        }}
+                        style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: "2px solid #e5e7eb" }}
                       />
                     </div>
                   ) : (
@@ -296,6 +278,26 @@ export default function UsersApprovalsScreen() {
 
                   <div className="fs13 fw800">Role: {selected.role || "—"}</div>
                   <div className="mt6 fs13 fw800">Approval status: {selected.approvalStatus || "—"}</div>
+
+                  {/* Profile status — shows if worker submitted for review */}
+                  {selectedAny?.profileStatus ? (
+                    <div
+                      className="mt6 fs13 fw800"
+                      style={{ color: selectedAny.profileStatus === "ready_for_review" ? "#D97706" : "#6B7280" }}
+                    >
+                      Profile status:{" "}
+                      {selectedAny.profileStatus === "ready_for_review"
+                        ? "🟡 Ready to review"
+                        : selectedAny.profileStatus}
+                      {selectedAny.profileSubmittedAt ? (
+                        <span className="muted fs12 fw800">
+                          {" "}· submitted {formatTimestamp(selectedAny.profileSubmittedAt)}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt6 fs13 fw800 muted">Profile status: incomplete</div>
+                  )}
 
                   <div className="mt12 fw900 mb8">Personal details</div>
                   <div className="fs13 fw800">First name: {selectedAny?.firstName || "—"}</div>
@@ -342,12 +344,7 @@ export default function UsersApprovalsScreen() {
 
                   <div className="fs13 fw900 mb8">CV</div>
                   {selectedAny?.cv?.url ? (
-                    <a
-                      href={selectedAny.cv.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="docLink"
-                    >
+                    <a href={selectedAny.cv.url} target="_blank" rel="noopener noreferrer" className="docLink">
                       {selectedAny.cv.fileName || "View CV"}
                     </a>
                   ) : (
@@ -356,12 +353,7 @@ export default function UsersApprovalsScreen() {
 
                   <div className="fs13 fw900 mt12 mb8">ID Document</div>
                   {selectedAny?.idDocument?.url ? (
-                    <a
-                      href={selectedAny.idDocument.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="docLink"
-                    >
+                    <a href={selectedAny.idDocument.url} target="_blank" rel="noopener noreferrer" className="docLink">
                       {selectedAny.idDocument.fileName || "View ID document"}
                     </a>
                   ) : (
@@ -370,12 +362,7 @@ export default function UsersApprovalsScreen() {
 
                   <div className="fs13 fw900 mt12 mb8">Visa document</div>
                   {selectedAny?.visaDocument?.url ? (
-                    <a
-                      href={selectedAny.visaDocument.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="docLink"
-                    >
+                    <a href={selectedAny.visaDocument.url} target="_blank" rel="noopener noreferrer" className="docLink">
                       {selectedAny.visaDocument.fileName || "View visa document"}
                     </a>
                   ) : (
@@ -385,7 +372,6 @@ export default function UsersApprovalsScreen() {
 
                 <div className="card cardBody fullRow">
                   <div className="fw900 mb8">References</div>
-
                   {references.length ? (
                     <div className="historyList">
                       {references.map((r, idx) => (
@@ -395,15 +381,11 @@ export default function UsersApprovalsScreen() {
                             {r?.role ? ` · ${r.role}` : ""}
                             {r?.company ? ` @ ${r.company}` : ""}
                           </div>
-
                           <div className="muted fs12 fw800 mt6">
                             {r?.email ? `email: ${r.email}` : ""}
                             {r?.phone ? (r?.email ? " · " : "") + `phone: ${r.phone}` : ""}
                           </div>
-
-                          {r?.notes ? (
-                            <div className="muted fs12 fw800 mt6">notes: {r.notes}</div>
-                          ) : null}
+                          {r?.notes ? <div className="muted fs12 fw800 mt6">notes: {r.notes}</div> : null}
                         </div>
                       ))}
                     </div>
@@ -414,7 +396,6 @@ export default function UsersApprovalsScreen() {
 
                 <div className="card cardBody fullRow">
                   <div className="fw900 mb8">Status history</div>
-
                   {Array.isArray(selectedAny?.statusHistory) && selectedAny.statusHistory.length ? (
                     <div className="historyList">
                       {selectedAny.statusHistory
@@ -422,9 +403,7 @@ export default function UsersApprovalsScreen() {
                         .reverse()
                         .map((h: any, idx: number) => (
                           <div key={idx} className="historyRow">
-                            <div className="fw900">
-                              {h.from || "—"} → {h.to || "—"}
-                            </div>
+                            <div className="fw900">{h.from || "—"} → {h.to || "—"}</div>
                             <div className="muted fs12 fw800 mt6">
                               by {h.by || "—"}
                               {h.reason ? ` · reason: ${h.reason}` : ""}
@@ -439,33 +418,25 @@ export default function UsersApprovalsScreen() {
 
                 <div className="card cardBody fullRow">
                   <div className="fw900 mb8">Skills (controls job visibility later)</div>
-
                   <div className="skillsWrap">
                     {skillsLoading ? (
                       <div className="muted fs13 fw800">Loading skills…</div>
                     ) : skillsError ? (
                       <div className="error fs13">{skillsError}</div>
                     ) : skills.length === 0 ? (
-                      <div className="muted fs13 fw800">
-                        No skills found. Add skills in Catalog → Skills.
-                      </div>
+                      <div className="muted fs13 fw800">No skills found. Add skills in Catalog → Skills.</div>
                     ) : (
                       skills.map((s) => {
                         const checked = selectedSkills.includes(s.key);
                         return (
                           <label key={s.id} className={`skillChip ${checked ? "skillChipActive" : ""}`}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleSkill(s.key)}
-                            />
+                            <input type="checkbox" checked={checked} onChange={() => toggleSkill(s.key)} />
                             {s.name}
                           </label>
                         );
                       })
                     )}
                   </div>
-
                   <div className="muted mt10 fs12 fw800">
                     Selected: {selectedSkills.length ? selectedSkills.join(", ") : "none"}
                   </div>
@@ -475,6 +446,6 @@ export default function UsersApprovalsScreen() {
           )}
         </div>
       </div>
-    </div >
+    </div>
   );
 }

@@ -90,10 +90,11 @@ export default function RegisterWorker({ navigation }) {
         lastName: lastName.trim(),
       });
 
-      // Worker can browse jobs immediately
       navigation.replace("WorkerRoot", {
         screen: "WorkerTabs",
-        params: { pendingApprovalMessage: true },
+        params: {
+          screen: "Profile",
+        },
       });
     } catch (e) {
       console.log("Registration error:", e);
