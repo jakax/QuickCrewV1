@@ -206,7 +206,7 @@ export default function WorkersScreen() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Status</th>
-                  <th>Skills</th>
+                  <th>Phone</th>
                   <th>Last change</th>
                   <th>Reason</th>
                   <th className="thActions" />
@@ -231,11 +231,7 @@ export default function WorkersScreen() {
                         <span className={pillClass(st)}>{st}</span>
                       </td>
 
-                      <td className="muted fw800">
-                        {Array.isArray(u.skills) && u.skills.length
-                          ? u.skills.map((id) => skillsMap[id] || id).join(", ")
-                          : "—"}
-                      </td>
+                      <td className="muted fw800">{u.phone || "—"}</td>
 
                       <td className="muted fw800 fs12">{updatedAt}</td>
                       <td className="muted fw800 fs12">{reason}</td>

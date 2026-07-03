@@ -13,6 +13,26 @@ import {
 const TABS = ["pending", "reviewed", "paid", "rejected", "unclosed"] as const;
 type Tab = typeof TABS[number];
 
+// Tries to parse shiftDate into a sortable timestamp.
+// Handles ISO "YYYY-MM-DD" first (unambiguous), then falls back to
+// "DD/MM/YYYY" style, then a generic Date parse as a last resort.
+// Shifts with no parseable date sort to the end.
+function parseShiftDate(v: string | null): number {
+  if (!v) return Infinity;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    return d.getTime();
+  }
+  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(v);
+  if (dmy) {
+    const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    return d.getTime();
+  }
+  const generic = new Date(v);
+  return isNaN(generic.getTime()) ? Infinity : generic.getTime();
+}
+
 export default function ShiftsScreen() {
   const { user } = useAuth();
 
@@ -49,13 +69,16 @@ export default function ShiftsScreen() {
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((s) => {
-      const worker = String(s.workerFullName || "").toLowerCase();
-      const org = String(s.orgName || "").toLowerCase();
-      const job = String(s.jobTitle || "").toLowerCase();
-      return worker.includes(term) || org.includes(term) || job.includes(term);
-    });
+    const base = term
+      ? items.filter((s) => {
+        const worker = String(s.workerFullName || "").toLowerCase();
+        const org = String(s.orgName || "").toLowerCase();
+        const job = String(s.jobTitle || "").toLowerCase();
+        return worker.includes(term) || org.includes(term) || job.includes(term);
+      })
+      : items;
+
+    return [...base].sort((a, b) => parseShiftDate(a.shiftDate) - parseShiftDate(b.shiftDate));
   }, [items, q]);
 
   const changeStatus = async (row: ShiftRow, to: ShiftReviewStatus, quickCrewComment?: string) => {
@@ -226,143 +249,151 @@ export default function ShiftsScreen() {
             </div>
           ) : null}
 
-          {!loading && filtered.length === 0 ? (
-            <div className="muted mt16">No shifts in this status.</div>
-          ) : null}
+          {loading ? (
+            <div className="mt16" style={{ textAlign: "center", padding: "48px 0" }}>
+              <div className="fw900 fs14">Loading shifts…</div>
+            </div>
+          ) : (
+            <>
+              {filtered.length === 0 ? (
+                <div className="muted mt16">No shifts in this status.</div>
+              ) : null}
 
-          <div className="mt16 tableWrap">
-            <table className="table tableThLeft">
-              <thead>
-                <tr>
-                  <th>Organization</th>
-                  <th>Job</th>
-                  <th>Date</th>
-                  <th>Worker</th>
-                  <th className="thActions" />
-                </tr>
-              </thead>
-
-              <tbody>
-                {filtered.map((row) => {
-                  const busy = actionLoadingId === row.id;
-
-                  return (
-                    <tr key={row.id}>
-                      <td className="fw900">{row.orgName || "—"}</td>
-                      <td className="fw800">{row.jobTitle || "—"}</td>
-                      <td className="muted fw800 fs12">
-                        {fmtDate(row.shiftDate)}
-                        {row.shiftTime ? (
-                          <div className="muted fs12">{row.shiftTime}</div>
-                        ) : null}
-                      </td>
-                      <td>
-                        <div className="fw900">{row.workerFullName || "—"}</div>
-                        {row.workerEmail ? (
-                          <div className="muted fs12">{row.workerEmail}</div>
-                        ) : null}
-                      </td>
-                      <td>
-                        <div className="tableActions">
-                          <button
-                            className="btn"
-                            onClick={() => setDetailRow(row)}
-                          >
-                            View details
-                          </button>
-
-                          {tab === "pending" ? (
-                            <>
-                              <button
-                                className="btn btnPrimary"
-                                onClick={() => changeStatus(row, "reviewed")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Mark reviewed"}
-                              </button>
-                              <button
-                                className="btn btnDanger"
-                                onClick={() => setRejectRow(row)}
-                                disabled={busy}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : tab === "reviewed" ? (
-                            <>
-                              <button
-                                className="btn"
-                                onClick={() => changeStatus(row, "pending")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Set pending"}
-                              </button>
-                              <button
-                                className="btn btnPrimary"
-                                onClick={() => changeStatus(row, "paid")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Mark paid"}
-                              </button>
-                              <button
-                                className="btn btnDanger"
-                                onClick={() => setRejectRow(row)}
-                                disabled={busy}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : tab === "rejected" ? (
-                            <>
-                              <button
-                                className="btn"
-                                onClick={() => changeStatus(row, "pending")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Set pending"}
-                              </button>
-                              <button
-                                className="btn"
-                                onClick={() => changeStatus(row, "reviewed")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Set reviewed"}
-                              </button>
-                            </>
-                          ) : tab === "unclosed" ? (
-                            <>
-                              <button
-                                className="btn btnPrimary"
-                                onClick={() => changeStatus(row, "paid")}
-                                disabled={busy}
-                              >
-                                {busy ? "Saving..." : "Mark paid"}
-                              </button>
-                              <button
-                                className="btn btnDanger"
-                                onClick={() => setRejectRow(row)}
-                                disabled={busy}
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className="btn"
-                              onClick={() => changeStatus(row, "reviewed")}
-                              disabled={busy}
-                            >
-                              {busy ? "Saving..." : "Set reviewed"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
+              <div className="mt16 tableWrap">
+                <table className="table tableThLeft">
+                  <thead>
+                    <tr>
+                      <th>Organization</th>
+                      <th>Job</th>
+                      <th>Date</th>
+                      <th>Worker</th>
+                      <th className="thActions" />
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+
+                  <tbody>
+                    {filtered.map((row) => {
+                      const busy = actionLoadingId === row.id;
+
+                      return (
+                        <tr key={row.id}>
+                          <td className="fw900">{row.orgName || "—"}</td>
+                          <td className="fw800">{row.jobTitle || "—"}</td>
+                          <td className="muted fw800 fs12">
+                            {fmtDate(row.shiftDate)}
+                            {row.shiftTime ? (
+                              <div className="muted fs12">{row.shiftTime}</div>
+                            ) : null}
+                          </td>
+                          <td>
+                            <div className="fw900">{row.workerFullName || "—"}</div>
+                            {row.workerEmail ? (
+                              <div className="muted fs12">{row.workerEmail}</div>
+                            ) : null}
+                          </td>
+                          <td>
+                            <div className="tableActions">
+                              <button
+                                className="btn"
+                                onClick={() => setDetailRow(row)}
+                              >
+                                View details
+                              </button>
+
+                              {tab === "pending" ? (
+                                <>
+                                  <button
+                                    className="btn btnPrimary"
+                                    onClick={() => changeStatus(row, "reviewed")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Mark reviewed"}
+                                  </button>
+                                  <button
+                                    className="btn btnDanger"
+                                    onClick={() => setRejectRow(row)}
+                                    disabled={busy}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : tab === "reviewed" ? (
+                                <>
+                                  <button
+                                    className="btn"
+                                    onClick={() => changeStatus(row, "pending")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Set pending"}
+                                  </button>
+                                  <button
+                                    className="btn btnPrimary"
+                                    onClick={() => changeStatus(row, "paid")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Mark paid"}
+                                  </button>
+                                  <button
+                                    className="btn btnDanger"
+                                    onClick={() => setRejectRow(row)}
+                                    disabled={busy}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : tab === "rejected" ? (
+                                <>
+                                  <button
+                                    className="btn"
+                                    onClick={() => changeStatus(row, "pending")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Set pending"}
+                                  </button>
+                                  <button
+                                    className="btn"
+                                    onClick={() => changeStatus(row, "reviewed")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Set reviewed"}
+                                  </button>
+                                </>
+                              ) : tab === "unclosed" ? (
+                                <>
+                                  <button
+                                    className="btn btnPrimary"
+                                    onClick={() => changeStatus(row, "paid")}
+                                    disabled={busy}
+                                  >
+                                    {busy ? "Saving..." : "Mark paid"}
+                                  </button>
+                                  <button
+                                    className="btn btnDanger"
+                                    onClick={() => setRejectRow(row)}
+                                    disabled={busy}
+                                  >
+                                    Reject
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  className="btn"
+                                  onClick={() => changeStatus(row, "reviewed")}
+                                  disabled={busy}
+                                >
+                                  {busy ? "Saving..." : "Set reviewed"}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

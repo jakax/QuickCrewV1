@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../providers/AuthProvider";
 import { ApprovalStatus, listEmployersByStatus, setWorkerStatus, UserRow } from "./users.service";
 import { usePrompt } from "../../providers/PromptProvider";
-import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 import UserInfoModal from "./UserInfoModal";
+import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 
 const TABS: ApprovalStatus[] = ["pending", "approved", "rejected", "suspended"];
 
@@ -53,10 +53,9 @@ export default function EmployersScreen() {
 
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [skillsMap, setSkillsMap] = useState<Record<string, string>>({});
 
   const [infoUser, setInfoUser] = useState<UserRow | null>(null);
-
-  const [skillsMap, setSkillsMap] = useState<Record<string, string>>({});
 
   const load = async () => {
     try {
@@ -104,9 +103,10 @@ export default function EmployersScreen() {
 
     return items.filter((u) => {
       const name = String(u.fullName || "").toLowerCase();
+      const legalName = String(u.legalBusinessNameDraft || "").toLowerCase();
       const email = String(u.email || "").toLowerCase();
       const id = String(u.id || "").toLowerCase();
-      return name.includes(term) || email.includes(term) || id.includes(term);
+      return name.includes(term) || legalName.includes(term) || email.includes(term) || id.includes(term);
     });
   }, [items, q]);
 
@@ -186,7 +186,7 @@ export default function EmployersScreen() {
 
             <input
               className="input w320"
-              placeholder="Search name / email / uid..."
+              placeholder="Search business name / email / uid..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -203,10 +203,10 @@ export default function EmployersScreen() {
             <table className="table tableThLeft">
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>Business Name</th>
                   <th>Email</th>
                   <th>Status</th>
-                  <th>Skills</th>
+                  <th>Phone</th>
                   <th>Last change</th>
                   <th>Reason</th>
                   <th className="thActions" />
@@ -224,18 +224,14 @@ export default function EmployersScreen() {
 
                   return (
                     <tr key={u.id}>
-                      <td className="fw900">{u.fullName || "Unnamed"}</td>
+                      <td className="fw900">{u.legalBusinessNameDraft || u.fullName || "Unnamed"}</td>
                       <td className="muted fw800">{u.email || u.id}</td>
 
                       <td>
                         <span className={pillClass(st)}>{st}</span>
                       </td>
 
-                      <td className="muted fw800">
-                        {Array.isArray(u.skills) && u.skills.length
-                          ? u.skills.map((id) => skillsMap[id] || id).join(", ")
-                          : "—"}
-                      </td>
+                      <td className="muted fw800">{u.phone || "—"}</td>
 
                       <td className="muted fw800 fs12">{updatedAt}</td>
                       <td className="muted fw800 fs12">{reason}</td>
@@ -283,7 +279,6 @@ export default function EmployersScreen() {
           </div>
         </div>
       </div>
-
       <UserInfoModal
         user={infoUser}
         skillsMap={skillsMap}

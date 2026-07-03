@@ -18,6 +18,8 @@ export type ProfileStatus = "incomplete" | "ready_for_review";
 export type UserRow = {
   id: string;
   fullName?: string;
+  legalBusinessNameDraft?: string;
+  phone?: string;
   email?: string;
   role?: string;
   approvalStatus?: ApprovalStatus | string;
@@ -86,6 +88,7 @@ export async function listPendingUsers(): Promise<UserRow[]> {
   const readyWorkersQ = query(
     collection(db, "users"),
     where("role", "==", "worker"),
+    where("approvalStatus", "==", "pending"),
     where("profileStatus", "==", "ready_for_review"),
     orderBy("profileSubmittedAt", "desc")
   );
