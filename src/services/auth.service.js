@@ -3,6 +3,7 @@ import { auth, db } from "./firebase/config";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, OAuthProvider } from "firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 export class AuthError extends Error {
   constructor(code, message) {
@@ -185,3 +186,21 @@ export const loginWithAppleAndLoadProfile = async () => {
     throw new AuthError("UNKNOWN", err?.message || "Apple login failed.");
   }
 };
+
+export async function deleteCurrentUserAccount() {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new AuthError("NOT_LOGGED_IN", "No active session.");
+  }
+
+  try {
+    const functions = getFunctions();
+    const deleteAccountFn = httpsCallable(functions, "deleteAccount");
+    await deleteAccountFn();
+  } catch (err) {
+    if (err?.code === "functions/unauthenticated") {
+      throw new AuthError("NOT_LOGGED_IN", "Please log in again and retry.");
+    }
+    throw new AuthError("UNKNOWN", err?.message || "Could not delete your account.");
+  }
+}

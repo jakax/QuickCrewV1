@@ -186,21 +186,6 @@ const Login = ({ navigation, route }) => {
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.legalSection}>
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Security & Privacy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Terms & Conditions</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Protect yourself online</Text>
-              </TouchableOpacity>
-              <TouchableOpacity disabled>
-                <Text style={styles.legalLink}>Contact</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </InnerWrapper>
@@ -414,21 +399,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 21,
     paddingVertical: 8,
-  },
-
-  legalSection: {
-    width: "100%",
-    gap: 10,
-    paddingTop: 14,
-  },
-
-  legalLink: {
-    color: "#595959",
-    fontSize: 14,
-    fontFamily: "Inter",
-    fontWeight: "600",
-    textDecorationLine: "underline",
-    paddingVertical: 4,
   },
 
   buttonDisabled: {

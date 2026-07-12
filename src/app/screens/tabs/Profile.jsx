@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,7 @@ import * as DocumentPicker from "expo-document-picker";
 import DatePickerModal from "../../components/modals/DatePickerModal";
 import SelectOptionModal from "../../components/modals/SelectOptionModal";
 import { getOrgById, updateOrganization } from "../../../services/organization.service";
+import { deleteCurrentUserAccount } from "../../../services/auth.service";
 
 const GENDER_OPTIONS = [
   "Male",
@@ -150,6 +151,7 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [uploadingCv, setUploadingCv] = useState(false);
@@ -191,7 +193,17 @@ export default function Profile() {
     passportExpiryDate: !!profile?.passportExpiryDate,
   };
 
+  const hasHydratedRef = useRef(false);
+
   useEffect(() => {
+    hasHydratedRef.current = false;
+  }, [uid]);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (hasHydratedRef.current) return;
+    hasHydratedRef.current = true;
+
     setFirstName(initial.firstName);
     setLastName(initial.lastName);
     setEmail(initial.email);
@@ -401,6 +413,28 @@ export default function Profile() {
       setError(e?.message || "Could not log out.");
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const onDeleteAccount = async () => {
+    setError(null);
+    const ok = await confirm({
+      title: "Delete your account?",
+      message: "This will permanently delete your account and all your profile data (photo, CV, ID and visa documents, references). This action cannot be undone.",
+      confirmText: "Delete account",
+      cancelText: "Cancel",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      setDeletingAccount(true);
+      await deleteCurrentUserAccount();
+      routeAfterAuthChange();
+    } catch (e) {
+      setError(e?.message || "Could not delete your account.");
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -686,6 +720,20 @@ export default function Profile() {
                 >
                   <Text style={styles.secondaryGhostButtonText}>
                     {loggingOut ? "Logging out..." : "Log out"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={onDeleteAccount}
+                  disabled={deletingAccount || loggingOut || savingOrg}
+                  style={({ pressed }) => [
+                    styles.dangerGhostButton,
+                    (pressed || deletingAccount) && { opacity: 0.9 },
+                    (deletingAccount || loggingOut || savingOrg) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.dangerGhostButtonText}>
+                    {deletingAccount ? "Deleting..." : "Delete account"}
                   </Text>
                 </Pressable>
               </View>
@@ -1154,6 +1202,20 @@ export default function Profile() {
                     {loggingOut ? "Logging out..." : "Log out"}
                   </Text>
                 </Pressable>
+
+                <Pressable
+                  onPress={onDeleteAccount}
+                  disabled={deletingAccount || loggingOut || saving}
+                  style={({ pressed }) => [
+                    styles.dangerGhostButton,
+                    (pressed || deletingAccount) && { opacity: 0.9 },
+                    (deletingAccount || loggingOut || saving) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text style={styles.dangerGhostButtonText}>
+                    {deletingAccount ? "Deleting..." : "Delete account"}
+                  </Text>
+                </Pressable>
               </View>
             </>
           ) : null}
@@ -1329,4 +1391,22 @@ const styles = StyleSheet.create({
   secondaryGhostButtonText: { color: "#434343", fontSize: 15, fontWeight: "600" },
   error: { marginTop: 16, backgroundColor: "#FEF2F2", color: "#B91C1C", padding: 12, borderRadius: 10, fontSize: 13 },
   orgDescriptionGroup: { marginTop: 24 },
+
+  dangerGhostButton: {
+    marginTop: 12,
+    height: 40,
+    borderRadius: 63,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+
+  dangerGhostButtonText: {
+    color: "#B91C1C",
+    fontSize: 15,
+    fontWeight: "600",
+  },
 });

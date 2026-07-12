@@ -152,7 +152,8 @@ export default function EmployerJobApplicants() {
 
   const shiftExpired = hoursUntilShift !== null && hoursUntilShift < 0;
   const showExpiryBanner = shiftExpired && !isFilled && !isCancelled && !isActive;
-  const approvalLocked = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 2;
+  // Cerramos la aprobacion 30 minutos antes de que inicie el shift
+  const approvalLocked = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 0 // volver a como estaba<= 2;
   const showApprovalWarning = !shiftExpired && hoursUntilShift !== null && hoursUntilShift <= 4;
 
   const onReject = async (app) => {

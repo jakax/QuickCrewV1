@@ -10,7 +10,7 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useSession } from "../../providers/SessionProvider";
-import { getJobById, updateJob, deleteJobIfAllowed, cancelJob } from "../../../services/jobs.service";
+import { getJobById, updateJob, cancelJob } from "../../../services/jobs.service";
 import { canCancelApplication } from "../../../utils/jobFormatters";
 import JobForm from "../../components/jobs/JobForm";
 import { useConfirm } from "../../providers/ConfirmProvider";
@@ -44,7 +44,6 @@ export default function EmployerEditJob() {
   const [job, setJob] = useState(null);
   const [loadingJob, setLoadingJob] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
 
@@ -147,33 +146,6 @@ export default function EmployerEditJob() {
       setError(e?.message || "Could not update job.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const onDelete = async () => {
-    const ok = await confirm({
-      title: "Delete shift?",
-      message:
-        "This action cannot be undone. You can only delete a shift that has no worker applications.",
-      confirmText: "Delete",
-    });
-
-    if (!ok) return;
-
-    try {
-      setError(null);
-      setDeleting(true);
-
-      await deleteJobIfAllowed({
-        jobId,
-        expectedOrgId: orgId,
-      });
-
-      navigation.goBack();
-    } catch (e) {
-      setError(e?.message || "Could not delete shift.");
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -331,23 +303,6 @@ export default function EmployerEditJob() {
                 >
                   <Text style={styles.cancelButtonText}>
                     {cancelling ? "Cancelling..." : "Cancel shift"}
-                  </Text>
-                </Pressable>
-              ) : null}
-
-              {/* Delete shift — only shown if no applications exist */}
-              {!readOnly ? (
-                <Pressable
-                  onPress={onDelete}
-                  disabled={deleting || saving || loadingJob}
-                  style={({ pressed }) => [
-                    styles.deleteButton,
-                    (deleting || saving || loadingJob) && styles.deleteButtonDisabled,
-                    pressed && !(deleting || saving || loadingJob) && styles.deleteButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.deleteButtonText}>
-                    {deleting ? "Deleting..." : "Delete shift"}
                   </Text>
                 </Pressable>
               ) : null}

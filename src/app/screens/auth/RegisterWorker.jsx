@@ -43,7 +43,7 @@ export default function RegisterWorker({ navigation }) {
   const onRegister = async () => {
     const ok = await confirm({
       title: "Create worker account?",
-      message: "You can browse jobs immediately. Approval is only needed when you apply.",
+      message: "Thanks for joining us. Your profile will need to be approved before joining shifts.",
       confirmText: "Register",
     });
     if (!ok) return;
@@ -142,7 +142,7 @@ export default function RegisterWorker({ navigation }) {
             </View>
 
             <Text style={styles.subtitle}>
-              You can browse jobs immediately. Approval is only needed when you apply.
+              Thanks for joining us. Your profile will need to be approved before joining shifts.
             </Text>
 
             <View style={styles.field}>

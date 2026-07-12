@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  Linking,
 } from "react-native";
 import {
   OuterWrapper,
@@ -123,6 +124,16 @@ const LoginEntry = ({ navigation }) => {
               >
                 <Text style={styles.employerButtonText}>Create an account</Text>
               </TouchableOpacity>
+
+              <View style={styles.legalRow}>
+                <TouchableOpacity onPress={() => Linking.openURL("https://quickcrew-legal.web.app/privacy")}>
+                  <Text style={styles.legalLink}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <Text style={styles.legalDot}>·</Text>
+                <TouchableOpacity onPress={() => Linking.openURL("https://quickcrew-2c10c.web.app/terms")}>
+                  <Text style={styles.legalLink}>Terms & Conditions</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -268,6 +279,27 @@ const styles = StyleSheet.create({
     fontFamily: "Inter",
     fontWeight: "600",
     textAlign: "center",
+  },
+
+  legalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+
+  legalLink: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Inter",
+    fontWeight: "600",
+    textDecorationLine: "underline",
+  },
+
+  legalDot: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 13,
   },
 });
 

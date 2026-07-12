@@ -8,9 +8,10 @@ import {
   ShiftReviewStatus,
   ShiftRow,
   listUnclosedAssignments,
+  listOpenJobs,
 } from "./shifts.service";
 
-const TABS = ["pending", "reviewed", "paid", "rejected", "unclosed"] as const;
+const TABS = ["pending", "reviewed", "paid", "rejected", "unclosed", "open"] as const;
 type Tab = typeof TABS[number];
 
 // Tries to parse shiftDate into a sortable timestamp.
@@ -51,9 +52,12 @@ export default function ShiftsScreen() {
     try {
       setError(null);
       setLoading(true);
-      const data = tab === "unclosed"
-        ? await listUnclosedAssignments()
-        : await listShiftsByReviewStatus(tab as ShiftReviewStatus);
+      const data =
+        tab === "unclosed"
+          ? await listUnclosedAssignments()
+          : tab === "open"
+            ? await listOpenJobs()
+            : await listShiftsByReviewStatus(tab as ShiftReviewStatus);
       setItems(data);
     } catch (e: any) {
       setError(e?.message || "Could not load shifts.");
@@ -72,9 +76,10 @@ export default function ShiftsScreen() {
     const base = term
       ? items.filter((s) => {
         const worker = String(s.workerFullName || "").toLowerCase();
+        const employer = String(s.employerFullName || "").toLowerCase();
         const org = String(s.orgName || "").toLowerCase();
         const job = String(s.jobTitle || "").toLowerCase();
-        return worker.includes(term) || org.includes(term) || job.includes(term);
+        return worker.includes(term) || employer.includes(term) || org.includes(term) || job.includes(term);
       })
       : items;
 
@@ -110,42 +115,85 @@ export default function ShiftsScreen() {
         <div className="modalOverlay" onClick={() => setDetailRow(null)}>
           <div className="modalBox" onClick={(e) => e.stopPropagation()}>
             <div className="modalHeader">
-              <span className="fw900">Shift details</span>
+              <span className="fw900">{tab === "open" ? "Job details" : "Shift details"}</span>
               <button className="modalClose" onClick={() => setDetailRow(null)}>✕</button>
             </div>
 
             <div className="modalBody">
-              {detailRow.workerNoShow ? (
-                <div className="noShowBanner">⚠️ Worker reported as no-show by employer</div>
-              ) : null}
+              {tab === "open" ? (
+                <>
+                  <div className="detailGrid">
+                    <div className="detailLabel">Organization</div>
+                    <div className="detailValue">{detailRow.orgName || "—"}</div>
 
-              <div className="detailGrid">
-                <div className="detailLabel">Worker clock in</div>
-                <div className="detailValue">{fmtTime(detailRow.workerClockIn)}</div>
+                    <div className="detailLabel">Posted by</div>
+                    <div className="detailValue">
+                      {detailRow.employerFullName || "—"}
+                      {detailRow.employerEmail ? ` (${detailRow.employerEmail})` : ""}
+                    </div>
 
-                <div className="detailLabel">Worker clock out</div>
-                <div className="detailValue">{fmtTime(detailRow.workerClockOut)}</div>
+                    <div className="detailLabel">Date</div>
+                    <div className="detailValue">{fmtDate(detailRow.shiftDate)}</div>
 
-                <div className="detailLabel">Employer clock in</div>
-                <div className="detailValue">{fmtTime(detailRow.employerClockIn)}</div>
+                    <div className="detailLabel">Time</div>
+                    <div className="detailValue">{detailRow.shiftTime || "—"}</div>
 
-                <div className="detailLabel">Employer clock out</div>
-                <div className="detailValue">{fmtTime(detailRow.employerClockOut)}</div>
-              </div>
+                    <div className="detailLabel">Shift name</div>
+                    <div className="detailValue">{detailRow.jobTitle || "—"}</div>
 
-              {detailRow.employerComment ? (
-                <div className="detailComment">
-                  <div className="detailCommentLabel">Employer comment</div>
-                  <div className="detailCommentBody">{detailRow.employerComment}</div>
-                </div>
-              ) : null}
+                    <div className="detailLabel">Primary role</div>
+                    <div className="detailValue">{detailRow.primaryRoleKey || "—"}</div>
 
-              {detailRow.quickCrewComment ? (
-                <div className="detailComment detailCommentInternal">
-                  <div className="detailCommentLabel">QuickCrew internal note</div>
-                  <div className="detailCommentBody">{detailRow.quickCrewComment}</div>
-                </div>
-              ) : null}
+                    <div className="detailLabel">Secondary roles</div>
+                    <div className="detailValue">
+                      {detailRow.requiredSkills && detailRow.requiredSkills.length
+                        ? detailRow.requiredSkills.join(", ")
+                        : "—"}
+                    </div>
+                  </div>
+
+                  {detailRow.description ? (
+                    <div className="detailComment">
+                      <div className="detailCommentLabel">Special requirements</div>
+                      <div className="detailCommentBody">{detailRow.description}</div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  {detailRow.workerNoShow ? (
+                    <div className="noShowBanner">⚠️ Worker reported as no-show by employer</div>
+                  ) : null}
+
+                  <div className="detailGrid">
+                    <div className="detailLabel">Worker clock in</div>
+                    <div className="detailValue">{fmtTime(detailRow.workerClockIn)}</div>
+
+                    <div className="detailLabel">Worker clock out</div>
+                    <div className="detailValue">{fmtTime(detailRow.workerClockOut)}</div>
+
+                    <div className="detailLabel">Employer clock in</div>
+                    <div className="detailValue">{fmtTime(detailRow.employerClockIn)}</div>
+
+                    <div className="detailLabel">Employer clock out</div>
+                    <div className="detailValue">{fmtTime(detailRow.employerClockOut)}</div>
+                  </div>
+
+                  {detailRow.employerComment ? (
+                    <div className="detailComment">
+                      <div className="detailCommentLabel">Employer comment</div>
+                      <div className="detailCommentBody">{detailRow.employerComment}</div>
+                    </div>
+                  ) : null}
+
+                  {detailRow.quickCrewComment ? (
+                    <div className="detailComment detailCommentInternal">
+                      <div className="detailCommentLabel">QuickCrew internal note</div>
+                      <div className="detailCommentBody">{detailRow.quickCrewComment}</div>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
 
             <div className="modalFooter">
@@ -223,7 +271,8 @@ export default function ShiftsScreen() {
                     : tab === "reviewed" ? "Reviewed shifts"
                       : tab === "paid" ? "Paid shifts"
                         : tab === "rejected" ? "Rejected shifts"
-                          : "Unclosed shifts"}
+                          : tab === "unclosed" ? "Unclosed shifts"
+                            : "Open jobs"}
                 </div>
               </div>
               <div className="muted mt6 fw800 fs13">
@@ -248,6 +297,11 @@ export default function ShiftsScreen() {
               These shifts were assigned to workers but no action was taken by the employer regarding hours. Please review each case and take the appropriate action.
             </div>
           ) : null}
+          {tab === "open" ? (
+            <div className="infoBanner mt12">
+              These jobs are open and have not been taken by any worker yet. This view is for visibility and control only.
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="mt16" style={{ textAlign: "center", padding: "48px 0" }}>
@@ -264,9 +318,9 @@ export default function ShiftsScreen() {
                   <thead>
                     <tr>
                       <th>Organization</th>
-                      <th>Job</th>
+                      <th>{tab === "open" ? "Shift name" : "Job"}</th>
                       <th>Date</th>
-                      <th>Worker</th>
+                      {tab === "open" ? <th>Time</th> : <th>Worker</th>}
                       <th className="thActions" />
                     </tr>
                   </thead>
@@ -281,23 +335,27 @@ export default function ShiftsScreen() {
                           <td className="fw800">{row.jobTitle || "—"}</td>
                           <td className="muted fw800 fs12">
                             {fmtDate(row.shiftDate)}
-                            {row.shiftTime ? (
+                            {row.shiftTime && tab !== "open" ? (
                               <div className="muted fs12">{row.shiftTime}</div>
                             ) : null}
                           </td>
-                          <td>
-                            <div className="fw900">{row.workerFullName || "—"}</div>
-                            {row.workerEmail ? (
-                              <div className="muted fs12">{row.workerEmail}</div>
-                            ) : null}
-                          </td>
+                          {tab === "open" ? (
+                            <td className="muted fw800 fs12">{row.shiftTime || "—"}</td>
+                          ) : (
+                            <td>
+                              <div className="fw900">{row.workerFullName || "—"}</div>
+                              {row.workerEmail ? (
+                                <div className="muted fs12">{row.workerEmail}</div>
+                              ) : null}
+                            </td>
+                          )}
                           <td>
                             <div className="tableActions">
                               <button
                                 className="btn"
                                 onClick={() => setDetailRow(row)}
                               >
-                                View details
+                                {tab === "open" ? "Review" : "View details"}
                               </button>
 
                               {tab === "pending" ? (
@@ -375,7 +433,7 @@ export default function ShiftsScreen() {
                                     Reject
                                   </button>
                                 </>
-                              ) : (
+                              ) : tab === "open" ? null : (
                                 <button
                                   className="btn"
                                   onClick={() => changeStatus(row, "reviewed")}

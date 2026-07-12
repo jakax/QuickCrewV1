@@ -8,7 +8,7 @@ import { getShiftStartMs } from "../../../utils/jobFormatters";
 import { useSession } from "../../providers/SessionProvider";
 
 import { db } from "../../../services/firebase/config";
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where, limit } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query, where, limit, Timestamp } from "firebase/firestore";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
@@ -89,12 +89,14 @@ const JobsList = () => {
   }, [uid]);
 
   useEffect(() => {
-    // Only show jobs that are truly available in the pool
+    // Only show jobs that are truly available in the pool, ordered by soonest
+    // shift start so relevant/urgent shifts always surface first as the pool grows.
     const q = query(
       collection(db, "jobs"),
       where("status", "==", "open"),
-      orderBy("createdAt", "desc"),
-      limit(50)
+      where("shiftStartAt", ">=", Timestamp.now()),
+      orderBy("shiftStartAt", "asc"),
+      limit(100)
     );
 
     const unsub = onSnapshot(

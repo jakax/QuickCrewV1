@@ -241,6 +241,10 @@ export async function getJobById(jobId) {
 }
 
 export async function updateJob(jobId, updates) {
+  if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
+    throw new Error("Invalid update payload for job.");
+  }
+
   if (!jobId) throw new Error("Missing jobId");
 
   // If editing a job and it includes the new split time fields, re-derive timestamps.

@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "quickcrew-2c10c"
-  }
+  },
+  "targets": {
+    "quickcrew-2c10c": {
+      "hosting": {
+        "backoffice": [
+          "quickcrew-2c10c"
+        ],
+        "legal": [
+          "quickcrew-legal"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

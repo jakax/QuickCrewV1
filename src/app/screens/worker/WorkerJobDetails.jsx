@@ -39,7 +39,7 @@ import {
 } from "firebase/firestore";
 import { resetTo } from "../../navigation/navigationRef";
 
-const MINUTES_45_MS = 45 * 60 * 1000; // volver como estaba45 * 60 * 1000;
+const MINUTES_45_MS = 3 * 60 * 1000; // volver como estaba 45 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 function normalizeSkill(s) {
@@ -651,14 +651,14 @@ export default function WorkerJobDetails() {
 
             {!!job.orgDescription && (
               <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Company description.</Text>
+                <Text style={styles.sectionTitle}>Company description</Text>
                 <Text style={styles.sectionBody}>{job.orgDescription}</Text>
               </View>
             )}
 
             {!!job.description && (
               <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Job description.</Text>
+                <Text style={styles.sectionTitle}>Special requirements</Text>
                 <Text style={styles.sectionBody}>{job.description}</Text>
               </View>
             )}

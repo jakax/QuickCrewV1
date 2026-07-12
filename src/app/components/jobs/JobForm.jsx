@@ -303,6 +303,11 @@ export default function JobForm({
       requiredSkills: [primaryRoleKey, ...alsoSkills],
     };
 
+    if (mode === "edit") {
+      onSubmit?.({ ...baseJob, shiftDate });
+      return;
+    }
+
     const shifts = [];
     for (let d = 0; d < daysCount; d++) {
       const shiftDateForDay = addDaysToIso(shiftDate, d);
