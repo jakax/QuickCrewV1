@@ -27,7 +27,7 @@ import { useSession } from "../../providers/SessionProvider";
 import { useConfirm } from "../../providers/ConfirmProvider";
 
 const HOURS_8_MS = 8 * 60 * 60 * 1000;
-const MINUTES_45 = 3 * 60 * 1000; // volver a como estaba 45 * 60 * 1000;
+const MINUTES_45 = 45 * 60 * 1000;
 
 const STATUS_PRIORITY = {
   "Upcoming": 0,

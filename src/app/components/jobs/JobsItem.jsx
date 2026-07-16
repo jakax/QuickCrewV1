@@ -175,10 +175,10 @@ const JobsItem = ({
     isEmployer &&
     (hasPendingApplicants ||
       jobStatusRaw === "filled" ||
-      jobStatusRaw === "assigned") &&
+      jobStatusRaw === "assigned" ||
+      jobStatusRaw === "finished") &&
     jobStatusRaw !== "cancelled" &&
-    jobStatusRaw !== "cancel" &&
-    jobStatusRaw !== "finished";
+    jobStatusRaw !== "cancel";
 
   const onPress = () => {
     if (onPressOverride) return onPressOverride(job);
@@ -194,7 +194,11 @@ const JobsItem = ({
 
   const onReviewApplicantsPress = (e) => {
     e.stopPropagation();
-    if (jobStatusRaw === "filled" || jobStatusRaw === "assigned") {
+    if (
+      jobStatusRaw === "filled" ||
+      jobStatusRaw === "assigned" ||
+      jobStatusRaw === "finished"
+    ) {
       navigation.navigate("AssignedWorkerDetails", { jobId: job.id });
     } else {
       navigation.navigate("EmployerJobApplicants", { jobId: job.id });
@@ -278,7 +282,9 @@ const JobsItem = ({
       {canReviewApplicants ? (
         <Pressable onPress={onReviewApplicantsPress} style={styles.reviewBtn}>
           <StyledText style={styles.reviewBtnText}>
-            {jobStatusRaw === "filled" || jobStatusRaw === "assigned"
+            {jobStatusRaw === "filled" ||
+            jobStatusRaw === "assigned" ||
+            jobStatusRaw === "finished"
               ? "View assigned worker"
               : "Review applicants"}
           </StyledText>

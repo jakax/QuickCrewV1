@@ -12,6 +12,11 @@ import { collection, doc, getDoc, onSnapshot, orderBy, query, where, limit, Time
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
+// Keeps the feed aligned with the "Expired" label + apply cutoff in
+// deriveJobStatus.js / WorkerJobDetails.jsx so workers never see a shift
+// they can no longer apply to.
+const FEED_APPLY_CUTOFF_MS = 45 * 60 * 1000;
+
 function normalizeSkill(s) {
   return String(s || "")
     .trim()
@@ -94,7 +99,7 @@ const JobsList = () => {
     const q = query(
       collection(db, "jobs"),
       where("status", "==", "open"),
-      where("shiftStartAt", ">=", Timestamp.now()),
+      where("shiftStartAt", ">=", Timestamp.fromMillis(Date.now() + FEED_APPLY_CUTOFF_MS)),
       orderBy("shiftStartAt", "asc"),
       limit(100)
     );
@@ -138,9 +143,9 @@ const JobsList = () => {
       // 1. Already applied
       if (appliedJobIds.has(job.id)) return false;
 
-      // 2. Shift already started or no date → hide
+      // 2. Shift already started (or within the apply cutoff) or no date → hide
       const shiftStart = job.shiftStartAt?.toDate?.();
-      if (!shiftStart || shiftStart < now) return false;
+      if (!shiftStart || shiftStart.getTime() - now.getTime() < FEED_APPLY_CUTOFF_MS) return false;
 
       // 3. Skill overlap
       const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];

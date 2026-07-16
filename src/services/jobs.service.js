@@ -588,8 +588,11 @@ export async function cancelJob({ jobId, expectedOrgId }) {
   if (status === "cancelled" || status === "cancel") {
     throw new Error("This shift is already cancelled.");
   }
+  if (status !== "open") {
+    throw new Error("This shift has already been taken by a worker and can no longer be cancelled.");
+  }
 
-  // Fetch all pending/accepted applications for this job
+  // Block cancellation if any worker has already applied (pending) or been accepted
   const appsSnap = await getDocs(
     query(
       collection(db, "applications"),
@@ -598,25 +601,15 @@ export async function cancelJob({ jobId, expectedOrgId }) {
     )
   );
 
-  const batch = writeBatch(db);
+  if (!appsSnap.empty) {
+    throw new Error("This shift has applicants and can no longer be cancelled. Reject them first.");
+  }
 
-  // Cancel the job
-  batch.update(jobRef, {
+  await updateDoc(jobRef, {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-
-  // Mark all affected applications as job_cancelled
-  appsSnap.docs.forEach((appDoc) => {
-    batch.update(appDoc.ref, {
-      status: "job_cancelled",
-      cancelledAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  });
-
-  await batch.commit();
 
   return { ok: true };
 }

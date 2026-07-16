@@ -17,7 +17,7 @@ import { useConfirm } from "../../providers/ConfirmProvider";
 import { asDateMaybe } from "../../../utils/dateUtils";
 
 import { db } from "../../../services/firebase/config";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 import { getOrgById } from "../../../services/organization.service";
 
@@ -46,6 +46,7 @@ export default function EmployerEditJob() {
   const [saving, setSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
+  const [hasActiveApplicants, setHasActiveApplicants] = useState(false);
 
   const [roleRates, setRoleRates] = useState({});
   const [orgLoading, setOrgLoading] = useState(true);
@@ -69,6 +70,16 @@ export default function EmployerEditJob() {
         }
 
         if (mounted) setJob(data);
+
+        const appsSnap = await getDocs(
+          query(
+            collection(db, "applications"),
+            where("jobId", "==", jobId),
+            where("status", "in", ["pending", "accepted"])
+          )
+        );
+
+        if (mounted) setHasActiveApplicants(!appsSnap.empty);
       } catch (e) {
         if (mounted) setError(e?.message || "Could not load job.");
       } finally {
@@ -164,7 +175,7 @@ export default function EmployerEditJob() {
       const ok = await confirm({
         title: "Cancel shift?",
         message:
-          "This will cancel the shift and notify any assigned workers. The shift record will be kept for tracking purposes.",
+          "This will cancel the shift. The shift record will be kept for tracking purposes.",
         confirmText: "Cancel shift",
         cancelText: "Keep it",
         destructive: true,
@@ -290,21 +301,28 @@ export default function EmployerEditJob() {
             />
 
             <View style={styles.deleteBlock}>
-              {/* Cancel shift — always shown unless already cancelled */}
-              {!isCancelled ? (
-                <Pressable
-                  onPress={onCancelShift}
-                  disabled={cancelling || saving || loadingJob}
-                  style={({ pressed }) => [
-                    styles.cancelButton,
-                    (cancelling || saving || loadingJob) && styles.deleteButtonDisabled,
-                    pressed && !(cancelling || saving || loadingJob) && styles.deleteButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.cancelButtonText}>
-                    {cancelling ? "Cancelling..." : "Cancel shift"}
-                  </Text>
-                </Pressable>
+              {/* Cancel shift — only while the shift is still open and has no applicants */}
+              {jobStatusRaw === "open" ? (
+                <>
+                  <Pressable
+                    onPress={onCancelShift}
+                    disabled={cancelling || saving || loadingJob || hasActiveApplicants}
+                    style={({ pressed }) => [
+                      styles.cancelButton,
+                      (cancelling || saving || loadingJob || hasActiveApplicants) && styles.deleteButtonDisabled,
+                      pressed && !(cancelling || saving || loadingJob || hasActiveApplicants) && styles.deleteButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.cancelButtonText}>
+                      {cancelling ? "Cancelling..." : "Cancel shift"}
+                    </Text>
+                  </Pressable>
+                  {hasActiveApplicants ? (
+                    <Text style={styles.cancelHintText}>
+                      This shift already has applicants and can no longer be cancelled here. Reject them from the applicants screen first.
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
             </View>
           </>
@@ -465,5 +483,12 @@ const styles = StyleSheet.create({
     color: "#C2410C",
     fontWeight: "700",
     fontSize: 15,
+  },
+
+  cancelHintText: {
+    color: "#92400E",
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "center",
   },
 });
