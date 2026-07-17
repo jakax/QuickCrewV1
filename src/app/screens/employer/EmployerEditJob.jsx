@@ -10,7 +10,7 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { useSession } from "../../providers/SessionProvider";
-import { getJobById, updateJob, cancelJob } from "../../../services/jobs.service";
+import { getJobById, updateJob, cancelJob, createJob } from "../../../services/jobs.service";
 import { canCancelApplication } from "../../../utils/jobFormatters";
 import JobForm from "../../components/jobs/JobForm";
 import { useConfirm } from "../../providers/ConfirmProvider";
@@ -36,7 +36,7 @@ function normKey(v) {
 export default function EmployerEditJob() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { orgId, orgName } = useSession();
+  const { orgId, orgName, uid } = useSession();
   const confirm = useConfirm();
 
   const jobId = route?.params?.jobId;
@@ -47,6 +47,7 @@ export default function EmployerEditJob() {
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
   const [hasActiveApplicants, setHasActiveApplicants] = useState(false);
+  const [hasAnyApplicants, setHasAnyApplicants] = useState(false);
 
   const [roleRates, setRoleRates] = useState({});
   const [orgLoading, setOrgLoading] = useState(true);
@@ -72,14 +73,17 @@ export default function EmployerEditJob() {
         if (mounted) setJob(data);
 
         const appsSnap = await getDocs(
-          query(
-            collection(db, "applications"),
-            where("jobId", "==", jobId),
-            where("status", "in", ["pending", "accepted"])
-          )
+          query(collection(db, "applications"), where("jobId", "==", jobId))
         );
 
-        if (mounted) setHasActiveApplicants(!appsSnap.empty);
+        if (mounted) {
+          setHasAnyApplicants(!appsSnap.empty);
+          setHasActiveApplicants(
+            appsSnap.docs.some((d) =>
+              ["pending", "accepted"].includes(String(d.data()?.status || "").toLowerCase())
+            )
+          );
+        }
       } catch (e) {
         if (mounted) setError(e?.message || "Could not load job.");
       } finally {
@@ -147,11 +151,20 @@ export default function EmployerEditJob() {
     return () => { mounted = false; };
   }, [orgId]);
 
-  const onSubmit = async (values) => {
+  const onSubmit = async (shifts) => {
     try {
       setError(null);
       setSaving(true);
-      await updateJob(jobId, values);
+
+      const [current, ...extra] = shifts;
+      await updateJob(jobId, canRelist ? { ...current, status: "open" } : current);
+
+      if (extra.length) {
+        await Promise.all(
+          extra.map((job) => createJob({ orgId, orgName, uid, job }))
+        );
+      }
+
       navigation.goBack();
     } catch (e) {
       setError(e?.message || "Could not update job.");
@@ -219,10 +232,15 @@ export default function EmployerEditJob() {
   const isExpired = !!shiftStart && shiftStart < new Date();
 
   const isCancelled = jobStatusRaw === "cancelled" || jobStatusRaw === "cancel";
+
+  // A shift that expired without ever getting an applicant can be edited
+  // (date/time updated) to relist it, instead of staying locked forever.
+  const canRelist = jobStatusRaw === "open" && isExpired && !hasAnyApplicants;
+
   const readOnly =
     route?.params?.readOnly === true ||
     isCancelled ||
-    isExpired ||
+    (isExpired && !canRelist) ||
     jobStatusRaw === "active" ||
     jobStatusRaw === "filled" ||
     jobStatusRaw === "assigned" ||
@@ -247,7 +265,13 @@ export default function EmployerEditJob() {
               </View>
             </View>
 
-            {readOnly ? (
+            {canRelist ? (
+              <View style={styles.relistBanner}>
+                <Text style={styles.relistBannerText}>
+                  This shift expired without any applicants. Update the date and time below to relist it.
+                </Text>
+              </View>
+            ) : readOnly ? (
               <View style={styles.readOnlyBanner}>
                 <Text style={styles.readOnlyBannerText}>
                   {isCancelled
@@ -462,6 +486,21 @@ const styles = StyleSheet.create({
   },
   readOnlyBannerText: {
     color: "#92400E",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  relistBanner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  relistBannerText: {
+    color: "#1D4ED8",
     fontSize: 13,
     fontWeight: "600",
   },

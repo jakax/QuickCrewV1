@@ -430,6 +430,7 @@ export default function Profile() {
     try {
       setDeletingAccount(true);
       await deleteCurrentUserAccount();
+      await signOut(auth);
       routeAfterAuthChange();
     } catch (e) {
       setError(e?.message || "Could not delete your account.");

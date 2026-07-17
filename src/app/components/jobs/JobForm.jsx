@@ -303,11 +303,6 @@ export default function JobForm({
       requiredSkills: [primaryRoleKey, ...alsoSkills],
     };
 
-    if (mode === "edit") {
-      onSubmit?.({ ...baseJob, shiftDate });
-      return;
-    }
-
     const shifts = [];
     for (let d = 0; d < daysCount; d++) {
       const shiftDateForDay = addDaysToIso(shiftDate, d);
@@ -549,13 +544,20 @@ export default function JobForm({
         ))}
       </View>
 
-      {daysCount > 1 && (
+      {mode === "edit" && (daysCount > 1 || workersCount > 1) ? (
+        <View style={styles.consecutiveBanner}>
+          <Text style={styles.consecutiveBannerText}>
+            📅 This will update the current shift and also create {daysCount * workersCount - 1} additional
+            {" "}shift{daysCount * workersCount - 1 > 1 ? "s" : ""} for the extra workers/days, in addition to this one.
+          </Text>
+        </View>
+      ) : daysCount > 1 ? (
         <View style={styles.consecutiveBanner}>
           <Text style={styles.consecutiveBannerText}>
             📅 Shifts will be created on {daysCount} consecutive days starting from the selected date.
           </Text>
         </View>
-      )}
+      ) : null}
 
       <Text style={styles.label}>Approval</Text>
       <View style={styles.switchRow}>
