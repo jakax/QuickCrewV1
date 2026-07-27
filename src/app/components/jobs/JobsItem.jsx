@@ -135,9 +135,12 @@ const JobsItem = ({
           if (mounted) setHasPendingApplicants(false);
           return;
         }
+        // orgId must be part of the query filters (not just the security rule) so
+        // Firestore can prove the query is safe without evaluating per-document.
         const q = query(
           collection(db, "applications"),
           where("jobId", "==", job.id),
+          where("orgId", "==", job.orgId),
           where("status", "==", "pending"),
           limit(1)
         );
@@ -150,7 +153,7 @@ const JobsItem = ({
     };
     checkPendingApplicants();
     return () => { mounted = false; };
-  }, [isEmployer, job?.id, hasPendingApplicantsOverride]);
+  }, [isEmployer, job?.id, job?.orgId, hasPendingApplicantsOverride]);
 
   // ── Derived status ────────────────────────────────────────────────────────
   // One label per session type. now ticks every 60s so transitions are automatic.

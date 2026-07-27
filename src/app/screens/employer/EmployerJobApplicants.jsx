@@ -47,10 +47,13 @@ export default function EmployerJobApplicants() {
       const jobData = { id: jobSnap.id, ...jobSnap.data() };
       setJob(jobData);
 
-      // Load pending applications for this job
+      // Load pending applications for this job. orgId must be part of the query
+      // filters (not just the security rule) so Firestore can prove the query is safe
+      // without evaluating per-document — see firestore.rules.
       const qApps = query(
         collection(db, "applications"),
         where("jobId", "==", jobId),
+        where("orgId", "==", jobData.orgId),
         where("status", "==", "pending")
       );
 
@@ -252,6 +255,7 @@ export default function EmployerJobApplicants() {
       const qOthers = query(
         collection(db, "applications"),
         where("jobId", "==", jobId),
+        where("orgId", "==", job?.orgId),
         where("status", "==", "pending"),
         limit(50)
       );

@@ -46,7 +46,6 @@ export default function EmployerEditJob() {
   const [saving, setSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState(null);
-  const [hasActiveApplicants, setHasActiveApplicants] = useState(false);
   const [hasAnyApplicants, setHasAnyApplicants] = useState(false);
 
   const [roleRates, setRoleRates] = useState({});
@@ -72,17 +71,18 @@ export default function EmployerEditJob() {
 
         if (mounted) setJob(data);
 
+        // orgId must be part of the query filters (not just the security rule) so
+        // Firestore can prove the query is safe without evaluating per-document.
         const appsSnap = await getDocs(
-          query(collection(db, "applications"), where("jobId", "==", jobId))
+          query(
+            collection(db, "applications"),
+            where("jobId", "==", jobId),
+            where("orgId", "==", data.orgId)
+          )
         );
 
         if (mounted) {
           setHasAnyApplicants(!appsSnap.empty);
-          setHasActiveApplicants(
-            appsSnap.docs.some((d) =>
-              ["pending", "accepted"].includes(String(d.data()?.status || "").toLowerCase())
-            )
-          );
         }
       } catch (e) {
         if (mounted) setError(e?.message || "Could not load job.");
@@ -174,27 +174,15 @@ export default function EmployerEditJob() {
   };
 
   const onCancelShift = async () => {
-    if (isLateCancel) {
-      const ok = await confirm({
-        title: "⚠️ Late cancellation",
-        message:
-          "This shift starts in less than 4 hours. Cancelling now may incur a late cancellation fee as per QuickCrew policy. Do you still want to cancel?",
-        confirmText: "Yes, cancel shift",
-        cancelText: "Keep it",
-        destructive: true,
-      });
-      if (!ok) return;
-    } else {
-      const ok = await confirm({
-        title: "Cancel shift?",
-        message:
-          "This will cancel the shift. The shift record will be kept for tracking purposes.",
-        confirmText: "Cancel shift",
-        cancelText: "Keep it",
-        destructive: true,
-      });
-      if (!ok) return;
-    }
+    const ok = await confirm({
+      title: "Cancel shift?",
+      message:
+        "This will cancel the shift. Any pending or accepted applications for it will also be cancelled. The shift record will be kept for tracking purposes.",
+      confirmText: "Cancel shift",
+      cancelText: "Keep it",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       setError(null);
@@ -226,12 +214,15 @@ export default function EmployerEditJob() {
 
   const legacy = parseShiftTimeLegacy(job.shiftTime || "");
 
-  const isLateCancel = job && readOnly ? !canCancelApplication(job, 4) : false;
   const jobStatusRaw = String(job?.status || "").toLowerCase();
   const shiftStart = asDateMaybe(job?.shiftStartAt);
   const isExpired = !!shiftStart && shiftStart < new Date();
 
   const isCancelled = jobStatusRaw === "cancelled" || jobStatusRaw === "cancel";
+
+  // Employers can cancel a shift up until 4 hours before it starts, regardless
+  // of applicant/worker state.
+  const canCancelShift = !isCancelled && canCancelApplication(job, 4);
 
   // A shift that expired without ever getting an applicant can be edited
   // (date/time updated) to relist it, instead of staying locked forever.
@@ -325,28 +316,21 @@ export default function EmployerEditJob() {
             />
 
             <View style={styles.deleteBlock}>
-              {/* Cancel shift — only while the shift is still open and has no applicants */}
-              {jobStatusRaw === "open" ? (
-                <>
-                  <Pressable
-                    onPress={onCancelShift}
-                    disabled={cancelling || saving || loadingJob || hasActiveApplicants}
-                    style={({ pressed }) => [
-                      styles.cancelButton,
-                      (cancelling || saving || loadingJob || hasActiveApplicants) && styles.deleteButtonDisabled,
-                      pressed && !(cancelling || saving || loadingJob || hasActiveApplicants) && styles.deleteButtonPressed,
-                    ]}
-                  >
-                    <Text style={styles.cancelButtonText}>
-                      {cancelling ? "Cancelling..." : "Cancel shift"}
-                    </Text>
-                  </Pressable>
-                  {hasActiveApplicants ? (
-                    <Text style={styles.cancelHintText}>
-                      This shift already has applicants and can no longer be cancelled here. Reject them from the applicants screen first.
-                    </Text>
-                  ) : null}
-                </>
+              {/* Cancel shift — allowed up until 4 hours before the shift starts, regardless of applicant/worker state */}
+              {canCancelShift ? (
+                <Pressable
+                  onPress={onCancelShift}
+                  disabled={cancelling || saving || loadingJob}
+                  style={({ pressed }) => [
+                    styles.cancelButton,
+                    (cancelling || saving || loadingJob) && styles.deleteButtonDisabled,
+                    pressed && !(cancelling || saving || loadingJob) && styles.deleteButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.cancelButtonText}>
+                    {cancelling ? "Cancelling..." : "Cancel shift"}
+                  </Text>
+                </Pressable>
               ) : null}
             </View>
           </>
@@ -522,12 +506,5 @@ const styles = StyleSheet.create({
     color: "#C2410C",
     fontWeight: "700",
     fontSize: 15,
-  },
-
-  cancelHintText: {
-    color: "#92400E",
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: "center",
   },
 });

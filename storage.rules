@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// =====================================================================================
+// QUICKCREW — CLOUD STORAGE SECURITY RULES
+// =====================================================================================
+//
+// All uploaded files live under users/{uid}/... (see src/services/profile.service.js):
+//   users/{uid}/photo.jpg
+//   users/{uid}/cv/{fileName}
+//   users/{uid}/idDocument/{fileName}   <- passport / driver's licence / NZ ID
+//   users/{uid}/visaDocument/{fileName} <- visa / right-to-work proof
+//
+// Storage rules can call `firestore.get()` / `firestore.exists()` to check a Firestore
+// document (that's how we check "is this caller an admin?" / "is this caller an
+// employer?" from over here) — each call is a real Firestore read, same cost/latency
+// caveat as in firestore.rules. Functions that use them must be declared INSIDE the
+// `service firebase.storage { ... }` block below, not at the top level.
+//
+// idDocument/visaDocument are the most sensitive files in the whole app (passport
+// numbers, visa status) — per a full read of the app code, NO employer-facing screen
+// ever renders these (WorkerProfileModal and EmployerJobApplicants only ever surface
+// cv/about/references/rightToWorkNz — never idDocument/visaDocument). Only the worker
+// themselves (Profile.jsx) and QuickCrew admin (backoffice UsersApprovalsScreen) do.
+// These rules enforce that at the storage layer too, not just by hiding it in the UI.
+// =====================================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/adminUsers/$(request.auth.uid));
+    }
+
+    function isEmployer() {
+      return isSignedIn() &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "employer";
+    }
+
+    // 10MB cap on any single upload (profile photo / CV / ID / visa document).
+    function withinSizeLimit() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    match /users/{uid}/photo.jpg {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) &&
+        withinSizeLimit() &&
+        request.resource.contentType.matches("image/.*");
+    }
+
+    match /users/{uid}/cv/{fileName} {
+      // MVP trade-off (mirrors firestore.rules note): visible to any signed-in
+      // employer, not scoped to only employers this worker actually applied to.
+      allow read: if isOwner(uid) || isAdmin() || isEmployer();
+      allow write: if isOwner(uid) && withinSizeLimit();
+    }
+
+    match /users/{uid}/idDocument/{fileName} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) && withinSizeLimit();
+    }
+
+    match /users/{uid}/visaDocument/{fileName} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) && withinSizeLimit();
+    }
+
+    // Default deny for anything outside the users/{uid}/... paths above.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -25,6 +25,16 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+
+# Firebase CLI local deploy cache (machine-specific, no value in git)
+.firebase/
+
+# Legal doc source files from QuickCrew's lawyer (not needed in the repo — the
+# published HTML in legal-site/privacy and legal-site/terms is the source of truth)
+legal-site/*.docx
 
 # macOS
 .DS_Store

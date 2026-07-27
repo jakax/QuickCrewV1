@@ -1217,6 +1217,10 @@ export default function Profile() {
                     {deletingAccount ? "Deleting..." : "Delete account"}
                   </Text>
                 </Pressable>
+
+                <Text style={styles.envBadge}>
+                  {(process.env.EXPO_PUBLIC_APP_ENV || "development").toUpperCase()}
+                </Text>
               </View>
             </>
           ) : null}
@@ -1285,6 +1289,10 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  envBadge: {
+    marginTop: 16, textAlign: "center", fontSize: 11, fontWeight: "700",
+    letterSpacing: 1, color: "#9A9A9A",
+  },
   container: { paddingTop: 75, paddingHorizontal: 12, paddingBottom: 170 },
   headerBlock: { marginBottom: 28 },
   title: { fontSize: 24, fontWeight: "600", color: "#2A5FB3" },

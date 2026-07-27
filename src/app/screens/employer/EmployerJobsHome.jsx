@@ -42,10 +42,13 @@ export default function EmployerJobsHome({ navigation }) {
     return last?.reason || null;
   }, [profile?.statusHistory, approvalStatus]);
 
-  const hasPendingForJob = async (jobId) => {
+  const hasPendingForJob = async (jobId, jobOrgId) => {
+    // orgId must be part of the query filters (not just the security rule) so Firestore
+    // can prove the query is safe without evaluating per-document — see firestore.rules.
     const q = query(
       collection(db, "applications"),
       where("jobId", "==", jobId),
+      where("orgId", "==", jobOrgId),
       where("status", "==", "pending"),
       limit(1)
     );
@@ -69,7 +72,7 @@ export default function EmployerJobsHome({ navigation }) {
 
             if (filled || cancelled) return { ...j, hasPendingApplicants: false };
 
-            const pending = await hasPendingForJob(j.id);
+            const pending = await hasPendingForJob(j.id, j.orgId);
             return { ...j, hasPendingApplicants: pending };
           } catch (e) {
             console.log("hasPendingForJob error:", e);

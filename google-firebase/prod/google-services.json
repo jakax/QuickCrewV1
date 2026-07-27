@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "806987404946",
+    "project_id": "quickcrew-prod",
+    "storage_bucket": "quickcrew-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:806987404946:android:d6525ba9b4406a2faa784b",
+        "android_client_info": {
+          "package_name": "com.jacob.baron.quickcrewapp2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCw8rQOlubm0fVlaWbZnkmjJwwHdq_Yrok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

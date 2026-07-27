@@ -185,7 +185,9 @@ export default function Applied() {
 
     const q = query(
       collection(db, "applications"),
-      where("workerId", "==", uid),
+      // workerUid (not workerId) — must match the exact field name firestore.rules
+      // checks (resource.data.workerUid), so Firestore can prove the query is safe.
+      where("workerUid", "==", uid),
       orderBy("createdAt", "desc")
     );
 
@@ -214,7 +216,9 @@ export default function Applied() {
       setLoadError(null);
       const q = query(
         collection(db, "applications"),
-        where("workerId", "==", uid),
+        // workerUid (not workerId) — must match the exact field name firestore.rules
+      // checks (resource.data.workerUid), so Firestore can prove the query is safe.
+      where("workerUid", "==", uid),
         orderBy("createdAt", "desc")
       );
       const snap = await getDocs(q);

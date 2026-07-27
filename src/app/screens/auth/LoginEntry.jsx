@@ -130,7 +130,7 @@ const LoginEntry = ({ navigation }) => {
                   <Text style={styles.legalLink}>Privacy Policy</Text>
                 </TouchableOpacity>
                 <Text style={styles.legalDot}>·</Text>
-                <TouchableOpacity onPress={() => Linking.openURL("https://quickcrew-2c10c.web.app/terms")}>
+                <TouchableOpacity onPress={() => Linking.openURL("https://quickcrew-legal.web.app/terms")}>
                   <Text style={styles.legalLink}>Terms & Conditions</Text>
                 </TouchableOpacity>
               </View>

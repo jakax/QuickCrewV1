@@ -1,4 +1,5 @@
 import { db } from "./firebase/config";
+import { getShiftStartMs } from "../utils/jobFormatters";
 import {
   addDoc,
   doc,
@@ -311,10 +312,16 @@ export async function updateJob(jobId, updates) {
 
   // Si cambiaron los timestamps del shift, propagar a las applications activas
   if (next.shiftStartAt || next.shiftEndAt) {
+    // orgId must be part of the query filters (not just the security rule) so
+    // Firestore can prove the query is safe without evaluating per-document — see
+    // firestore.rules. `updates` doesn't carry orgId (it's never editable), so fetch it.
+    const orgId = next.orgId || (await getDoc(ref)).data()?.orgId;
+
     const appsSnap = await getDocs(
       query(
         collection(db, "applications"),
         where("jobId", "==", jobId),
+        where("orgId", "==", orgId),
         where("status", "in", ["pending", "accepted"])
       )
     );
@@ -346,10 +353,13 @@ export async function deleteJobIfAllowed({ jobId, expectedOrgId }) {
   }
 
   // Safe MVP rule:
-  // if any application exists for this job, do not allow delete
+  // if any application exists for this job, do not allow delete. orgId must be part of
+  // the query filters (not just the security rule) so Firestore can prove the query is
+  // safe without evaluating per-document — see firestore.rules.
   const appsQ = query(
     collection(db, "applications"),
     where("jobId", "==", jobId),
+    where("orgId", "==", job.orgId),
     limit(1)
   );
 
@@ -588,28 +598,43 @@ export async function cancelJob({ jobId, expectedOrgId }) {
   if (status === "cancelled" || status === "cancel") {
     throw new Error("This shift is already cancelled.");
   }
-  if (status !== "open") {
-    throw new Error("This shift has already been taken by a worker and can no longer be cancelled.");
+
+  // Employers can cancel a shift regardless of applicant/worker state, but
+  // only up until 4 hours before it starts.
+  const startMs = getShiftStartMs(job);
+  if (!Number.isFinite(startMs) || startMs - Date.now() < 4 * 60 * 60 * 1000) {
+    throw new Error("This shift starts in less than 4 hours and can no longer be cancelled.");
   }
 
-  // Block cancellation if any worker has already applied (pending) or been accepted
+  // Cancel any pending/accepted applications along with the job. orgId must be part of
+  // the query filters (not just the security rule) so Firestore can prove the query is
+  // safe without evaluating per-document — see firestore.rules.
   const appsSnap = await getDocs(
     query(
       collection(db, "applications"),
       where("jobId", "==", jobId),
+      where("orgId", "==", job.orgId),
       where("status", "in", ["pending", "accepted"])
     )
   );
 
-  if (!appsSnap.empty) {
-    throw new Error("This shift has applicants and can no longer be cancelled. Reject them first.");
-  }
+  const batch = writeBatch(db);
 
-  await updateDoc(jobRef, {
+  batch.update(jobRef, {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  appsSnap.docs.forEach((appDoc) => {
+    batch.update(appDoc.ref, {
+      status: "job_cancelled",
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
 
   return { ok: true };
 }

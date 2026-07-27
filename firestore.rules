@@ -1,0 +1,361 @@
+rules_version = '2';
+
+// =====================================================================================
+// QUICKCREW — FIRESTORE SECURITY RULES
+// =====================================================================================
+//
+// HOW TO READ THIS FILE (if you're new to Firestore rules):
+//
+// - Firestore rules run on GOOGLE's SERVERS, not in the app. The app has zero say over
+//   who can read/write what — these rules are the ONLY thing standing between the
+//   internet and your database. Client-side checks in the app (disabled buttons,
+//   validation, etc.) are just UX — anyone can bypass them by talking to Firestore
+//   directly with the same API keys that are already embedded in the app bundle.
+//
+// - The model is DEFAULT DENY. If no rule matches, the answer is "no". We never rely on
+//   "everything except X is allowed" — we only ever grant narrow, explicit permissions.
+//
+// - `request.auth` is who is making the call (null if not logged in).
+//   `resource.data` is the document as it exists BEFORE the write.
+//   `request.resource.data` is the document as it WOULD exist AFTER the write.
+//   Comparing the two (see the `unchanged()` helper below) is how we stop someone from
+//   sneaking a privileged field (like `approvalStatus: "approved"`) into an update that's
+//   supposed to only touch their phone number.
+//
+// - `get()` / `exists()` let a rule read ANOTHER document to make a decision (e.g. "look
+//   up my own user doc to check my role"). Each one counts as an extra Firestore read
+//   (billed, and adds latency), so we only do it where we actually need role/ownership
+//   info that isn't already on the document being written.
+//
+// - Rules are evaluated PER DOCUMENT, even inside a batch/transaction. There is no way
+//   for a rule to see "the whole transaction" — each doc in the batch must independently
+//   satisfy its own rules for the transaction to succeed.
+//
+// KNOWN MVP TRADE-OFFS (intentionally simplified for v1 — see chat writeup for detail):
+//   - `jobs` are readable by any signed-in user (open marketplace listings).
+//   - CVs are readable by any signed-in employer, not just ones a worker applied to.
+//   - `workerShiftDayLocks` can be deleted by any employer (used when rejecting/cancelling).
+// =====================================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------------------
+    // HELPERS
+    // ---------------------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // The caller's own /users/{uid} document. Costs 1 read whenever it's called.
+    function callerDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid));
+    }
+
+    // adminUsers docs are provisioned manually (Firebase console / admin script) —
+    // there is intentionally NO code path in the app that writes them. Rules must never
+    // allow a client write here, or any signed-in user could grant themselves admin.
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isApprovedEmployerOfOrg(orgId) {
+      return isSignedIn() &&
+        callerDoc().role == "employer" &&
+        callerDoc().approvalStatus == "approved" &&
+        (callerDoc().orgId == orgId ||
+          ("orgIds" in callerDoc() && orgId in callerDoc().orgIds));
+    }
+
+    // Any employer linked to the org, regardless of approval state. Used only for the
+    // handful of places where the current app doesn't gate on approval yet (matches
+    // existing behavior instead of inventing a new restriction that would break flows).
+    function isEmployerOfOrg(orgId) {
+      return isSignedIn() &&
+        callerDoc().role == "employer" &&
+        (callerDoc().orgId == orgId ||
+          ("orgIds" in callerDoc() && orgId in callerDoc().orgIds));
+    }
+
+    function isApprovedWorker() {
+      return isSignedIn() &&
+        callerDoc().role == "worker" &&
+        callerDoc().approvalStatus == "approved";
+    }
+
+    // True if none of the given fields changed between the existing doc and the
+    // incoming write. This is how we let someone update "their own document" while
+    // still blocking them from touching specific privileged fields on it.
+    function unchanged(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields) == false;
+    }
+
+    // True if the incoming write only touches fields from the given allow-list (plus
+    // whatever it started with). Used for tightly-scoped updates like "clock in/out".
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // users/{uid} — worker & employer profiles
+    // ---------------------------------------------------------------------------------
+    //
+    // Fields QuickCrew (admin) controls exclusively, never the user themselves:
+    //   role, approvalStatus, isActive, skills, statusReason, statusUpdatedAt,
+    //   statusUpdatedBy, statusHistory, approvedAt/By, rejectedAt/By, suspendedAt/By,
+    //   movedToPendingAt/By, lateCancellationCount, createdAt.
+    //
+    // orgId / orgIds / memberRole / employerOnboardingStatus ARE self-written by the
+    // employer signup/join-org flow (that's the user's own client writing their own
+    // doc) — but any change to them must simultaneously reset approvalStatus to
+    // "pending", so nobody can grant themselves instant access to an org.
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin() ||
+        // Employers reviewing an applicant need name/phone/about/cv/etc. This is a
+        // broad MVP read (see trade-offs at top) — it does NOT expose idDocument /
+        // visaDocument because those are never rendered anywhere employer-facing
+        // (enforced separately by Storage rules, not by hiding the Firestore field).
+        (isSignedIn() && callerDoc().role == "employer");
+
+      allow create: if isOwner(uid) &&
+        request.resource.data.role in ["worker", "employer"] &&
+        request.resource.data.approvalStatus == "pending" &&
+        request.resource.data.isActive == true &&
+        !("skills" in request.resource.data);
+
+      allow update: if isOwner(uid) &&
+        unchanged([
+          "role", "approvalStatus", "isActive", "skills",
+          "statusReason", "statusUpdatedAt", "statusUpdatedBy", "statusHistory",
+          "approvedAt", "approvedBy", "rejectedAt", "rejectedBy",
+          "suspendedAt", "suspendedBy", "movedToPendingAt", "movedToPendingBy",
+          "lateCancellationCount", "createdAt"
+        ]) &&
+        // If org linkage changes, it must land back in "pending" — never self-approve.
+        (unchanged(["orgId", "orgIds", "memberRole", "employerOnboardingStatus"]) ||
+          request.resource.data.approvalStatus == "pending");
+
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+      // Regular deletes go through the deleteAccount Cloud Function (uses the Admin
+      // SDK, which bypasses these rules entirely) so it can also clean up Storage,
+      // Auth, and related collections atomically. No client path needs delete here.
+
+      // ---- users/{uid}/savedJobs/{jobId} — worker's own bookmarks ----
+      match /savedJobs/{jobId} {
+        allow read, write: if isOwner(uid);
+        allow read: if isAdmin();
+      }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // adminUsers/{uid} — presence of a doc = that uid is an admin
+    // ---------------------------------------------------------------------------------
+    // No client write path anywhere (see isAdmin() comment). A user may check their OWN
+    // doc (that's exactly how AdminGate.tsx decides whether to show the backoffice UI).
+
+    match /adminUsers/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // organizations/{orgId}
+    // ---------------------------------------------------------------------------------
+
+    match /organizations/{orgId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if isEmployerOfOrg(orgId) && unchanged(["createdBy", "createdAt"]);
+      allow update, delete: if isAdmin();
+
+      // ---- organizations/{orgId}/members/{uid} ----
+      match /members/{uid} {
+        allow read: if isOwner(uid) || isEmployerOfOrg(orgId) || isAdmin();
+        // Self-registration only (join-org / create-org flow writes their own row).
+        allow create: if isOwner(uid);
+        allow update, delete: if isAdmin();
+      }
+
+      // ---- organizations/{orgId}/roleRates/{roleKey} — pay rates, admin-managed ----
+      match /roleRates/{roleKey} {
+        allow read: if isEmployerOfOrg(orgId) || isAdmin();
+        allow write: if isAdmin();
+      }
+    }
+
+    // orgKeys/{orgKey} — uniqueness lock used during org signup (normalized name ->
+    // orgId). Not sensitive on its own; only needs to stop random tampering.
+    match /orgKeys/{orgKey} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // skillsCatalog/{id} — admin-managed reference list (roles/skills picker)
+    // ---------------------------------------------------------------------------------
+
+    match /skillsCatalog/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // jobs/{jobId} — shift postings
+    // ---------------------------------------------------------------------------------
+
+    match /jobs/{jobId} {
+      // Open marketplace listing model: any signed-in user can browse jobs (workers
+      // need this to find shifts). See trade-offs note at the top of the file.
+      allow read: if isSignedIn();
+
+      allow create: if isApprovedEmployerOfOrg(request.resource.data.orgId) &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.status == "open";
+
+      // Employer (owner org) editing/cancelling/relisting their own shift.
+      allow update: if isEmployerOfOrg(resource.data.orgId) &&
+        unchanged(["orgId", "orgName", "createdBy", "createdAt"]);
+
+      // Worker self-assigning to a shift that doesn't require employer approval
+      // (mirrors the exact transaction in WorkerJobDetails.applyToJob), or releasing
+      // it back to "open" when they cancel (mirrors cancelJobApplication[WithPenalty]).
+      allow update: if isApprovedWorker() &&
+        onlyChanges(["status", "assignedWorkerUid", "assignedAt", "updatedAt"]) &&
+        (
+          (resource.data.status == "open" &&
+            request.resource.data.status == "assigned" &&
+            request.resource.data.assignedWorkerUid == request.auth.uid) ||
+          (resource.data.status == "assigned" &&
+            resource.data.assignedWorkerUid == request.auth.uid &&
+            request.resource.data.status == "open" &&
+            request.resource.data.assignedWorkerUid == null)
+        );
+
+      allow update, delete: if isAdmin();
+      allow delete: if isEmployerOfOrg(resource.data.orgId);
+      // (Client-side still warns/blocks deleting a job that has applications — that's
+      // a data-hygiene nicety, not a security boundary, so we don't duplicate the
+      // "no applications exist" check here.)
+    }
+
+    // ---------------------------------------------------------------------------------
+    // applications/{jobId}_{workerUid}
+    // ---------------------------------------------------------------------------------
+
+    match /applications/{appId} {
+      // The !exists() check comes first so that reading a doc that hasn't been
+      // created yet (e.g. a worker's client checking "did I already apply?" before
+      // ever applying) returns "not found" instead of "permission denied" — resource.data
+      // is null for a non-existent doc, and accessing .workerUid on null would error.
+      allow read: if isSignedIn() &&
+        (!exists(/databases/$(database)/documents/applications/$(appId)) ||
+          resource.data.workerUid == request.auth.uid ||
+          isEmployerOfOrg(resource.data.orgId) ||
+          isAdmin());
+
+      // Doc id must be exactly "{jobId}_{callerUid}" and the applicant must be self.
+      allow create: if isApprovedWorker() &&
+        appId == (request.resource.data.jobId + "_" + request.auth.uid) &&
+        request.resource.data.workerUid == request.auth.uid &&
+        request.resource.data.status == "pending";
+
+      // Worker withdrawing their own application.
+      allow update: if isSignedIn() &&
+        resource.data.workerUid == request.auth.uid &&
+        onlyChanges(["status", "cancelledAt", "isLateCancellation", "updatedAt"]) &&
+        request.resource.data.status == "cancelled";
+
+      // Employer approving/rejecting an applicant to one of their org's jobs, or
+      // bulk-cancelling applications when the whole shift is cancelled.
+      allow update: if isEmployerOfOrg(resource.data.orgId) &&
+        onlyChanges(["status", "decidedAt", "cancelledAt", "updatedAt"]) &&
+        request.resource.data.status in ["accepted", "rejected", "job_cancelled"];
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // assignments/{jobId}_{workerUid} — confirmed shift + time tracking
+    // ---------------------------------------------------------------------------------
+
+    match /assignments/{assignmentId} {
+      // Same !exists() reasoning as applications/{appId} above — WorkerJobDetails opens
+      // an onSnapshot listener on this doc before the worker has ever applied, when it
+      // legitimately doesn't exist yet.
+      allow read: if isSignedIn() &&
+        (!exists(/databases/$(database)/documents/assignments/$(assignmentId)) ||
+          resource.data.workerUid == request.auth.uid ||
+          isEmployerOfOrg(resource.data.orgId) ||
+          isAdmin());
+
+      // Auto-assign path: worker creates their own "assigned" record.
+      allow create: if isApprovedWorker() &&
+        assignmentId == (request.resource.data.jobId + "_" + request.auth.uid) &&
+        request.resource.data.workerUid == request.auth.uid &&
+        request.resource.data.status == "assigned";
+
+      // Approval path: employer creates the "confirmed" record after approving.
+      allow create: if isEmployerOfOrg(request.resource.data.orgId) &&
+        request.resource.data.employerUid == request.auth.uid &&
+        request.resource.data.status == "confirmed";
+
+      // Worker clocking in/out on their own assignment — nothing else.
+      allow update: if isSignedIn() &&
+        resource.data.workerUid == request.auth.uid &&
+        onlyChanges(["workerClockIn", "workerClockOut", "updatedAt"]);
+
+      // Employer submitting hours / reporting a no-show for their org's assignment.
+      allow update: if isEmployerOfOrg(resource.data.orgId) &&
+        onlyChanges([
+          "employerClockIn", "employerClockOut", "hoursSubmitted", "workerNoShow",
+          "hoursSubmittedAt", "hoursSubmittedBy", "employerComment", "reviewStatus",
+          "updatedAt"
+        ]) &&
+        // Employers may only ever set reviewStatus to "pending" (the initial submit) —
+        // moving it to reviewed/paid/rejected is QuickCrew's call, done in backoffice.
+        (unchanged(["reviewStatus"]) || request.resource.data.reviewStatus == "pending");
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // workerShiftDayLocks/{workerUid}_{shiftDate} — "one shift per day" guard
+    // ---------------------------------------------------------------------------------
+    // Low-sensitivity: just a scheduling lock (workerUid, shiftDate, jobId, status),
+    // no PII. Employers legitimately delete OTHER people's locks when rejecting an
+    // applicant or cancelling a shift (see EmployerJobApplicants.onReject) — there's no
+    // cheap way in rules to prove "this employer's rejection was for this exact lock"
+    // without another get(), so for v1 we accept that any employer can release any
+    // worker's lock. Worst case is a scheduling nuisance, not a data leak.
+
+    match /workerShiftDayLocks/{lockId} {
+      // Same !exists() reasoning — the apply-to-job transaction always reads this doc
+      // first to check whether a lock exists yet, which is the common (no-lock) case.
+      allow read: if isSignedIn() &&
+        (!exists(/databases/$(database)/documents/workerShiftDayLocks/$(lockId)) ||
+          resource.data.workerUid == request.auth.uid || isAdmin());
+
+      allow create, delete: if isSignedIn() &&
+        (request.resource.data.workerUid == request.auth.uid ||
+          resource.data.workerUid == request.auth.uid ||
+          callerDoc().role == "employer" ||
+          isAdmin());
+
+      allow update: if isAdmin();
+    }
+  }
+}

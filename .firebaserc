@@ -1,6 +1,8 @@
 {
   "projects": {
-    "default": "quickcrew-2c10c"
+    "default": "quickcrew-2c10c",
+    "dev": "quickcrew-2c10c",
+    "prod": "quickcrew-prod"
   },
   "targets": {
     "quickcrew-2c10c": {
