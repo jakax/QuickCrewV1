@@ -18,16 +18,38 @@ export type ProfileStatus = "incomplete" | "ready_for_review";
 export type UserRow = {
   id: string;
   fullName?: string;
+  firstName?: string;
+  lastName?: string;
   legalBusinessNameDraft?: string;
   phone?: string;
   email?: string;
   role?: string;
   approvalStatus?: ApprovalStatus | string;
-  profileStatus?: ProfileStatus | string; // NEW — set by worker when profile is complete
-  profileSubmittedAt?: any;               // NEW — timestamp when worker submitted for review
+  profileStatus?: ProfileStatus | string; // set by worker when they tap "Submit for review"
+  profileSubmittedAt?: any;               // timestamp when worker submitted for review
   createdAt?: any;
   updatedAt?: any;
   skills?: string[];
+
+  dateOfBirth?: string;
+  nationality?: string;
+  passportNumber?: string;
+  passportExpiryDate?: string;
+  passportIssuingCountry?: string;
+  address?: { street?: string; suburb?: string; city?: string; postcode?: string };
+  rightToWorkNz?: string;
+  idDocument?: { url?: string };
+  visaDocument?: { url?: string };
+  cv?: { url?: string };
+  references?: Array<{ name?: string; company?: string; role?: string; phone?: string; email?: string }>;
+  criminalCheckConsent?: boolean;
+  termsAccepted?: boolean;
+
+  // Computed client-side by isWorkerProfileComplete() — not stored in Firestore.
+  // This is the source of truth Backoffice uses for "ready to review," independent
+  // of the mobile app's (now non-blocking) profileStatus flag — see CLAUDE.md.
+  profileComplete?: boolean;
+  missingProfileFields?: string[];
 
   statusReason?: string;
   statusUpdatedAt?: any;
@@ -41,6 +63,52 @@ export type UserRow = {
     reason?: string | null;
   }>;
 };
+
+// Kept in sync with REQUIRES_VISA_DOC_OPTIONS in
+// src/app/screens/tabs/Profile.jsx (mobile app).
+const REQUIRES_VISA_DOC_OPTIONS = [
+  "Working Holiday Visa",
+  "Work Visa",
+  "Open Work Visa",
+  "Partner Visa",
+  "Student Visa",
+  "Other",
+];
+
+/**
+ * Objectively checks whether a worker's profile has every field QuickCrew needs
+ * before approving them — computed here in Backoffice rather than trusted from the
+ * mobile app's profileStatus flag. The mobile app no longer blocks its "Submit for
+ * review" button on completeness (Apple App Review guideline 5.1.1 — apps can't
+ * require personal info that isn't needed to use the app's core features), so this
+ * is now the single source of truth for the "ready to review" signal.
+ */
+export function isWorkerProfileComplete(u: UserRow): { complete: boolean; missing: string[] } {
+  const missing: string[] = [];
+
+  if (!u.firstName?.trim() || !u.lastName?.trim()) missing.push("Full name");
+  if (!u.phone?.trim()) missing.push("Phone number");
+  if (!u.dateOfBirth?.trim()) missing.push("Date of birth");
+  if (!u.nationality?.trim()) missing.push("Nationality");
+  if (!u.passportNumber?.trim()) missing.push("Passport number");
+  if (!u.passportExpiryDate?.trim()) missing.push("Passport expiry date");
+  if (!u.passportIssuingCountry?.trim()) missing.push("Passport issuing country");
+  if (!u.address?.street?.trim()) missing.push("Street address");
+  if (!u.address?.city?.trim()) missing.push("City");
+  if (!u.rightToWorkNz?.trim()) missing.push("Right to work in NZ");
+  if (!u.idDocument?.url) missing.push("ID document");
+  if (REQUIRES_VISA_DOC_OPTIONS.includes(u.rightToWorkNz || "") && !u.visaDocument?.url) {
+    missing.push("Visa document");
+  }
+  if (!u.cv?.url) missing.push("Resume / CV");
+  if (!Array.isArray(u.references) || u.references.length < 2) {
+    missing.push(`Work experience (${u.references?.length || 0}/2 references)`);
+  }
+  if (!u.criminalCheckConsent) missing.push("Criminal check consent");
+  if (!u.termsAccepted) missing.push("Terms and conditions");
+
+  return { complete: missing.length === 0, missing };
+}
 
 export async function listWorkersByStatus(status: ApprovalStatus): Promise<UserRow[]> {
   const q = query(
@@ -72,54 +140,32 @@ export async function listPendingWorkers(): Promise<UserRow[]> {
 }
 
 /**
- * Lists all users that need attention in Backoffice:
- * - Workers/employers with approvalStatus "pending" (regardless of profileStatus)
- * - Workers with profileStatus "ready_for_review" (profile complete, waiting for approval)
- *
- * Workers with incomplete profiles (no profileStatus or "incomplete") are NOT shown
- * until they explicitly submit for review.
+ * Lists all users that need attention in Backoffice: every worker/employer with
+ * approvalStatus "pending". Readiness ("ready to review") is computed here via
+ * isWorkerProfileComplete() by checking the worker's actual field values, rather
+ * than trusting the mobile app to have gated its "Submit for review" button on
+ * completeness — the app no longer does that (see CLAUDE.md, Apple guideline 5.1.1).
+ * Complete profiles are sorted first so reviewers see the actionable ones up top;
+ * incomplete ones still show, so nothing worker-side stays invisible to QuickCrew.
  */
 export async function listPendingUsers(): Promise<UserRow[]> {
-  // Fetch pending employers (no profileStatus concept for employers)
   const pendingEmployers = await listEmployersByStatus("pending");
-
-  // Fetch workers with profileStatus = "ready_for_review"
-  // These are the ones that actually need attention from Backoffice
-  const readyWorkersQ = query(
-    collection(db, "users"),
-    where("role", "==", "worker"),
-    where("approvalStatus", "==", "pending"),
-    where("profileStatus", "==", "ready_for_review"),
-    orderBy("profileSubmittedAt", "desc")
-  );
-
-  const readyWorkersSnap = await getDocs(readyWorkersQ);
-  const readyWorkers = readyWorkersSnap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as any),
-  }));
-
-  // Also keep pending workers that haven't submitted yet
-  // (existing workers in DB before this feature was added)
   const pendingWorkers = await listWorkersByStatus("pending");
 
-  // Merge: ready_for_review first (they took action), then pending without profileStatus
-  const pendingWithoutSubmit = pendingWorkers.filter(
-    (w) => !w.profileStatus || w.profileStatus === "incomplete"
-  );
+  const workersWithCompleteness = pendingWorkers.map((w) => {
+    const { complete, missing } = isWorkerProfileComplete(w);
+    return { ...w, profileComplete: complete, missingProfileFields: missing };
+  });
 
-  // Deduplicate by id (a worker could appear in both queries)
-  const seen = new Set<string>();
-  const merged: UserRow[] = [];
+  workersWithCompleteness.sort((a, b) => {
+    if (a.profileComplete !== b.profileComplete) return a.profileComplete ? -1 : 1;
+    // Within the same completeness bucket, most recently submitted/updated first.
+    const aTime = a.profileSubmittedAt?.toMillis?.() ?? a.updatedAt?.toMillis?.() ?? 0;
+    const bTime = b.profileSubmittedAt?.toMillis?.() ?? b.updatedAt?.toMillis?.() ?? 0;
+    return bTime - aTime;
+  });
 
-  for (const u of [...readyWorkers, ...pendingWithoutSubmit, ...pendingEmployers]) {
-    if (!seen.has(u.id)) {
-      seen.add(u.id);
-      merged.push(u);
-    }
-  }
-
-  return merged;
+  return [...workersWithCompleteness, ...pendingEmployers];
 }
 
 type SetWorkerStatusArgs = {

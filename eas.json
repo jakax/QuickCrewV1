@@ -15,6 +15,7 @@
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "android": {
         "buildType": "apk"
       },
@@ -29,6 +30,7 @@
     },
     "preview-ios": {
       "distribution": "store",
+      "autoIncrement": true,
       "ios": {
         "simulator": false
       },
@@ -39,6 +41,7 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "806987404946-buf4rpn1hkks64io72ov2fjvl04ceap0.apps.googleusercontent.com",
@@ -47,6 +50,10 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6761596626"
+      }
+    }
   }
 }

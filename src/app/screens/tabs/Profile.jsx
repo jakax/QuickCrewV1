@@ -627,6 +627,9 @@ export default function Profile() {
         >
           <View style={styles.headerBlock}>
             <Text style={styles.title}>My profile</Text>
+            <Text style={styles.envBadge}>
+              {(process.env.EXPO_PUBLIC_APP_ENV || "development").toUpperCase()}
+            </Text>
           </View>
 
           <Pressable
@@ -1139,7 +1142,7 @@ export default function Profile() {
                 {!isProfileComplete && (
                   <View style={styles.missingFieldsBox}>
                     <Text style={styles.missingFieldsTitle}>
-                      Complete these fields to submit for review:
+                      For faster approval, we recommend completing:
                     </Text>
                     {missingFields.map((field) => (
                       <Text key={field} style={styles.missingFieldItem}>· {field}</Text>
@@ -1162,15 +1165,17 @@ export default function Profile() {
                   </Text>
                 </Pressable>
 
-                {/* Submit for review — active only when all mandatory fields are complete */}
+                {/* Submit for review — always available; QuickCrew's backoffice determines
+                    readiness independently by checking the profile's actual field completeness,
+                    rather than the app gating this action (Apple App Review guideline 5.1.1). */}
                 {approvalStatus !== "approved" ? (
                   <Pressable
-                    onPress={isProfileComplete && !alreadySubmitted ? onSubmitForReview : undefined}
-                    disabled={!isProfileComplete || submitting || alreadySubmitted}
+                    onPress={!alreadySubmitted ? onSubmitForReview : undefined}
+                    disabled={submitting || alreadySubmitted}
                     style={({ pressed }) => [
                       styles.submitButton,
-                      (!isProfileComplete || submitting || alreadySubmitted) && styles.submitButtonDisabled,
-                      pressed && isProfileComplete && !alreadySubmitted && { opacity: 0.9 },
+                      (submitting || alreadySubmitted) && styles.submitButtonDisabled,
+                      pressed && !alreadySubmitted && { opacity: 0.9 },
                     ]}
                   >
                     <Text style={styles.submitButtonText}>
@@ -1217,10 +1222,6 @@ export default function Profile() {
                     {deletingAccount ? "Deleting..." : "Delete account"}
                   </Text>
                 </Pressable>
-
-                <Text style={styles.envBadge}>
-                  {(process.env.EXPO_PUBLIC_APP_ENV || "development").toUpperCase()}
-                </Text>
               </View>
             </>
           ) : null}

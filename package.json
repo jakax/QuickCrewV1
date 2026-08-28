@@ -1,6 +1,6 @@
 {
   "name": "quick-crew-app-2",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -11,7 +11,9 @@
     "lint:fix": "eslint . --fix",
     "test:rules": "firebase emulators:exec --only firestore,storage \"node security-rules-tests/run.js\"",
     "deploy:rules:dev": "firebase deploy --only firestore:rules,firestore:indexes,storage --project dev",
-    "deploy:rules:prod": "firebase deploy --only firestore:rules,firestore:indexes,storage --project prod"
+    "deploy:rules:prod": "firebase deploy --only firestore:rules,firestore:indexes,storage --project prod",
+    "deploy:functions:dev": "firebase deploy --only functions --project dev",
+    "deploy:functions:prod": "firebase deploy --only functions --project prod"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

@@ -303,8 +303,14 @@ export default function AssignedWorkerDetails() {
                 ? worker.fullName
                 : worker?.firstName || worker?.lastName
                   ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
-                  : "Unknown worker"}
+                  : "This worker's account no longer exists"}
             </Text>
+            {!worker ? (
+              <Text style={styles.sectionSub}>
+                The worker deleted their QuickCrew account. This shift can no longer be
+                completed as assigned — contact QuickCrew support if it needs to be closed out.
+              </Text>
+            ) : null}
             {worker?.phone ? (
               <Text style={styles.sectionSub}>{worker.phone}</Text>
             ) : null}
@@ -428,8 +434,11 @@ export default function AssignedWorkerDetails() {
             )}
           </View>
 
-          {/* Submit button */}
-          {!hoursSubmitted ? (
+          {/* Submit button — hidden when the worker's account no longer exists, since
+              their `assignments` record was deleted along with it and this would just
+              fail with a confusing error (see functions/index.js deleteAccount, which
+              now also cancels the shift itself going forward for new deletions). */}
+          {!hoursSubmitted && worker ? (
             <Pressable
               onPress={onSubmitHours}
               disabled={submitting}

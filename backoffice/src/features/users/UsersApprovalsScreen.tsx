@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { listPendingUsers, approveWorker, rejectWorker, UserRow } from "./users.service";
+import { listPendingUsers, approveWorker, rejectWorker, isWorkerProfileComplete, UserRow } from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 import { useSearchParams } from "react-router-dom";
@@ -197,7 +197,9 @@ export default function UsersApprovalsScreen() {
         <div className="list">
           {filtered.map((u) => {
             const isActive = u.id === selectedId;
-            const isReadyToReview = u.profileStatus === "ready_for_review";
+            // Computed by listPendingUsers() via isWorkerProfileComplete() — the actual
+            // field data, not the (now non-blocking) profileStatus the mobile app sets.
+            const isReadyToReview = u.role === "worker" && u.profileComplete === true;
             return (
               <button
                 key={u.id}
@@ -279,25 +281,27 @@ export default function UsersApprovalsScreen() {
                   <div className="fs13 fw800">Role: {selected.role || "—"}</div>
                   <div className="mt6 fs13 fw800">Approval status: {selected.approvalStatus || "—"}</div>
 
-                  {/* Profile status — shows if worker submitted for review */}
-                  {selectedAny?.profileStatus ? (
-                    <div
-                      className="mt6 fs13 fw800"
-                      style={{ color: selectedAny.profileStatus === "ready_for_review" ? "#D97706" : "#6B7280" }}
-                    >
-                      Profile status:{" "}
-                      {selectedAny.profileStatus === "ready_for_review"
-                        ? "🟡 Ready to review"
-                        : selectedAny.profileStatus}
-                      {selectedAny.profileSubmittedAt ? (
-                        <span className="muted fs12 fw800">
-                          {" "}· submitted {formatTimestamp(selectedAny.profileSubmittedAt)}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="mt6 fs13 fw800 muted">Profile status: incomplete</div>
-                  )}
+                  {/* Profile completeness — computed from the actual field values, not the
+                      mobile app's profileStatus flag (that button no longer gates on this,
+                      per Apple App Review guideline 5.1.1 — see CLAUDE.md). */}
+                  {selected.role === "worker" ? (() => {
+                    const { complete, missing } = isWorkerProfileComplete(selected as UserRow);
+                    return (
+                      <div className="mt6 fs13 fw800" style={{ color: complete ? "#D97706" : "#6B7280" }}>
+                        Profile status: {complete ? "🟡 Ready to review" : "Incomplete"}
+                        {selectedAny?.profileSubmittedAt ? (
+                          <span className="muted fs12 fw800">
+                            {" "}· worker submitted {formatTimestamp(selectedAny.profileSubmittedAt)}
+                          </span>
+                        ) : null}
+                        {!complete ? (
+                          <div className="muted fs12 fw700 mt6">
+                            Missing: {missing.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })() : null}
 
                   <div className="mt12 fw900 mb8">Personal details</div>
                   <div className="fs13 fw800">First name: {selectedAny?.firstName || "—"}</div>

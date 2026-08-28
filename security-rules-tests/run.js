@@ -137,6 +137,30 @@ async function main() {
       status: "confirmed", hoursSubmitted: false,
     });
 
+    // Dedicated fixtures for the applications self-accept exception, kept separate
+    // from jobA1/jobA1_worker1 (used extensively by other tests below) and from
+    // jobA2 (created fresh by a later "employer CAN post a job" test) to avoid
+    // cross-test state coupling / doc-id collisions.
+    await setDoc(doc(db, "jobs", "jobNoApproval1"), {
+      orgId: "orgA", orgName: "Org A", createdBy: "employer1",
+      title: "No-approval shift", status: "open", businessApprovalRequired: false,
+    });
+    await setDoc(doc(db, "applications", "jobNoApproval1_worker1"), {
+      jobId: "jobNoApproval1", workerUid: "worker1", orgId: "orgA", status: "pending",
+    });
+    await setDoc(doc(db, "jobs", "jobApprovalRequired1"), {
+      orgId: "orgA", orgName: "Org A", createdBy: "employer1",
+      title: "Approval-required shift", status: "open", businessApprovalRequired: true,
+    });
+    await setDoc(doc(db, "applications", "jobApprovalRequired1_worker1"), {
+      jobId: "jobApprovalRequired1", workerUid: "worker1", orgId: "orgA", status: "pending",
+    });
+
+    // Fixture for the workerShiftDayLocks delete-by-employer path (EmployerJobApplicants.onReject).
+    await setDoc(doc(db, "workerShiftDayLocks", "worker1_2026-08-01"), {
+      workerUid: "worker1", shiftDate: "2026-08-01", jobId: "jobA1", status: "locked",
+    });
+
     // Storage fixtures
     const storage = ctx.storage();
     await uploadBytes(ref(storage, "users/worker1/idDocument/passport.pdf"), new Uint8Array([1, 2, 3]), { contentType: "application/pdf" });
@@ -183,6 +207,13 @@ async function main() {
   await test("worker reading a not-yet-created day-lock doc doesn't error", async () => {
     const snap = await assertSucceeds(getDoc(doc(worker2, "workerShiftDayLocks/worker2_2026-08-01")));
     if (snap.exists()) throw new Error("fixture assumption broken: doc should not exist");
+  });
+  await test("employer CAN delete a worker's day-lock (release-on-reject path)", async () => {
+    // Empirically checks the `allow create, delete: if ... request.resource.data.workerUid ...`
+    // rule — for a delete, request.resource is null, so that first `||` term errors. This
+    // confirms whether Firestore's rule engine still falls through to the
+    // `callerDoc().role == "employer"` term (matches EmployerJobApplicants.onReject).
+    await assertSucceeds(deleteDoc(doc(employer1, "workerShiftDayLocks/worker1_2026-08-01")));
   });
 
   console.log("\n--- users/{uid} ---");
@@ -298,8 +329,14 @@ async function main() {
       jobId: "jobA1", workerUid: "worker2", orgId: "orgA", status: "pending",
     }));
   });
-  await test("worker CANNOT self-approve their own application", async () => {
-    await assertFails(updateDoc(doc(worker1, "applications/jobA1_worker1"), { status: "accepted" }));
+  await test("worker CANNOT self-approve their own application when the shift requires approval", async () => {
+    await assertFails(updateDoc(doc(worker1, "applications/jobApprovalRequired1_worker1"), { status: "accepted" }));
+  });
+  await test("worker CAN self-accept their own application when the shift doesn't require approval", async () => {
+    await assertSucceeds(updateDoc(doc(worker1, "applications/jobNoApproval1_worker1"), { status: "accepted" }));
+  });
+  await test("worker CANNOT self-accept another worker's application, even on a no-approval shift", async () => {
+    await assertFails(updateDoc(doc(worker2, "applications/jobNoApproval1_worker1"), { status: "accepted" }));
   });
   await test("worker CAN cancel their own application", async () => {
     await assertSucceeds(updateDoc(doc(worker2, "applications/jobA1_worker2"), { status: "cancelled" }));

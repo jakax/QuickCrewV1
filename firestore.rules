@@ -279,6 +279,16 @@ service cloud.firestore {
         onlyChanges(["status", "cancelledAt", "isLateCancellation", "updatedAt"]) &&
         request.resource.data.status == "cancelled";
 
+      // Worker self-accepting their own application on a shift that doesn't require
+      // employer approval (mirrors the exact transaction in WorkerJobDetails.applyToJob,
+      // and the matching jobs/assignments self-assign exceptions below/above).
+      allow update: if isApprovedWorker() &&
+        resource.data.workerUid == request.auth.uid &&
+        resource.data.status == "pending" &&
+        onlyChanges(["status", "decidedAt", "updatedAt"]) &&
+        request.resource.data.status == "accepted" &&
+        get(/databases/$(database)/documents/jobs/$(resource.data.jobId)).data.businessApprovalRequired == false;
+
       // Employer approving/rejecting an applicant to one of their org's jobs, or
       // bulk-cancelling applications when the whole shift is cancelled.
       allow update: if isEmployerOfOrg(resource.data.orgId) &&

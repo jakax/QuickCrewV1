@@ -156,34 +156,29 @@ export default function WorkerJobDetails() {
   }, [uid]);
 
   useEffect(() => {
-    let mounted = true;
+    if (!uid || !jobId) return;
 
-    const checkApplied = async () => {
-      try {
-        if (!uid || !jobId) return;
-
-        const applicationId = `${jobId}_${uid}`;
-        const ref = doc(db, "applications", applicationId);
-        const snap = await getDoc(ref);
-
-        if (!mounted) return;
-
+    // Live listener (not a one-time getDoc) so an employer approving/rejecting while
+    // the worker is sitting on this screen reflects immediately, instead of only after
+    // navigating away and back.
+    const applicationId = `${jobId}_${uid}`;
+    const ref = doc(db, "applications", applicationId);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
         if (!snap.exists()) {
           setApplicationStatus(null);
           return;
         }
-
         const st = String(snap.data()?.status || "").toLowerCase();
         setApplicationStatus(st || "pending");
-      } catch {
+      },
+      () => {
         // ignore
       }
-    };
+    );
 
-    checkApplied();
-    return () => {
-      mounted = false;
-    };
+    return () => unsub();
   }, [uid, jobId]);
 
   useEffect(() => {

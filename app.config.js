@@ -17,7 +17,7 @@ module.exports = {
   expo: {
     name: "quick-crew-app-2",
     slug: "quick-crew-app-2",
-    version: "1.0.0",
+    version: "1.0.2",
     orientation: "portrait",
     icon: "./assets/icon-new.png",
     userInterfaceStyle: "light",
@@ -29,7 +29,7 @@ module.exports = {
     },
     ios: {
       buildNumber: "18",
-      supportsTablet: true,
+      supportsTablet: false,
       googleServicesFile: isProd
         ? "./google-firebase/prod/GoogleService-Info.plist"
         : "./google-firebase/dev/GoogleService-Info.plist",
