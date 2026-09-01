@@ -268,10 +268,19 @@ service cloud.firestore {
           isAdmin());
 
       // Doc id must be exactly "{jobId}_{callerUid}" and the applicant must be self.
+      // Status may be "pending", or "accepted" outright when the shift doesn't require
+      // employer approval — WorkerJobDetails.applyToJob writes both the initial
+      // status:"pending" set AND the immediate merge to "accepted" inside the SAME
+      // runTransaction call, and Firestore collapses multiple writes to the same
+      // not-yet-existing doc within one transaction into a single "create" using the
+      // FINAL merged data — so this create rule (not the "update" self-accept rule
+      // below, which never actually fires for that path) is what has to allow it.
       allow create: if isApprovedWorker() &&
         appId == (request.resource.data.jobId + "_" + request.auth.uid) &&
         request.resource.data.workerUid == request.auth.uid &&
-        request.resource.data.status == "pending";
+        (request.resource.data.status == "pending" ||
+          (request.resource.data.status == "accepted" &&
+            get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.businessApprovalRequired == false));
 
       // Worker withdrawing their own application.
       allow update: if isSignedIn() &&

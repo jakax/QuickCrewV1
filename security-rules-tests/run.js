@@ -32,6 +32,7 @@ const {
   query,
   where,
   getDocs,
+  runTransaction,
 } = require("firebase/firestore");
 const {
   ref,
@@ -337,6 +338,26 @@ async function main() {
   });
   await test("worker CANNOT self-accept another worker's application, even on a no-approval shift", async () => {
     await assertFails(updateDoc(doc(worker2, "applications/jobNoApproval1_worker1"), { status: "accepted" }));
+  });
+
+  // Reproduces the ACTUAL WorkerJobDetails.applyToJob write pattern (not the isolated
+  // updateDoc above): a brand-new application doc, created and immediately merge-updated
+  // to "accepted" within the SAME runTransaction call. Firestore evaluates multiple
+  // writes to the same doc within one transaction as a single combined write against the
+  // pre-transaction state — since the doc didn't exist before, that's a single "create"
+  // with the FINAL merged data (status: "accepted"), not a "create" then a separate
+  // "update". So this only passes if the create rule itself allows status "accepted" for
+  // a no-approval job — the update-based self-accept rule never actually gets evaluated
+  // for this path.
+  await test("worker CAN create+self-accept in one transaction on a no-approval shift (real app write pattern)", async () => {
+    await assertSucceeds(runTransaction(worker2, async (tx) => {
+      const ref = doc(worker2, "applications/jobNoApproval1_worker2");
+      tx.set(ref, {
+        jobId: "jobNoApproval1", workerId: "worker2", workerUid: "worker2", orgId: "orgA",
+        status: "pending", createdAt: new Date(), updatedAt: new Date(),
+      });
+      tx.set(ref, { status: "accepted", decidedAt: new Date(), updatedAt: new Date() }, { merge: true });
+    }));
   });
   await test("worker CAN cancel their own application", async () => {
     await assertSucceeds(updateDoc(doc(worker2, "applications/jobA1_worker2"), { status: "cancelled" }));
