@@ -295,6 +295,13 @@ service cloud.firestore {
         onlyChanges(["status", "decidedAt", "cancelledAt", "updatedAt"]) &&
         request.resource.data.status in ["accepted", "rejected", "job_cancelled"];
 
+      // Worker clocking in/out — mirrors the same write onto assignments/{assignmentId}
+      // below (jobs.service.js writes both docs), used so Applied.jsx can derive
+      // "Completed" from an actual clockOut instead of only the scheduled shiftEndAt.
+      allow update: if isSignedIn() &&
+        resource.data.workerUid == request.auth.uid &&
+        onlyChanges(["workerClockIn", "workerClockOut", "updatedAt"]);
+
       allow update, delete: if isAdmin();
     }
 

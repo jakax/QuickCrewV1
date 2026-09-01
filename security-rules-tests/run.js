@@ -351,6 +351,34 @@ async function main() {
     await assertFails(getDoc(doc(worker2, "applications/jobA1_worker1")));
   });
 
+  // Regression coverage for a real bug found in manual QA: jobs.service.js's
+  // workerClockIn()/workerClockOut() write the clock timestamp onto BOTH
+  // assignments/{id} (already covered below) AND applications/{id}, so Applied.jsx can
+  // derive "Completed" from an actual clockOut instead of only the scheduled
+  // shiftEndAt — but only the assignments side had a matching rule, so the mirrored
+  // applications write silently failed and the worker's status stayed stuck on
+  // "Ongoing" until the scheduled end time passed.
+  await test("worker CAN clock themselves in on their own application (clock fields only)", async () => {
+    await assertSucceeds(updateDoc(doc(worker1, "applications/jobA1_worker1"), {
+      workerClockIn: new Date(),
+    }));
+  });
+  await test("worker CAN clock themselves out on their own application (clock fields only)", async () => {
+    await assertSucceeds(updateDoc(doc(worker1, "applications/jobA1_worker1"), {
+      workerClockOut: new Date(),
+    }));
+  });
+  await test("worker CANNOT sneak a status change into an application clock-in update", async () => {
+    await assertFails(updateDoc(doc(worker1, "applications/jobA1_worker1"), {
+      workerClockIn: new Date(), status: "completed",
+    }));
+  });
+  await test("worker CANNOT clock in on another worker's application", async () => {
+    await assertFails(updateDoc(doc(worker2, "applications/jobA1_worker1"), {
+      workerClockIn: new Date(),
+    }));
+  });
+
   // Regression coverage for a real bug found in manual QA: EmployerJobApplicants /
   // EmployerJobsHome / jobs.service.js all query `applications` filtered by jobId (and
   // status). Firestore rejects a *query* (as opposed to a single-doc read) unless it can
