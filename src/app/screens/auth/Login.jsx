@@ -116,7 +116,9 @@ const Login = ({ navigation, route }) => {
                       onPress={onApplePress}
                       disabled={loading}
                     >
-                      <Text style={styles.socialIconApple}></Text>
+                      <View style={styles.socialIconAppleWrap}>
+                        <Ionicons name="logo-apple" size={22} color="#000000" />
+                      </View>
                       <Text style={styles.socialButtonText}>Continue with Apple</Text>
                     </TouchableOpacity>
                   )}
@@ -290,12 +292,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  socialIconApple: {
+  // The Apple logo used to be the U+F8FF private-use glyph in a <Text>, which
+  // only renders with Apple's system font — under the app's custom font it drew
+  // nothing, and Apple rejected the build (Guideline 4) because the button had
+  // no logo next to Google's. Ionicons ships the logo as an icon-font glyph.
+  socialIconAppleWrap: {
     width: 24,
-    textAlign: "center",
-    color: "#898989",
-    fontSize: 22,
-    fontWeight: "700",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   socialButtonText: {

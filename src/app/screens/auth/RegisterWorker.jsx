@@ -4,11 +4,20 @@ import {
   Text,
   TextInput,
   Pressable,
+  TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Image,
+  Platform,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { registerWorker } from "../../../services/signup.service";
+import {
+  loginWithGoogleAndLoadProfile,
+  loginWithAppleAndLoadProfile,
+} from "../../../services/auth.service";
+import { getFirebaseAuthErrorMessage } from "../../../utils/firebaseError";
+import { routeAfterAuthChange } from "../../navigation/routeAfterAuth";
 import { useConfirm } from "../../providers/ConfirmProvider";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
 
@@ -26,6 +35,8 @@ export default function RegisterWorker({ navigation }) {
   const confirm = useConfirm();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const canSubmit = useMemo(() => {
     return (
@@ -39,6 +50,43 @@ export default function RegisterWorker({ navigation }) {
       !isSubmitting
     );
   }, [firstName, lastName, email, confirmEmail, password, confirmPassword, isSubmitting]);
+
+  // Reuses the exact same sign-in used on the Login screen — it already creates a
+  // fresh worker profile (role:"worker", approvalStatus:"pending") the first time
+  // a given Google account signs in, so there's no separate "register" call needed.
+  const onGooglePress = async () => {
+    try {
+      setError(null);
+      setGoogleLoading(true);
+      const profile = await loginWithGoogleAndLoadProfile();
+      routeAfterAuthChange(profile);
+    } catch (e) {
+      setError(getFirebaseAuthErrorMessage(e));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Same idea as onGooglePress — reuses the Login screen's Apple sign-in, which
+  // creates a fresh worker profile the first time a given Apple account signs in.
+  // Apple requires "Sign in with Apple" to be offered as an equivalent option
+  // wherever another third-party sign-in (Google) is offered, including here on
+  // the registration screen, not just on Login (Guideline 4.8 — flagged in a real
+  // App Store rejection on 2026-09-17 for being missing on this screen).
+  const onApplePress = async () => {
+    try {
+      setError(null);
+      setAppleLoading(true);
+      const profile = await loginWithAppleAndLoadProfile();
+      routeAfterAuthChange(profile);
+    } catch (e) {
+      if (e?.code !== "CANCELLED") {
+        setError(getFirebaseAuthErrorMessage(e));
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  };
 
   const onRegister = async () => {
     const ok = await confirm({
@@ -144,6 +192,38 @@ export default function RegisterWorker({ navigation }) {
             <Text style={styles.subtitle}>
               Thanks for joining us. Your profile will need to be approved before joining shifts.
             </Text>
+
+            <View style={styles.socialSection}>
+              <TouchableOpacity
+                style={[styles.socialButton, (isSubmitting || googleLoading) && styles.socialButtonDisabled]}
+                onPress={onGooglePress}
+                disabled={isSubmitting || googleLoading}
+              >
+                <Text style={styles.socialIcon}>G</Text>
+                <Text style={styles.socialButtonText}>
+                  {googleLoading ? "Signing in..." : "Continue with Google"}
+                </Text>
+              </TouchableOpacity>
+
+              {Platform.OS === "ios" && (
+                <TouchableOpacity
+                  style={[styles.socialButton, (isSubmitting || appleLoading) && styles.socialButtonDisabled]}
+                  onPress={onApplePress}
+                  disabled={isSubmitting || appleLoading}
+                >
+                  <View style={styles.socialIconAppleWrap}>
+                    <Ionicons name="logo-apple" size={22} color="#000000" />
+                  </View>
+                  <Text style={styles.socialButtonText}>
+                    {appleLoading ? "Signing in..." : "Continue with Apple"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.dividerWrap}>
+              <View style={styles.divider} />
+            </View>
 
             <View style={styles.field}>
               <Text style={styles.label}>First name</Text>
@@ -459,5 +539,74 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     fontSize: 13,
     fontFamily: "Inter",
+  },
+
+  socialSection: {
+    width: "100%",
+    paddingHorizontal: 8,
+    marginBottom: 4,
+    gap: 12,
+  },
+
+  socialButton: {
+    alignSelf: "stretch",
+    minWidth: 300,
+    height: 45,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingLeft: 10,
+    paddingRight: 15,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#CDCDCD",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  socialButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  socialIcon: {
+    width: 24,
+    textAlign: "center",
+    color: "#4285F4",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
+  // Ionicons glyph instead of the U+F8FF private-use character — that one only
+  // renders with Apple's system font and drew nothing here (see Login.jsx).
+  socialIconAppleWrap: {
+    width: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  socialButtonText: {
+    flex: 1,
+    textAlign: "center",
+    color: "#716C6C",
+    fontSize: 15,
+    fontFamily: "Inter",
+    fontWeight: "500",
+    marginRight: 24,
+  },
+
+  dividerWrap: {
+    width: "100%",
+    paddingHorizontal: 10,
+    paddingTop: 15,
+    paddingBottom: 15,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  divider: {
+    width: "46%",
+    height: 1,
+    backgroundColor: "#B6A9A9",
   },
 });
