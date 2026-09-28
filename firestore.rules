@@ -146,9 +146,22 @@ service cloud.firestore {
       allow update: if isAdmin();
 
       allow delete: if isAdmin();
-      // Regular deletes go through the deleteAccount Cloud Function (uses the Admin
-      // SDK, which bypasses these rules entirely) so it can also clean up Storage,
-      // Auth, and related collections atomically. No client path needs delete here.
+
+      // Narrow exception: an employer who registered but never finished linking to
+      // an organization (still mid-"Create your organization" step, no orgId set
+      // yet) can self-delete to cancel registration. At this point there's nothing
+      // else to clean up (no org membership, no uploaded files), so this doesn't
+      // need the deleteAccount Cloud Function's Storage/collection cascade — see
+      // CreateOrganizationScreen's "Cancel registration" and
+      // signup.service.js's cancelEmployerRegistration(). Once orgId is set, this
+      // no longer applies; cancelling then requires the full deleteAccount flow.
+      allow delete: if isOwner(uid) &&
+        resource.data.role == "employer" &&
+        !("orgId" in resource.data);
+
+      // All other deletes go through the deleteAccount Cloud Function (uses the
+      // Admin SDK, which bypasses these rules entirely) so it can also clean up
+      // Storage, Auth, and related collections atomically.
 
       // ---- users/{uid}/savedJobs/{jobId} — worker's own bookmarks ----
       match /savedJobs/{jobId} {
@@ -165,6 +178,19 @@ service cloud.firestore {
 
     match /adminUsers/{uid} {
       allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // deletedUsers/{uid} — minimal tombstone left by the deleteAccount Cloud Function
+    // ---------------------------------------------------------------------------------
+    // Written only by deleteAccount (Admin SDK, bypasses these rules) right before it
+    // wipes users/{uid} for good — see that function's own comment for what it keeps
+    // and why (name/email/phone/role/approvalStatus/lateCancellationCount only, never
+    // CV/idDocument/visaDocument/passport/address/DOB). No client write path.
+
+    match /deletedUsers/{uid} {
+      allow read: if isAdmin();
       allow write: if false;
     }
 
@@ -282,6 +308,22 @@ service cloud.firestore {
           (request.resource.data.status == "accepted" &&
             get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.businessApprovalRequired == false));
 
+      // Worker re-applying to a job they were previously rejected/cancelled from.
+      // The application doc id is deterministic ("{jobId}_{workerUid}"), so
+      // WorkerJobDetails.applyToJob re-applying overwrites that SAME existing doc
+      // instead of creating a new one — Firestore evaluates that as an update, not
+      // a create (the create rule above only ever fires for a doc that doesn't
+      // exist yet), so it needs its own rule. Mirrors "create"'s validation exactly;
+      // only guarded to require the existing application be in a terminal state —
+      // never lets an active (pending/accepted) application get silently overwritten.
+      allow update: if isApprovedWorker() &&
+        resource.data.status in ["rejected", "cancelled", "job_cancelled"] &&
+        appId == (request.resource.data.jobId + "_" + request.auth.uid) &&
+        request.resource.data.workerUid == request.auth.uid &&
+        (request.resource.data.status == "pending" ||
+          (request.resource.data.status == "accepted" &&
+            get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.businessApprovalRequired == false));
+
       // Worker withdrawing their own application.
       allow update: if isSignedIn() &&
         resource.data.workerUid == request.auth.uid &&
@@ -344,16 +386,38 @@ service cloud.firestore {
         resource.data.workerUid == request.auth.uid &&
         onlyChanges(["workerClockIn", "workerClockOut", "updatedAt"]);
 
+      // Worker cancelling their own application on a no-approval-required shift
+      // (cancelJobApplicationWithPenalty) — closes the assignment it created at
+      // self-assign time instead of deleting it, same reasoning as the employer's
+      // cancel-shift rule below.
+      allow update: if isSignedIn() &&
+        resource.data.workerUid == request.auth.uid &&
+        onlyChanges(["status", "cancelledAt", "cancelReason", "updatedAt"]) &&
+        request.resource.data.status == "cancelled";
+
       // Employer submitting hours / reporting a no-show for their org's assignment.
+      // workerFullNameSnapshot/workerEmailSnapshot: a copy of the worker's identity
+      // taken at this exact moment, so the backoffice still has a name to show if
+      // the worker later deletes their account (see AssignedWorkerDetails.jsx).
       allow update: if isEmployerOfOrg(resource.data.orgId) &&
         onlyChanges([
           "employerClockIn", "employerClockOut", "hoursSubmitted", "workerNoShow",
           "hoursSubmittedAt", "hoursSubmittedBy", "employerComment", "reviewStatus",
-          "updatedAt"
+          "workerFullNameSnapshot", "workerEmailSnapshot", "updatedAt"
         ]) &&
         // Employers may only ever set reviewStatus to "pending" (the initial submit) —
         // moving it to reviewed/paid/rejected is QuickCrew's call, done in backoffice.
         (unchanged(["reviewStatus"]) || request.resource.data.reviewStatus == "pending");
+
+      // Employer cancelling the shift (jobs.service.js's cancelJob) closes out its
+      // assignment — otherwise it's left pointing at a cancelled job with status
+      // "assigned"/"confirmed", indistinguishable from a genuine unclosed shift in
+      // the backoffice's "Unclosed" tab. lateCancellationByEmployer tags a
+      // cancellation made under 4h with a worker attached, for QuickCrew to find
+      // and apply the 50% charge policy manually (no automated billing exists).
+      allow update: if isEmployerOfOrg(resource.data.orgId) &&
+        onlyChanges(["status", "cancelledAt", "cancelReason", "lateCancellationByEmployer", "updatedAt"]) &&
+        request.resource.data.status == "cancelled";
 
       allow update, delete: if isAdmin();
     }

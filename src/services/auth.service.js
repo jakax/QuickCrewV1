@@ -1,6 +1,6 @@
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase/config";
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, OAuthProvider } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithCredential, OAuthProvider } from "firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -32,6 +32,11 @@ export const loginAndLoadProfile = async (email, password) => {
     const snap = await getDoc(ref);
 
     if (!snap.exists()) {
+      // Don't leave this session signed in with no profile — otherwise the next
+      // app launch skips this screen entirely (onAuthStateChanged already sees a
+      // "logged in" user) and the app is left trying to route someone with no
+      // profile at all.
+      await signOut(auth);
       throw new AuthError(
         "PROFILE_MISSING",
         "Your account exists but your profile is not set up. Contact support."

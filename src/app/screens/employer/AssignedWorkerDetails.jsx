@@ -204,6 +204,14 @@ export default function AssignedWorkerDetails() {
         ...(workerNoShow ? {} : { employerClockIn: clockIn, employerClockOut: clockOut }),
         hoursSubmitted: true,
         workerNoShow: workerNoShow,
+        // Snapshot the worker's identity at the moment hours are submitted — the
+        // backoffice otherwise looks this up live from users/{workerUid}, which
+        // returns nothing once the worker deletes their account (see deleteAccount
+        // in functions/index.js). Mirrors the jobTitle/orgName snapshot pattern
+        // already used on applications. Forward-looking only — can't backfill shifts
+        // finished before this existed.
+        workerFullNameSnapshot: worker?.fullName || null,
+        workerEmailSnapshot: worker?.email || null,
         hoursSubmittedAt: serverTimestamp(),
         hoursSubmittedBy: employerUid,
         updatedAt: serverTimestamp(),
@@ -303,9 +311,14 @@ export default function AssignedWorkerDetails() {
                 ? worker.fullName
                 : worker?.firstName || worker?.lastName
                   ? `${worker?.firstName || ""} ${worker?.lastName || ""}`.trim()
-                  : "This worker's account no longer exists"}
+                  : assignment?.workerFullNameSnapshot
+                    ? assignment.workerFullNameSnapshot
+                    : "This worker's account no longer exists"}
             </Text>
-            {!worker ? (
+            {/* Only warn about the account being gone if the shift is still something
+                to act on — a finished/hoursSubmitted shift is already closed out fine,
+                the worker deleting their account afterward doesn't change that. */}
+            {!worker && !hoursSubmitted ? (
               <Text style={styles.sectionSub}>
                 The worker deleted their QuickCrew account. This shift can no longer be
                 completed as assigned — contact QuickCrew support if it needs to be closed out.
@@ -316,6 +329,8 @@ export default function AssignedWorkerDetails() {
             ) : null}
             {worker?.email ? (
               <Text style={styles.sectionSub}>{worker.email}</Text>
+            ) : !worker && assignment?.workerEmailSnapshot ? (
+              <Text style={styles.sectionSub}>{assignment.workerEmailSnapshot}</Text>
             ) : null}
             {worker?.rightToWorkNz ? (
               <Text style={styles.sectionSub}>Right to work: {worker.rightToWorkNz}</Text>

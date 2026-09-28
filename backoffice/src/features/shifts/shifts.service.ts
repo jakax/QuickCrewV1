@@ -96,10 +96,14 @@ export async function listShiftsByReviewStatus(
     const data = d.data();
     const workerUid = data.workerUid || null;
 
-    let workerFullName: string | null = null;
-    let workerEmail: string | null = null;
+    // Prefer the snapshot taken when hours were submitted (AssignedWorkerDetails.jsx)
+    // — it survives the worker later deleting their account, when the live lookup
+    // below would return nothing. Only fall back to the live lookup for older
+    // records written before this snapshot existed.
+    let workerFullName: string | null = data.workerFullNameSnapshot || null;
+    let workerEmail: string | null = data.workerEmailSnapshot || null;
 
-    if (workerUid) {
+    if (workerUid && !workerFullName && !workerEmail) {
       try {
         const userSnap = await getDoc(doc(db, "users", workerUid));
         if (userSnap.exists()) {

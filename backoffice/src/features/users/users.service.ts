@@ -2,6 +2,7 @@ import {
   arrayUnion,
   collection,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -9,6 +10,7 @@ import {
   updateDoc,
   where,
   or,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../firebase/client";
 
@@ -65,8 +67,10 @@ export type UserRow = {
 };
 
 // Kept in sync with REQUIRES_VISA_DOC_OPTIONS in
-// src/app/screens/tabs/Profile.jsx (mobile app).
+// src/app/screens/tabs/Profile.jsx (mobile app). "NZ Resident" needs a
+// supporting doc (proof of a valid INZ residence visa) but no expiry date.
 const REQUIRES_VISA_DOC_OPTIONS = [
+  "NZ Resident",
   "Working Holiday Visa",
   "Work Visa",
   "Open Work Visa",
@@ -206,6 +210,11 @@ export async function setWorkerStatus({
     statusUpdatedBy: adminUid,
 
     ...(to === "approved" ? { approvedAt: serverTimestamp(), approvedBy: adminUid } : {}),
+    // Reinstating someone out of "suspended" is meant to be a clean slate — otherwise
+    // lateCancellationCount only ever grows and can never come back down, so anyone
+    // ever suspended for this reason would stay one late cancellation away from an
+    // instant re-suspension forever, no matter how long ago or how it was resolved.
+    ...(to === "approved" && from === "suspended" ? { lateCancellationCount: 0 } : {}),
     ...(to === "rejected" ? { rejectedAt: serverTimestamp(), rejectedBy: adminUid } : {}),
     ...(to === "suspended" ? { suspendedAt: serverTimestamp(), suspendedBy: adminUid } : {}),
     ...(to === "pending" ? { movedToPendingAt: serverTimestamp(), movedToPendingBy: adminUid } : {}),
@@ -220,6 +229,145 @@ export async function setWorkerStatus({
 
     updatedAt: serverTimestamp(),
   });
+
+  // Suspending a worker who's currently assigned/confirmed to an upcoming shift
+  // must detach them and reopen the shift — otherwise the business is stuck with
+  // a shift silently assigned to someone who can no longer work it. Naturally a
+  // no-op for employers (their uid never appears as assignedWorkerUid/filledByUid
+  // on any job), so this doesn't need a role check. Uses admin's existing blanket
+  // write access (firestore.rules: `allow update, delete: if isAdmin()` on jobs/
+  // assignments/workerShiftDayLocks) — no new rules needed.
+  if (to === "suspended") {
+    const TERMINAL_JOB_STATUSES = ["cancelled", "cancel", "finished", "completed"];
+    const assignedFields = ["assignedWorkerUid", "filledByUid"] as const;
+
+    for (const field of assignedFields) {
+      const jobsSnap = await getDocs(
+        query(collection(db, "jobs"), where(field, "==", userId))
+      );
+
+      for (const jobDoc of jobsSnap.docs) {
+        const job = jobDoc.data() as any;
+        const jobStatus = String(job?.status || "").toLowerCase();
+        if (TERMINAL_JOB_STATUSES.includes(jobStatus)) continue;
+
+        const batch = writeBatch(db);
+
+        // Reopen the shift for another worker to take, instead of cancelling it —
+        // the shift itself is still legitimate, only this worker can't work it.
+        // But only if it hasn't started yet — reopening a shift already underway
+        // (or past) as "open" would be a stale/nonsensical listing (same
+        // reasoning as deleteAccount's matching worker-detach path).
+        const startTs = job?.shiftStartAt;
+        const startMs =
+          startTs && typeof startTs.toMillis === "function" ? startTs.toMillis() : NaN;
+        const hasNotStartedYet = Number.isFinite(startMs) && startMs > Date.now();
+
+        if (hasNotStartedYet) {
+          batch.update(jobDoc.ref, {
+            status: "open",
+            assignedWorkerUid: null,
+            assignedAt: null,
+            filledByUid: null,
+            assignmentId: null,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          batch.update(jobDoc.ref, {
+            status: "cancelled",
+            cancelledAt: serverTimestamp(),
+            cancelReason: "worker_suspended",
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        batch.set(
+          doc(db, "assignments", `${jobDoc.id}_${userId}`),
+          {
+            status: "cancelled",
+            cancelledAt: serverTimestamp(),
+            cancelReason: "worker_suspended",
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        const shiftDate = String(job?.shiftDate || "").trim();
+        if (shiftDate) {
+          batch.delete(doc(db, "workerShiftDayLocks", `${userId}_${shiftDate}`));
+        }
+
+        await batch.commit();
+      }
+    }
+
+    // Suspending an EMPLOYER, on the other hand, cancels every non-terminal job
+    // they created — mirrors functions/index.js's deleteAccount employer cascade
+    // exactly. Unlike the worker case above, there's no "reopen" option: the
+    // business itself is suspended, not just unavailable, so a worker with an
+    // upcoming shift needs to see it as cancelled, not sit there as if nothing
+    // happened. Naturally a no-op for workers (their uid is never createdBy on
+    // any job), so — same as the worker cascade above — no role check needed.
+    const createdJobsSnap = await getDocs(
+      query(collection(db, "jobs"), where("createdBy", "==", userId))
+    );
+
+    for (const jobDoc of createdJobsSnap.docs) {
+      const job = jobDoc.data() as any;
+      const jobStatus = String(job?.status || "").toLowerCase();
+      if (TERMINAL_JOB_STATUSES.includes(jobStatus)) continue;
+
+      const batch = writeBatch(db);
+
+      batch.update(jobDoc.ref, {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelReason: "employer_suspended",
+        updatedAt: serverTimestamp(),
+      });
+
+      const attachedWorkerUid = job?.assignedWorkerUid || job?.filledByUid;
+      if (attachedWorkerUid) {
+        const assignmentSnap = await getDoc(
+          doc(db, "assignments", `${jobDoc.id}_${attachedWorkerUid}`)
+        );
+        if (assignmentSnap.exists() && assignmentSnap.data()?.hoursSubmitted !== true) {
+          batch.update(assignmentSnap.ref, {
+            status: "cancelled",
+            cancelledAt: serverTimestamp(),
+            cancelReason: "employer_suspended",
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      const appsSnap = await getDocs(
+        query(
+          collection(db, "applications"),
+          where("jobId", "==", jobDoc.id),
+          where("orgId", "==", job.orgId || null),
+          where("status", "in", ["pending", "accepted"])
+        )
+      );
+
+      appsSnap.docs.forEach((appDoc) => {
+        const app = appDoc.data() as any;
+        batch.update(appDoc.ref, {
+          status: "job_cancelled",
+          cancelledAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        const appWorkerUid = app?.workerUid || app?.workerId;
+        const appShiftDate = String(app?.shiftDate || "").trim();
+        if (appWorkerUid && appShiftDate) {
+          batch.delete(doc(db, "workerShiftDayLocks", `${appWorkerUid}_${appShiftDate}`));
+        }
+      });
+
+      await batch.commit();
+    }
+  }
 
   return { ok: true };
 }

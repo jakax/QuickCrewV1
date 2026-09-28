@@ -1,3 +1,4 @@
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "./firebase/config";
 import { getShiftStartMs } from "../utils/jobFormatters";
 import {
@@ -505,7 +506,6 @@ export async function cancelJobApplicationWithPenalty({
 
   const job = jobSnap.data();
   const app = appSnap.data();
-  const user = userSnap.data();
 
   const appWorker = app?.workerUid || app?.workerId;
   if (appWorker && appWorker !== workerUid) {
@@ -538,8 +538,22 @@ export async function cancelJobApplicationWithPenalty({
       updatedAt: serverTimestamp(),
     });
 
+    // Close the assignment instead of deleting it — same reasoning as the
+    // employer-cancel path (jobs.service.js's cancelJob) and firestore.rules only
+    // ever allowed delete to admins anyway, so this delete always failed and took
+    // the whole batch down with it (that's this bug). Keeping a closed record also
+    // means a worker-cancelled shift doesn't vanish from anywhere QC might look.
     const assignmentRef = doc(db, "assignments", `${jobId}_${workerUid}`);
-    batch.delete(assignmentRef);
+    batch.set(
+      assignmentRef,
+      {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelReason: "worker_cancelled",
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
   }
 
   // Release day lock
@@ -550,37 +564,40 @@ export async function cancelJobApplicationWithPenalty({
     batch.delete(lockRef);
   }
 
-  // Handle late cancellation penalty
-  if (isLateCancellation) {
-    const currentCount = typeof user?.lateCancellationCount === "number"
-      ? user.lateCancellationCount
-      : 0;
-    const newCount = currentCount + 1;
-
-    const userUpdate = {
-      lateCancellationCount: newCount,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (newCount >= 2) {
-      userUpdate.approvalStatus = "suspended";
-    }
-
-    batch.update(userRef, userUpdate);
-  }
-
   await batch.commit();
 
-  // Return suspension status so UI can react
-  const currentCount = typeof user?.lateCancellationCount === "number"
-    ? user.lateCancellationCount
-    : 0;
-  const willBeSuspended = isLateCancellation && (currentCount + 1) >= 2;
+  // Late cancellation penalty (lateCancellationCount / approvalStatus) is NOT
+  // written here — firestore.rules forbids a worker from touching those fields on
+  // their own users/{uid} doc (by design: a client can't be trusted to self-report
+  // its own penalty count). Applied server-side via a callable Cloud Function,
+  // invoked directly right after the cancel above commits.
+  //
+  // This used to be an onDocumentUpdated Firestore trigger reacting to this same
+  // write, but manual QA (2026-09-12) found that trigger unreliable — Eventarc
+  // silently missed events in this project, so the penalty/suspension never
+  // landed. A callable removes the event bus entirely: nothing to drop. The
+  // function re-verifies lateness itself from the job's shiftStartAt, so
+  // isLateCancellation above only drives which confirmation dialog the worker
+  // saw — it's not trusted for the actual penalty decision.
+  let willBeSuspended = false;
+  if (isLateCancellation) {
+    try {
+      const applyPenalty = httpsCallable(getFunctions(), "applyLateCancellationPenalty");
+      const { data } = await applyPenalty({ jobId });
+      willBeSuspended = !!data?.willBeSuspended;
+    } catch (e) {
+      // The cancellation itself already succeeded above — don't fail the whole
+      // action just because the penalty call had an issue (e.g. network drop).
+      // Worst case: this one late cancellation isn't counted; not silently
+      // failing the user's cancel request is more important.
+      console.warn("applyLateCancellationPenalty call failed:", e?.message || e);
+    }
+  }
 
   return { ok: true, willBeSuspended };
 }
 
-export async function cancelJob({ jobId, expectedOrgId }) {
+export async function cancelJob({ jobId, expectedOrgId, acknowledgeLateCancellation = false }) {
   if (!jobId) throw new Error("Missing jobId");
 
   const jobRef = doc(db, "jobs", jobId);
@@ -594,16 +611,39 @@ export async function cancelJob({ jobId, expectedOrgId }) {
     throw new Error("You don't have permission to cancel this job.");
   }
 
+  // The only job.status values this app ever writes: "open" (created, or reopened
+  // after a worker cancels their application), "assigned" (worker self-assigned,
+  // no-approval-required path), "filled" (employer approved an applicant),
+  // "finished" (hours submitted), "cancelled"/legacy "cancel" (this function).
   const status = String(job?.status || "").toLowerCase();
   if (status === "cancelled" || status === "cancel") {
     throw new Error("This shift is already cancelled.");
   }
+  if (status === "finished") {
+    throw new Error("This shift has already finished and can no longer be cancelled.");
+  }
 
-  // Employers can cancel a shift regardless of applicant/worker state, but
-  // only up until 4 hours before it starts.
-  const startMs = getShiftStartMs(job);
-  if (!Number.isFinite(startMs) || startMs - Date.now() < 4 * 60 * 60 * 1000) {
-    throw new Error("This shift starts in less than 4 hours and can no longer be cancelled.");
+  // The 4h cutoff only applies once a worker is actually attached to the shift
+  // ("assigned" or "filled"). A shift still "open" — no worker assigned yet,
+  // whether or not it has pending applications awaiting approval — can be
+  // cancelled at any time, no acknowledgement needed. Once a worker IS attached,
+  // cancelling under 4h is still allowed but must be explicitly acknowledged
+  // (EmployerEditJob shows a warning first) — QuickCrew charges the business 50%
+  // of the shift for this per policy, so it's tagged on the assignment below
+  // (lateCancellationByEmployer) for QC to find manually; there's no automated
+  // billing to trigger.
+  let isLateCancellationWithWorker = false;
+  if (status !== "open") {
+    const startMs = getShiftStartMs(job);
+    if (!Number.isFinite(startMs)) {
+      throw new Error("This shift is missing its start time. Cannot cancel safely.");
+    }
+    if (startMs - Date.now() < 4 * 60 * 60 * 1000) {
+      if (!acknowledgeLateCancellation) {
+        throw new Error("This shift starts in less than 4 hours and can no longer be cancelled.");
+      }
+      isLateCancellationWithWorker = true;
+    }
   }
 
   // Cancel any pending/accepted applications along with the job. orgId must be part of
@@ -623,22 +663,70 @@ export async function cancelJob({ jobId, expectedOrgId }) {
   batch.update(jobRef, {
     status: "cancelled",
     cancelledAt: serverTimestamp(),
+    cancelReason: "employer_cancelled",
     updatedAt: serverTimestamp(),
   });
 
+  // If a worker was attached (assigned/filled), close out their assignment too —
+  // otherwise it's left pointing at a now-cancelled job with status
+  // "assigned"/"confirmed", which would keep showing up in the backoffice's
+  // "Unclosed" tab indistinguishable from a genuine no-show/forgotten-clockout.
+  const attachedWorkerUid = job?.assignedWorkerUid || job?.filledByUid;
+  if (attachedWorkerUid) {
+    const assignmentRef = doc(db, "assignments", `${jobId}_${attachedWorkerUid}`);
+    batch.set(
+      assignmentRef,
+      {
+        status: "cancelled",
+        cancelledAt: serverTimestamp(),
+        cancelReason: "employer_cancelled",
+        ...(isLateCancellationWithWorker ? { lateCancellationByEmployer: true } : {}),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
   appsSnap.docs.forEach((appDoc) => {
+    const app = appDoc.data();
     batch.update(appDoc.ref, {
       status: "job_cancelled",
       cancelledAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // Release each applicant's day lock too — otherwise they're stuck unable to
+    // apply to anything else that day even though this application is no longer
+    // active (mirrors the release done by the worker's own cancelJobApplication[WithPenalty]
+    // and by EmployerJobApplicants.onReject's single-reject path).
+    const appWorkerUid = app?.workerUid || app?.workerId;
+    const appShiftDate = String(app?.shiftDate || "").trim();
+    if (appWorkerUid && appShiftDate) {
+      const lockRef = doc(db, "workerShiftDayLocks", `${appWorkerUid}_${appShiftDate}`);
+      batch.delete(lockRef);
+    }
   });
 
   await batch.commit();
 
-  return { ok: true };
+  return { ok: true, isLateCancellationWithWorker };
 }
 
+/**
+ * KNOWN RISK (accepted per request, documented rather than solved — see
+ * WorkerJobDetails.jsx's canClockIn): a worker who misses the original clock-in
+ * window (1h before shift start through 4h after) can still clock in/out any time
+ * afterward, even once the shift is "finished". This has NO audit trail — the
+ * written timestamp is always serverTimestamp() (when the button was pressed, not
+ * when the worker actually arrived), and nothing here distinguishes a normal
+ * on-time clock-in from a backfilled one, or flags/limits how far after the fact
+ * it happens. It's also not reconciled against an employer-reported no-show
+ * (workerNoShow:true + hoursSubmitted:true on this same assignment) — a worker
+ * could still clock in after the employer already closed the shift out as a
+ * no-show, leaving a contradictory record with no resolution mechanism. Properly
+ * closing this would mean tracking a change history (who/when) for both worker and
+ * employer clock edits — out of scope as a new feature; not built here.
+ */
 export async function workerClockIn({ jobId, workerUid }) {
   if (!jobId) throw new Error("Missing jobId");
   if (!workerUid) throw new Error("Missing workerUid");

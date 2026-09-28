@@ -65,8 +65,23 @@ const RIGHT_TO_WORK_OPTIONS = [
   "Other",
 ];
 
-const NO_VISA_DOC_REQUIRED = ["", "NZ/AU Citizen", "NZ Resident"];
+// A supporting visa document is mandatory for these. "NZ Resident" is included
+// (QuickCrew wants proof of a valid INZ residence visa) but, unlike the others,
+// it does NOT get an expiry-date field — a residence visa has no meaningful
+// expiry for our purposes. Keep in sync with REQUIRES_VISA_DOC_OPTIONS in
+// backoffice/src/features/users/users.service.ts.
 const REQUIRES_VISA_DOC_OPTIONS = [
+  "NZ Resident",
+  "Working Holiday Visa",
+  "Work Visa",
+  "Open Work Visa",
+  "Partner Visa",
+  "Student Visa",
+  "Other",
+];
+// The expiry-date field shows only for these (everything that requires a doc
+// EXCEPT "NZ Resident").
+const REQUIRES_VISA_EXPIRY_OPTIONS = [
   "Working Holiday Visa",
   "Work Visa",
   "Open Work Visa",
@@ -268,8 +283,12 @@ export default function Profile() {
     return null;
   }, [isEmployer, isWorker, profile]);
 
+  const requiresVisaDoc = useMemo(() => {
+    return REQUIRES_VISA_DOC_OPTIONS.includes(rightToWorkNz);
+  }, [rightToWorkNz]);
+
   const requiresVisaExpiry = useMemo(() => {
-    return !NO_VISA_DOC_REQUIRED.includes(rightToWorkNz);
+    return REQUIRES_VISA_EXPIRY_OPTIONS.includes(rightToWorkNz);
   }, [rightToWorkNz]);
 
   // ── Mandatory fields validation ───────────────────────────────────────────
@@ -450,7 +469,12 @@ export default function Profile() {
       });
       if (!ok) return;
       setSavingOrg(true);
-      await updateOrganization(profile.orgId, { description: orgDescription.trim() });
+      // Save the employer's own contact phone regardless of org-link state, so it
+      // isn't silently lost if the org update below fails (e.g. no orgId yet).
+      await updateUserProfile(uid, { phone: phone.trim() });
+      if (profile?.orgId) {
+        await updateOrganization(profile.orgId, { description: orgDescription.trim() });
+      }
     } catch (e) {
       setOrgError(e?.message || "Could not save organization.");
     } finally {
@@ -675,6 +699,19 @@ export default function Profile() {
                 <Row label="Member role" value={profile?.memberRole ? profile.memberRole.charAt(0).toUpperCase() + profile.memberRole.slice(1) : "—"} />
                 <Row label="Approval status" value={profile?.approvalStatus ? profile.approvalStatus.charAt(0).toUpperCase() + profile.approvalStatus.slice(1) : "Pending"} />
                 <Row label="Email address" value={profile?.email || "-"} />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Phone number</Text>
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="(+64) 555-1234"
+                  placeholderTextColor="#716C6C"
+                  keyboardType="phone-pad"
+                  editable={!savingOrg}
+                />
               </View>
 
               {isApproved ? (
@@ -1017,7 +1054,7 @@ export default function Profile() {
                 </View>
               ) : null}
 
-              {requiresVisaExpiry ? (
+              {requiresVisaDoc ? (
                 <View style={styles.inputGroup}>
                   <Text style={styles.sectionLabel}>Visa document</Text>
                   <Text style={styles.helper}>Please upload a document that supports your visa status.</Text>
@@ -1167,22 +1204,26 @@ export default function Profile() {
 
                 {/* Submit for review — always available; QuickCrew's backoffice determines
                     readiness independently by checking the profile's actual field completeness,
-                    rather than the app gating this action (Apple App Review guideline 5.1.1). */}
+                    rather than the app gating this action (Apple App Review guideline 5.1.1).
+                    Stays tappable even after a first submission — profileStatus never resets
+                    on its own (e.g. after a rejection, or after the worker goes back to fill
+                    in fields that were missing), so disabling on alreadySubmitted would lock
+                    the worker out of ever notifying QuickCrew again. */}
                 {approvalStatus !== "approved" ? (
                   <Pressable
-                    onPress={!alreadySubmitted ? onSubmitForReview : undefined}
-                    disabled={submitting || alreadySubmitted}
+                    onPress={onSubmitForReview}
+                    disabled={submitting}
                     style={({ pressed }) => [
                       styles.submitButton,
-                      (submitting || alreadySubmitted) && styles.submitButtonDisabled,
-                      pressed && !alreadySubmitted && { opacity: 0.9 },
+                      submitting && styles.submitButtonDisabled,
+                      pressed && { opacity: 0.9 },
                     ]}
                   >
                     <Text style={styles.submitButtonText}>
                       {submitting
                         ? "Submitting..."
                         : alreadySubmitted
-                          ? "Profile submitted ✅"
+                          ? "Submitted — tap to resubmit"
                           : "Submit for review"}
                     </Text>
                   </Pressable>

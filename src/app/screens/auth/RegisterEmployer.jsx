@@ -12,12 +12,14 @@ import Checkbox from "expo-checkbox";
 import { registerEmployer } from "../../../services/signup.service";
 import { searchOrganizationsByNamePrefix } from "../../../services/organization.service";
 import { OuterWrapper, InnerWrapper } from "../../components/layout/ScreenScrollKeyboard";
+import { sanitizePhone } from "../../../utils/formatters";
 
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
 export default function RegisterEmployer({ navigation }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
   const [legalBusinessName, setLegalBusinessName] = useState("");
   const [businessAlreadyRegistered, setBusinessAlreadyRegistered] = useState(false);
 
@@ -49,6 +51,7 @@ export default function RegisterEmployer({ navigation }) {
     const base =
       firstName.trim().length >= 2 &&
       lastName.trim().length >= 2 &&
+      sanitizePhone(phone).length >= 7 &&
       legalBusinessName.trim().length >= 2 &&
       isValidEmail(email.trim()) &&
       email.trim() === confirmEmail.trim() &&
@@ -68,6 +71,7 @@ export default function RegisterEmployer({ navigation }) {
   }, [
     firstName,
     lastName,
+    phone,
     legalBusinessName,
     email,
     confirmEmail,
@@ -125,6 +129,7 @@ export default function RegisterEmployer({ navigation }) {
 
     if (firstName.trim().length < 2) return setError("Please enter your first name.");
     if (lastName.trim().length < 2) return setError("Please enter your last name.");
+    if (sanitizePhone(phone).length < 7) return setError("Please enter a valid phone number.");
     if (legalBusinessName.trim().length < 2) return setError("Please enter your legal business name.");
 
     const mail = email.trim();
@@ -145,6 +150,7 @@ export default function RegisterEmployer({ navigation }) {
         email: mail,
         password,
         fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        phone: sanitizePhone(phone),
         legalBusinessName: legalBusinessName.trim(),
         businessAlreadyRegistered,
         selectedOrgId: selectedOrg?.id || null,
@@ -231,6 +237,19 @@ export default function RegisterEmployer({ navigation }) {
                 placeholder="e.g., Smith"
                 placeholderTextColor="#9A9A9A"
                 autoCapitalize="words"
+                style={styles.input}
+                editable={!isSubmitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Phone number</Text>
+              <TextInput
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="(+64) 555-1234"
+                placeholderTextColor="#9A9A9A"
+                keyboardType="phone-pad"
                 style={styles.input}
                 editable={!isSubmitting}
               />

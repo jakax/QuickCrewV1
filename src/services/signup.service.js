@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import {
   doc,
   setDoc,
@@ -8,6 +8,44 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { auth, db } from "./firebase/config";
+
+/**
+ * Creates the Auth user for a new signup, self-healing from the case where a
+ * previous attempt already created the Auth account but never got to write the
+ * users/{uid} profile doc (e.g. the createUserWithEmailAndPassword call succeeded
+ * on Firebase's servers, but the response never reached the app because of a
+ * network drop right after — the client saw "auth/network-request-failed" and
+ * the account was left in limbo: it exists, but has no profile).
+ *
+ * On "auth/email-already-in-use", we try signing in with the same email/password
+ * the user just typed. If that succeeds and there's still no profile doc, it's
+ * our own orphaned account from an interrupted signup — resume onboarding with
+ * that uid instead of dead-ending. If sign-in fails, or a profile already exists,
+ * this is a real "email taken" case and the original error is surfaced as-is.
+ */
+async function createOrResumeAuthUser(email, password) {
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    return { uid: cred.user.uid, resumed: false };
+  } catch (err) {
+    if (err?.code !== "auth/email-already-in-use") throw err;
+
+    let signInCred;
+    try {
+      signInCred = await signInWithEmailAndPassword(auth, email, password);
+    } catch {
+      throw err; // wrong password / not our account — surface the original error
+    }
+
+    const uid = signInCred.user.uid;
+    const existingSnap = await getDoc(doc(db, "users", uid));
+    if (existingSnap.exists()) {
+      throw err; // already fully registered — surface the original error
+    }
+
+    return { uid, resumed: true };
+  }
+}
 
 /**
  * Employer signup (scalable):
@@ -24,18 +62,19 @@ export const registerEmployer = async ({
   email,
   password,
   fullName,
+  phone,
   legalBusinessName,
   businessAlreadyRegistered,
   selectedOrgId,
   memberRole, // Owner/Admin/Manager/Supervisor
 }) => {
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  const uid = cred.user.uid;
+  const { uid } = await createOrResumeAuthUser(email.trim(), password);
 
   const baseUserDoc = {
     role: "employer",
     fullName: fullName?.trim() || "",
     email: email.trim(),
+    phone: phone?.trim?.() || "",
     isActive: true,
     createdAt: serverTimestamp(),
   };
@@ -137,8 +176,7 @@ export const registerEmployer = async ({
  * - Creates users/{uid} profile
  */
 export const registerWorker = async ({ email, password, firstName, lastName, phone }) => {
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  const uid = cred.user.uid;
+  const { uid } = await createOrResumeAuthUser(email.trim(), password);
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   await setDoc(doc(db, "users", uid), {

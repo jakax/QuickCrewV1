@@ -264,7 +264,11 @@ export default function WorkerJobDetails() {
     const shiftStartAt = asDateMaybe(job?.shiftStartAt);
     if (!shiftStartAt) return false;
     const diff = shiftStartAt.getTime() - Date.now();
-    return diff <= ONE_HOUR_MS && diff > -(4 * ONE_HOUR_MS);
+    // No upper bound (used to cut off 4h after shiftStartAt) — a worker who missed
+    // clocking in during the original window can still do it later, even after the
+    // shift is "finished". Per-request change; see jobs.service.js's workerClockIn
+    // for the risk this accepts (backfilled clock-in/out has no audit trail).
+    return diff <= ONE_HOUR_MS;
   }, [assignment, job]);
 
   const canClockOut = useMemo(() => {

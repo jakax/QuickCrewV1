@@ -174,20 +174,40 @@ export default function EmployerEditJob() {
   };
 
   const onCancelShift = async () => {
-    const ok = await confirm({
-      title: "Cancel shift?",
-      message:
-        "This will cancel the shift. Any pending or accepted applications for it will also be cancelled. The shift record will be kept for tracking purposes.",
-      confirmText: "Cancel shift",
-      cancelText: "Keep it",
-      destructive: true,
-    });
+    // A worker is attached once the shift is "assigned" (auto-assign) or "filled"
+    // (employer approved an applicant). Cancelling one of those with less than 4h
+    // left is still allowed, but it's a late cancellation QuickCrew charges the
+    // business 50% for (per policy) — acknowledgeLateCancellation tells cancelJob
+    // to both allow it and tag the assignment so QC can find it.
+    const status = String(job?.status || "").toLowerCase();
+    const hasWorkerAttached = status === "assigned" || status === "filled";
+    const isLate = hasWorkerAttached && !canCancelApplication(job, 4);
+
+    const ok = await confirm(
+      isLate
+        ? {
+          title: "⚠️ Late cancellation warning",
+          message:
+            "This shift starts in less than 4 hours and has a worker assigned. Cancelling now counts as a late cancellation — per QuickCrew policy, your business may be charged 50% of the shift's value. Please contact the worker directly to let them know. Do you still want to cancel?",
+          confirmText: "Yes, cancel",
+          cancelText: "Keep it",
+          destructive: true,
+        }
+        : {
+          title: "Cancel shift?",
+          message:
+            "This will cancel the shift. Any pending or accepted applications for it will also be cancelled. The shift record will be kept for tracking purposes.",
+          confirmText: "Cancel shift",
+          cancelText: "Keep it",
+          destructive: true,
+        }
+    );
     if (!ok) return;
 
     try {
       setError(null);
       setCancelling(true);
-      await cancelJob({ jobId, expectedOrgId: orgId });
+      await cancelJob({ jobId, expectedOrgId: orgId, acknowledgeLateCancellation: isLate });
       navigation.goBack();
     } catch (e) {
       setError(e?.message || "Could not cancel shift.");
@@ -220,9 +240,20 @@ export default function EmployerEditJob() {
 
   const isCancelled = jobStatusRaw === "cancelled" || jobStatusRaw === "cancel";
 
-  // Employers can cancel a shift up until 4 hours before it starts, regardless
-  // of applicant/worker state.
-  const canCancelShift = !isCancelled && canCancelApplication(job, 4);
+  // The only job.status values this app ever actually writes are: open, assigned,
+  // filled, finished, cancelled/cancel (see cancelJob's own comment for the full
+  // audit). A finished shift must never be cancellable — excluded explicitly here
+  // rather than relying on it incidentally always being in the past.
+  const isTerminal = isCancelled || jobStatusRaw === "finished";
+
+  // A shift with no worker assigned yet (status "open" — whether or not it has
+  // pending applications awaiting approval, and regardless of businessApprovalRequired)
+  // can be cancelled at ANY time, no 4h restriction. Once a worker is attached
+  // ("assigned"/"filled"), cancelling is still always allowed — even under 4h —
+  // but onCancelShift shows a late-cancellation warning in that case instead of
+  // hiding the button entirely (see jobs.service.js's cancelJob for the matching
+  // server-side acknowledgeLateCancellation handling).
+  const canCancelShift = !isTerminal && (jobStatusRaw === "open" || jobStatusRaw === "assigned" || jobStatusRaw === "filled");
 
   // A shift that expired without ever getting an applicant can be edited
   // (date/time updated) to relist it, instead of staying locked forever.

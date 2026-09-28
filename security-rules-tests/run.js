@@ -96,6 +96,12 @@ async function main() {
 
     await setDoc(doc(db, "adminUsers", "admin1"), { addedAt: new Date() });
 
+    // Tombstone fixture — normally only ever written by deleteAccount (Admin SDK).
+    await setDoc(doc(db, "deletedUsers", "someDeletedWorker"), {
+      fullName: "Deleted Worker", email: "deleted@example.com", role: "worker",
+      approvalStatus: "approved", lateCancellationCount: 0,
+    });
+
     await setDoc(doc(db, "users", "worker1"), {
       role: "worker", approvalStatus: "approved", isActive: true,
       fullName: "Worker One", phone: "111", skills: ["cleaning"],
@@ -115,6 +121,13 @@ async function main() {
     await setDoc(doc(db, "users", "employerPending"), {
       role: "employer", approvalStatus: "pending", isActive: true,
       orgId: "orgA", orgIds: ["orgA"], memberRole: "Manager",
+    });
+    // Mid-registration employer: signed up but never finished linking to an org
+    // (still on the "Create your organization" step) — no orgId set yet. See the
+    // "cancel registration" self-delete exception in firestore.rules.
+    await setDoc(doc(db, "users", "employerNoOrg"), {
+      role: "employer", approvalStatus: "pending", isActive: true,
+      orgIds: [], employerOnboardingStatus: "needs_org_creation",
     });
 
     await setDoc(doc(db, "organizations", "orgA"), {
@@ -157,6 +170,34 @@ async function main() {
       jobId: "jobApprovalRequired1", workerUid: "worker1", orgId: "orgA", status: "pending",
     });
 
+    // Dedicated fixture for the "re-apply after rejection" exception — a worker
+    // who was already rejected from this job re-applying overwrites this SAME
+    // application doc back to "pending" (deterministic doc id), which Firestore
+    // evaluates as an update, not a create.
+    await setDoc(doc(db, "jobs", "jobReapply1"), {
+      orgId: "orgA", orgName: "Org A", createdBy: "employer1",
+      title: "Re-apply test shift", status: "open", businessApprovalRequired: true,
+    });
+    await setDoc(doc(db, "applications", "jobReapply1_worker1"), {
+      jobId: "jobReapply1", workerUid: "worker1", orgId: "orgA", status: "rejected",
+    });
+
+    // Dedicated assignment fixture for the "employer cancels a shift with a worker
+    // attached" exception — kept separate from jobA1_worker1 (used extensively by
+    // other assignment tests below) so this test can freely flip its status.
+    await setDoc(doc(db, "assignments", "jobCancelTest1_worker1"), {
+      jobId: "jobCancelTest1", workerUid: "worker1", employerUid: "employer1", orgId: "orgA",
+      status: "confirmed", hoursSubmitted: false,
+    });
+
+    // Dedicated assignment fixture for the "worker cancels their own no-approval
+    // self-assigned shift" exception — the assignment cancelJobApplicationWithPenalty
+    // closes instead of deleting.
+    await setDoc(doc(db, "assignments", "jobWorkerCancelTest1_worker2"), {
+      jobId: "jobWorkerCancelTest1", workerUid: "worker2", orgId: "orgA",
+      status: "assigned", hoursSubmitted: false,
+    });
+
     // Fixture for the workerShiftDayLocks delete-by-employer path (EmployerJobApplicants.onReject).
     await setDoc(doc(db, "workerShiftDayLocks", "worker1_2026-08-01"), {
       workerUid: "worker1", shiftDate: "2026-08-01", jobId: "jobA1", status: "locked",
@@ -175,6 +216,7 @@ async function main() {
   const employer1 = testEnv.authenticatedContext("employer1").firestore();
   const employer2 = testEnv.authenticatedContext("employer2").firestore();
   const employerPending = testEnv.authenticatedContext("employerPending").firestore();
+  const employerNoOrg = testEnv.authenticatedContext("employerNoOrg").firestore();
   const admin1 = testEnv.authenticatedContext("admin1").firestore();
 
   console.log("\n--- Unauthenticated access ---");
@@ -256,6 +298,34 @@ async function main() {
   await test("random user CANNOT grant themselves admin", async () => {
     await assertFails(setDoc(doc(worker1, "adminUsers/worker1"), { addedAt: new Date() }));
   });
+
+  await test("admin CAN read the deleteAccount tombstone", async () => {
+    await assertSucceeds(getDoc(doc(admin1, "deletedUsers/someDeletedWorker")));
+  });
+  await test("worker CANNOT read the deleteAccount tombstone", async () => {
+    await assertFails(getDoc(doc(worker1, "deletedUsers/someDeletedWorker")));
+  });
+  await test("employer CANNOT read the deleteAccount tombstone", async () => {
+    await assertFails(getDoc(doc(employer1, "deletedUsers/someDeletedWorker")));
+  });
+  await test("nobody (not even admin) can write to deletedUsers from the client", async () => {
+    await assertFails(setDoc(doc(admin1, "deletedUsers/someDeletedWorker"), { fullName: "Tampered" }));
+  });
+
+  await test("employer already linked to an org CANNOT self-delete their profile", async () => {
+    await assertFails(deleteDoc(doc(employer1, "users/employer1")));
+  });
+  await test("worker CANNOT self-delete their profile", async () => {
+    await assertFails(deleteDoc(doc(worker1, "users/worker1")));
+  });
+  await test("employer CANNOT delete another mid-registration employer's profile", async () => {
+    await assertFails(deleteDoc(doc(employer1, "users/employerNoOrg")));
+  });
+  // Runs last among these — it's the only one that actually deletes the
+  // employerNoOrg fixture (used by the "another employer CANNOT delete" test above).
+  await test("mid-registration employer (no orgId) CAN self-delete to cancel registration", async () => {
+    await assertSucceeds(deleteDoc(doc(employerNoOrg, "users/employerNoOrg")));
+  });
   await test("admin CAN approve a worker", async () => {
     await assertSucceeds(updateDoc(doc(admin1, "users/worker2"), {
       approvalStatus: "approved", skills: ["cleaning", "kitchen"],
@@ -328,6 +398,22 @@ async function main() {
   await test("worker CANNOT create an application impersonating another worker", async () => {
     await assertFails(setDoc(doc(worker2, "applications/jobA1_worker1"), {
       jobId: "jobA1", workerUid: "worker2", orgId: "orgA", status: "pending",
+    }));
+  });
+  await test("worker CANNOT overwrite their own currently-pending application via the re-apply path", async () => {
+    // jobA1_worker1 is genuinely "pending" (seeded above) — re-apply must only be
+    // allowed from a terminal status, never silently overwrite an active one. Sets
+    // createdAt (outside every onlyChanges() allowlist in this match block) so this
+    // can't accidentally pass as a trivial no-op write under some unrelated rule —
+    // it must be evaluated against the re-apply rule's own status guard.
+    await assertFails(setDoc(doc(worker1, "applications/jobA1_worker1"), {
+      jobId: "jobA1", workerUid: "worker1", orgId: "orgA", status: "pending",
+      createdAt: new Date(),
+    }));
+  });
+  await test("worker CAN re-apply to a job after being rejected", async () => {
+    await assertSucceeds(setDoc(doc(worker1, "applications/jobReapply1_worker1"), {
+      jobId: "jobReapply1", workerUid: "worker1", orgId: "orgA", status: "pending",
     }));
   });
   await test("worker CANNOT self-approve their own application when the shift requires approval", async () => {
@@ -437,10 +523,11 @@ async function main() {
       workerClockIn: new Date(), hoursSubmitted: true,
     }));
   });
-  await test("owning employer CAN submit hours (status -> pending review)", async () => {
+  await test("owning employer CAN submit hours, including the worker identity snapshot", async () => {
     await assertSucceeds(updateDoc(doc(employer1, "assignments/jobA1_worker1"), {
       employerClockIn: "9:00 am", employerClockOut: "5:00 pm",
       hoursSubmitted: true, reviewStatus: "pending",
+      workerFullNameSnapshot: "Worker One", workerEmailSnapshot: "worker1@example.com",
     }));
   });
   await test("employer CANNOT mark their own submission as reviewed/paid", async () => {
@@ -448,9 +535,40 @@ async function main() {
       reviewStatus: "paid",
     }));
   });
+  await test("worker CANNOT close another worker's assignment", async () => {
+    await assertFails(updateDoc(doc(worker1, "assignments/jobWorkerCancelTest1_worker2"), {
+      status: "cancelled", cancelledAt: new Date(), cancelReason: "worker_cancelled",
+    }));
+  });
+  await test("worker CANNOT sneak other fields into their own cancel-assignment update", async () => {
+    await assertFails(updateDoc(doc(worker2, "assignments/jobWorkerCancelTest1_worker2"), {
+      status: "cancelled", cancelledAt: new Date(), hoursSubmitted: true,
+    }));
+  });
+  await test("worker CAN close their own assignment when cancelling a no-approval self-assign", async () => {
+    await assertSucceeds(updateDoc(doc(worker2, "assignments/jobWorkerCancelTest1_worker2"), {
+      status: "cancelled", cancelledAt: new Date(), cancelReason: "worker_cancelled",
+    }));
+  });
   await test("admin CAN mark a submission as reviewed", async () => {
     await assertSucceeds(updateDoc(doc(admin1, "assignments/jobA1_worker1"), {
       reviewStatus: "reviewed", reviewedBy: "admin1",
+    }));
+  });
+  await test("employer from a different org CANNOT cancel another org's assignment", async () => {
+    await assertFails(updateDoc(doc(employer2, "assignments/jobCancelTest1_worker1"), {
+      status: "cancelled", cancelledAt: new Date(),
+    }));
+  });
+  await test("employer CANNOT sneak other fields into a cancel-assignment update", async () => {
+    await assertFails(updateDoc(doc(employer1, "assignments/jobCancelTest1_worker1"), {
+      status: "cancelled", cancelledAt: new Date(), hoursSubmitted: true,
+    }));
+  });
+  await test("owning employer CAN cancel their own assignment (cancelJob's late-cancellation path)", async () => {
+    await assertSucceeds(updateDoc(doc(employer1, "assignments/jobCancelTest1_worker1"), {
+      status: "cancelled", cancelledAt: new Date(), cancelReason: "employer_cancelled",
+      lateCancellationByEmployer: true, updatedAt: new Date(),
     }));
   });
   await test("employer from a different org CANNOT read this assignment", async () => {

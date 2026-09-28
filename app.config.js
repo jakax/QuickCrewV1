@@ -15,9 +15,21 @@ const GOOGLE_IOS_URL_SCHEME =
 
 module.exports = {
   expo: {
-    name: "quick-crew-app-2",
+    name: "QuickCrew",
     slug: "quick-crew-app-2",
-    version: "1.0.2",
+    owner: "jacob.quickcrewdev",
+    version: "1.1.1",
+    // Ties OTA-update compatibility to the marketing version (X.Y.Z): an
+    // update pushed via `eas update` only reaches devices running a build
+    // with the SAME version. Bumping version (as we already do for any
+    // meaningful change, per CLAUDE.md's convention) requires a new native
+    // build+submit as before — OTA only covers same-version JS/asset fixes.
+    runtimeVersion: {
+      policy: "appVersion",
+    },
+    updates: {
+      url: "https://u.expo.dev/956fafe2-f1b2-4b1e-87ac-0cc81a39f606",
+    },
     orientation: "portrait",
     icon: "./assets/icon-new.png",
     userInterfaceStyle: "light",
@@ -62,6 +74,18 @@ module.exports = {
       ],
       "expo-apple-authentication",
       [
+        "expo-image-picker",
+        {
+          // Apple rejected build 1.1.0 (30) under Guideline 5.1.1(ii) — the
+          // default photo-library purpose string didn't explain the actual
+          // use or give an example. This is the ONLY place the app touches
+          // the photo library: Profile.jsx's "Add photo" button, to set a
+          // profile picture. No camera usage anywhere in the app.
+          photosPermission:
+            "QuickCrew uses your photo library so you can choose a picture from it to set as your profile photo, which is then shown to the businesses or workers you're matched with on shifts.",
+        },
+      ],
+      [
         "expo-build-properties",
         {
           ios: {
@@ -72,7 +96,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "dbd5bca0-b8e6-4936-8a53-f7ac0058578b",
+        projectId: "956fafe2-f1b2-4b1e-87ac-0cc81a39f606",
       },
     },
   },

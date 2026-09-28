@@ -234,6 +234,7 @@ export default function EmployerJobApplicants() {
       batch.set(doc(db, "assignments", assignmentId), {
         jobId,
         orgId: job?.orgId || null,
+        orgName: job?.orgName || null,
         workerUid: app.workerUid,
         employerUid: employerUid || null,
         status: "confirmed",
@@ -262,7 +263,19 @@ export default function EmployerJobApplicants() {
       const othersSnap = await getDocs(qOthers);
 
       othersSnap.docs.forEach((d) => {
-        if (d.id !== app.id) batch.update(doc(db, "applications", d.id), { status: "rejected" });
+        if (d.id === app.id) return;
+        batch.update(doc(db, "applications", d.id), { status: "rejected" });
+
+        // Release each auto-rejected applicant's day lock too — same reasoning as
+        // the single-reject path below (onReject): otherwise they're stuck unable
+        // to apply to anything else that day for an application that's no longer active.
+        const other = d.data();
+        const otherWorkerUid = other?.workerUid || other?.workerId;
+        const otherShiftDate = other?.shiftDate;
+        if (otherWorkerUid && otherShiftDate) {
+          const lockId = `${otherWorkerUid}_${otherShiftDate}`;
+          batch.delete(doc(db, "workerShiftDayLocks", lockId));
+        }
       });
 
       await batch.commit();
