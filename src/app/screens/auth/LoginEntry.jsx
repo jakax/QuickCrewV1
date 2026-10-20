@@ -10,6 +10,7 @@ import {
   Platform,
   Linking,
 } from "react-native";
+import * as Updates from "expo-updates";
 import {
   OuterWrapper,
   InnerWrapper,
@@ -19,9 +20,31 @@ const TOGGLE_WIDTH = 327;
 const TOGGLE_HEIGHT = 56;
 const SLIDER_WIDTH = TOGGLE_WIDTH / 2;
 
+// Internal/QA marker — shows when the JS bundle currently running was last
+// published via OTA, so we can confirm an `eas update` actually reached a
+// device without needing a build. Updates.createdAt is null when running the
+// embedded bundle (no OTA applied yet, e.g. fresh install or local dev), so
+// there's nothing to show in that case.
+const formatOtaTimestamp = (date) => {
+  if (!date) return null;
+  try {
+    return new Intl.DateTimeFormat("en-NZ", {
+      timeZone: "Pacific/Auckland",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+};
+
 const LoginEntry = ({ navigation }) => {
   const [userType, setUserType] = useState("worker");
   const animatedValue = useRef(new Animated.Value(0)).current;
+  const otaTimestamp = formatOtaTimestamp(Updates.createdAt);
 
   const handleToggle = (type) => {
     if (type === userType) return;
@@ -134,6 +157,10 @@ const LoginEntry = ({ navigation }) => {
                   <Text style={styles.legalLink}>Terms & Conditions</Text>
                 </TouchableOpacity>
               </View>
+
+              {otaTimestamp ? (
+                <Text style={styles.otaDebugText}>Last OTA update: {otaTimestamp} NZ</Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -300,6 +327,14 @@ const styles = StyleSheet.create({
   legalDot: {
     color: "rgba(255,255,255,0.6)",
     fontSize: 13,
+  },
+
+  otaDebugText: {
+    color: "rgba(255,255,255,0.35)",
+    fontSize: 10,
+    fontFamily: "Inter",
+    textAlign: "center",
+    marginTop: 8,
   },
 });
 
