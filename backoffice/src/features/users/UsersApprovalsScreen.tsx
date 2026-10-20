@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { listPendingUsers, approveWorker, rejectWorker, isWorkerProfileComplete, UserRow } from "./users.service";
+import {
+  listPendingUsers,
+  approveWorker,
+  rejectWorker,
+  isWorkerProfileComplete,
+  markUserReviewed,
+  markUserNeedsReview,
+  UserRow,
+} from "./users.service";
 import { useAuth } from "../../providers/AuthProvider";
 import { listSkillsCatalog } from "../../services/skillsCatalog.service";
 import { useSearchParams } from "react-router-dom";
@@ -57,6 +65,7 @@ export default function UsersApprovalsScreen() {
 
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
@@ -171,6 +180,32 @@ export default function UsersApprovalsScreen() {
     }
   };
 
+  const onToggleNeedsReview = async () => {
+    try {
+      if (!selected?.id) return;
+      if (!user?.uid) throw new Error("Missing admin session.");
+      setActionError(null);
+      setReviewLoading(true);
+      // Currently showing the dot (or never touched, which defaults to "needs
+      // review") → clear it. Already cleared → bring it back, Gmail-style.
+      if (selected.needsReview === false) {
+        await markUserNeedsReview(selected.id, user.uid);
+        setItems((prev) =>
+          prev.map((it) => (it.id === selected.id ? { ...it, needsReview: true } : it))
+        );
+      } else {
+        await markUserReviewed(selected.id, user.uid);
+        setItems((prev) =>
+          prev.map((it) => (it.id === selected.id ? { ...it, needsReview: false } : it))
+        );
+      }
+    } catch (e: any) {
+      setActionError(e?.message || "Could not update review status.");
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
   const selectedAny = selected as any;
   const references: ReferenceItem[] = Array.isArray(selectedAny?.references) ? selectedAny.references : [];
 
@@ -200,16 +235,31 @@ export default function UsersApprovalsScreen() {
             // Computed by listPendingUsers() via isWorkerProfileComplete() — the actual
             // field data, not the (now non-blocking) profileStatus the mobile app sets.
             const isReadyToReview = u.role === "worker" && u.profileComplete === true;
+            // Gmail-style: the dot shows for any complete profile staff haven't
+            // explicitly dismissed yet (needsReview starts undefined == "needs it").
+            const showDot = isReadyToReview && u.needsReview !== false;
             return (
               <button
                 key={u.id}
                 className={`listItem ${isActive ? "listItemActive" : ""}`}
-                onClick={() => setSelectedId(u.id)}
+                onClick={() => {
+                  setSelectedId(u.id);
+                  // Opening a flagged profile clears the dot, like opening an email.
+                  // Staff can always bring it back with "Mark as unreviewed" below.
+                  if (showDot && user?.uid) {
+                    setItems((prev) =>
+                      prev.map((it) => (it.id === u.id ? { ...it, needsReview: false } : it))
+                    );
+                    markUserReviewed(u.id, user.uid).catch(() => {
+                      // Best-effort — worst case the dot reappears on next reload.
+                    });
+                  }
+                }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div className="fw900">{u.fullName || "Unnamed worker"}</div>
-                  {/* Yellow dot — profile complete, submitted for review */}
-                  {isReadyToReview && (
+                  {/* Yellow dot — profile complete and not yet marked reviewed */}
+                  {showDot && (
                     <span
                       title="Profile complete — ready to review"
                       style={{
@@ -299,6 +349,13 @@ export default function UsersApprovalsScreen() {
                             Missing: {missing.join(", ")}
                           </div>
                         ) : null}
+                        <button
+                          className="btn mt8"
+                          disabled={reviewLoading}
+                          onClick={onToggleNeedsReview}
+                        >
+                          {selected.needsReview === false ? "Mark as unreviewed" : "Mark as reviewed"}
+                        </button>
                       </div>
                     );
                   })() : null}

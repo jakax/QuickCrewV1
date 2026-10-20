@@ -113,8 +113,15 @@ export default function Profile() {
   const confirm = useConfirm();
 
   const initial = useMemo(() => {
-    const fullName = profile?.fullName || "";
-    const { firstName, lastName } = splitName(fullName);
+    // firstName/lastName are the source of truth — prefer them. Only fall back
+    // to splitting fullName for a profile that somehow has no firstName/lastName
+    // of its own (previously: every Apple/Google signup, since auth.service.js
+    // never wrote a fullName there — see buildProfilePayload below for the other
+    // half of this bug, where editing here never saved firstName/lastName back).
+    const hasNameFields = !!(profile?.firstName || profile?.lastName);
+    const { firstName, lastName } = hasNameFields
+      ? { firstName: profile?.firstName || "", lastName: profile?.lastName || "" }
+      : splitName(profile?.fullName || "");
     return {
       firstName,
       lastName,
@@ -196,8 +203,11 @@ export default function Profile() {
   const [orgError, setOrgError] = useState(null);
 
   const locked = {
-    firstName: !!profile?.fullName,
-    lastName: !!profile?.fullName,
+    // Locks once a real legal name is on file — keyed off firstName+lastName
+    // directly rather than fullName, since fullName can exist without a real
+    // lastName (see the fix to buildProfilePayload below).
+    firstName: !!profile?.firstName && !!profile?.lastName,
+    lastName: !!profile?.firstName && !!profile?.lastName,
     dateOfBirth: !!profile?.dateOfBirth,
     email: !!profile?.email,
     gender: !!profile?.gender,
@@ -339,6 +349,14 @@ export default function Profile() {
   const buildProfilePayload = () => {
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     return {
+      // Bug fix: this payload computed fullName from firstName/lastName but
+      // never actually wrote firstName/lastName themselves — every save only
+      // ever touched fullName. Any worker who edited their name here (not just
+      // Apple/Google signups, where firstName/lastName started out without a
+      // fullName at all) ended up with fullName out of sync with the stored
+      // firstName/lastName forever, since updateDoc leaves unlisted fields as-is.
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       fullName,
       phone: phone.trim(),
       preferredName: preferredName.trim(),

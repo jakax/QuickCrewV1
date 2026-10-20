@@ -57,6 +57,16 @@ export type UserRow = {
   statusUpdatedAt?: any;
   statusUpdatedBy?: string;
 
+  // Gmail-style "needs review" flag — separate from profileComplete (which is
+  // purely derived from field data) and from approvalStatus (which only changes
+  // on Approve/Reject). Lets staff dismiss the yellow dot after they've looked
+  // at a complete profile, and bring it back later if they want to revisit it.
+  // Undefined is treated as "needs review" so existing complete profiles keep
+  // showing the dot until someone explicitly clears it.
+  needsReview?: boolean;
+  reviewedAt?: any;
+  reviewedBy?: string;
+
   statusHistory?: Array<{
     at?: any;
     by?: string;
@@ -409,5 +419,37 @@ export async function rejectWorker({
     skills: skills || [],
     reason: reason || "",
     from: null,
+  });
+}
+
+/**
+ * Clears the "needs review" dot for a user — called when staff open a complete
+ * profile, and also available as an explicit action. Independent of
+ * approvalStatus: marking someone reviewed doesn't approve/reject them, it just
+ * tracks that a human has looked at this profile.
+ */
+export async function markUserReviewed(userId: string, adminUid: string) {
+  if (!userId) throw new Error("Missing userId");
+  if (!adminUid) throw new Error("Missing admin uid");
+
+  await updateDoc(doc(db, "users", userId), {
+    needsReview: false,
+    reviewedAt: serverTimestamp(),
+    reviewedBy: adminUid,
+  });
+}
+
+/**
+ * Brings the "needs review" dot back — the Gmail "mark as unread" equivalent,
+ * for a profile staff want to flag for another look later.
+ */
+export async function markUserNeedsReview(userId: string, adminUid: string) {
+  if (!userId) throw new Error("Missing userId");
+  if (!adminUid) throw new Error("Missing admin uid");
+
+  await updateDoc(doc(db, "users", userId), {
+    needsReview: true,
+    reviewedAt: null,
+    reviewedBy: adminUid,
   });
 }
