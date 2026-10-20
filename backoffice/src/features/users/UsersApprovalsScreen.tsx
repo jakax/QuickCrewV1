@@ -307,6 +307,15 @@ export default function UsersApprovalsScreen() {
                   <button className="btn btnPrimary" disabled={actionLoading} onClick={onApprove}>
                     Approve
                   </button>
+                  {selected.role === "worker" ? (
+                    <button
+                      className="btn"
+                      disabled={reviewLoading}
+                      onClick={onToggleNeedsReview}
+                    >
+                      {selected.needsReview === false ? "Mark as unreviewed" : "Mark as reviewed"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -349,13 +358,6 @@ export default function UsersApprovalsScreen() {
                             Missing: {missing.join(", ")}
                           </div>
                         ) : null}
-                        <button
-                          className="btn mt8"
-                          disabled={reviewLoading}
-                          onClick={onToggleNeedsReview}
-                        >
-                          {selected.needsReview === false ? "Mark as unreviewed" : "Mark as reviewed"}
-                        </button>
                       </div>
                     );
                   })() : null}
