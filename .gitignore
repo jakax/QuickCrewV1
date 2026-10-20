@@ -50,3 +50,7 @@ legal-site/*.docx
 /ios
 /android
 
+
+# Vars de entorno de backoffice (vacias hoy, pero son el patron de archivo que nunca se commitea)
+backoffice/.env.development
+backoffice/.env.production
